@@ -9,3 +9,7 @@ CREATE INDEX IF NOT EXISTS idx_excluded_scanlators_manga_id_scanlator ON exclude
 CREATE INDEX IF NOT EXISTS idx_history_last_read ON history(last_read) WHERE last_read > 0;
 
 CREATE INDEX IF NOT EXISTS idx_manga_sync_sync_id_remote_id ON manga_sync(sync_id, remote_id, manga_id);
+
+ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(_id);
+CREATE INDEX IF NOT EXISTS categories_parent_id_index ON categories(parent_id);
+
