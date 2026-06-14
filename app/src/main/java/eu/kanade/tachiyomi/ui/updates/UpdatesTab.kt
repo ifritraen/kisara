@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.updates
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FilterList
@@ -16,6 +17,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -43,6 +49,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.updates.UpdatesScreenModel.Event
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import mihon.feature.upcoming.UpcomingScreen
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
@@ -222,34 +229,51 @@ fun Screen.updatesTab(
             val context = LocalContext.current
             val usePanoramaCover by settingsScreenModel.updatesPreferences.usePanoramaCover().collectAsState()
 
-            UpdateScreen(
-                state = state,
-                snackbarHostState = screenModel.snackbarHostState,
-                lastUpdated = screenModel.lastUpdated,
-                preserveReadingPosition = screenModel.preserveReadingPosition,
-                onClickCover = { item -> navigator.push(MangaScreen(item.update.mangaId)) },
-                onSelectAll = screenModel::toggleAllSelection,
-                onInvertSelection = screenModel::invertSelection,
-                onUpdateLibrary = screenModel::updateLibrary,
-                onDownloadChapter = screenModel::downloadChapters,
-                onMultiBookmarkClicked = screenModel::bookmarkUpdates,
-                onMultiMarkAsReadClicked = screenModel::markUpdatesRead,
-                onMultiDeleteClicked = screenModel::showConfirmDeleteChapters,
-                updateSwipeStartAction = screenModel.chapterSwipeStartAction,
-                updateSwipeEndAction = screenModel.chapterSwipeEndAction,
-                onUpdateSwipe = screenModel::updateSwipe,
-                onUpdateSelected = screenModel::toggleSelection,
-                onOpenChapter = {
-                    val intent = ReaderActivity.newIntent(context, it.update.mangaId, it.update.chapterId)
-                    context.startActivity(intent)
-                },
-                onCalendarClicked = { navigator.push(UpcomingScreen()) },
-                onFilterClicked = screenModel::showFilterDialog,
-                hasActiveFilters = state.hasActiveFilters,
-                usePanoramaCover = usePanoramaCover,
-                collapseToggle = screenModel::toggleExpandedState,
-                showAppBar = false,
-            )
+            val scope = rememberCoroutineScope()
+            val nestedScrollConnection = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        val delta = available.y
+                        if (delta < -10f) {
+                            scope.launch { HomeScreen.showBottomNav(false) }
+                        } else if (delta > 10f) {
+                            scope.launch { HomeScreen.showBottomNav(true) }
+                        }
+                        return Offset.Zero
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
+                UpdateScreen(
+                    state = state,
+                    snackbarHostState = screenModel.snackbarHostState,
+                    lastUpdated = screenModel.lastUpdated,
+                    preserveReadingPosition = screenModel.preserveReadingPosition,
+                    onClickCover = { item -> navigator.push(MangaScreen(item.update.mangaId)) },
+                    onSelectAll = screenModel::toggleAllSelection,
+                    onInvertSelection = screenModel::invertSelection,
+                    onUpdateLibrary = screenModel::updateLibrary,
+                    onDownloadChapter = screenModel::downloadChapters,
+                    onMultiBookmarkClicked = screenModel::bookmarkUpdates,
+                    onMultiMarkAsReadClicked = screenModel::markUpdatesRead,
+                    onMultiDeleteClicked = screenModel::showConfirmDeleteChapters,
+                    updateSwipeStartAction = screenModel.chapterSwipeStartAction,
+                    updateSwipeEndAction = screenModel.chapterSwipeEndAction,
+                    onUpdateSwipe = screenModel::updateSwipe,
+                    onUpdateSelected = screenModel::toggleSelection,
+                    onOpenChapter = {
+                        val intent = ReaderActivity.newIntent(context, it.update.mangaId, it.update.chapterId)
+                        context.startActivity(intent)
+                    },
+                    onCalendarClicked = { navigator.push(UpcomingScreen()) },
+                    onFilterClicked = screenModel::showFilterDialog,
+                    hasActiveFilters = state.hasActiveFilters,
+                    usePanoramaCover = usePanoramaCover,
+                    collapseToggle = screenModel::toggleExpandedState,
+                    showAppBar = false,
+                )
+            }
 
             val onDismissDialog = { screenModel.setDialog(null) }
             when (val dialog = state.dialog) {

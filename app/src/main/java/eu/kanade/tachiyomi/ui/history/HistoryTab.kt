@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.FilterList
@@ -16,6 +17,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -47,6 +53,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import mihon.feature.migration.dialog.MigrateMangaDialog
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
@@ -258,23 +265,40 @@ fun Screen.historyTab(
             val context = LocalContext.current
             val usePanoramaCover by settingsScreenModel.historyPreferences.usePanoramaCover().collectAsState()
 
-            HistoryScreen(
-                state = state,
-                snackbarHostState = snackbarHostState,
-                onSearchQueryChange = screenModel::updateSearchQuery,
-                onClickCover = { navigator.push(MangaScreen(it)) },
-                onClickResume = screenModel::getNextChapterForManga,
-                onDialogChange = screenModel::setDialog,
-                onClickFavorite = screenModel::addFavorite,
-                toggleSelectionMode = screenModel::toggleSelectionMode,
-                onSelectAll = screenModel::toggleAllSelection,
-                onInvertSelection = screenModel::invertSelection,
-                onHistorySelected = screenModel::toggleSelection,
-                onFilterClicked = screenModel::showFilterDialog,
-                hasActiveFilters = state.hasActiveFilters,
-                usePanoramaCover = usePanoramaCover,
-                showAppBar = false,
-            )
+            val scope = rememberCoroutineScope()
+            val nestedScrollConnection = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        val delta = available.y
+                        if (delta < -10f) {
+                            scope.launch { HomeScreen.showBottomNav(false) }
+                        } else if (delta > 10f) {
+                            scope.launch { HomeScreen.showBottomNav(true) }
+                        }
+                        return Offset.Zero
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
+                HistoryScreen(
+                    state = state,
+                    snackbarHostState = snackbarHostState,
+                    onSearchQueryChange = screenModel::updateSearchQuery,
+                    onClickCover = { navigator.push(MangaScreen(it)) },
+                    onClickResume = screenModel::getNextChapterForManga,
+                    onDialogChange = screenModel::setDialog,
+                    onClickFavorite = screenModel::addFavorite,
+                    toggleSelectionMode = screenModel::toggleSelectionMode,
+                    onSelectAll = screenModel::toggleAllSelection,
+                    onInvertSelection = screenModel::invertSelection,
+                    onHistorySelected = screenModel::toggleSelection,
+                    onFilterClicked = screenModel::showFilterDialog,
+                    hasActiveFilters = state.hasActiveFilters,
+                    usePanoramaCover = usePanoramaCover,
+                    showAppBar = false,
+                )
+            }
 
             val onDismissRequest = { screenModel.setDialog(null) }
             when (val dialog = state.dialog) {

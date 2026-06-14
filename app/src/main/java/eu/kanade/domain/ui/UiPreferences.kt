@@ -82,6 +82,12 @@ class UiPreferences(
 
     fun bottomBarLabels() = preferenceStore.getBoolean("pref_show_bottom_bar_labels", true)
 
+    // KMK -->
+    fun floatingBottomBar() = preferenceStore.getBoolean("pref_floating_bottom_bar", true)
+    fun bottomBarOpacity() = preferenceStore.getInt("pref_bottom_bar_opacity", 80)
+    fun bottomBarBlur() = preferenceStore.getInt("pref_bottom_bar_blur", 8)
+    // KMK <--
+
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)
 
     fun showNavHistory() = preferenceStore.getBoolean("pref_show_history_button", true)

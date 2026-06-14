@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import eu.kanade.core.preference.PreferenceMutableState
 import eu.kanade.presentation.category.visualName
 import eu.kanade.tachiyomi.ui.library.LibraryItem
@@ -70,6 +72,10 @@ fun LibraryContent(
     getDisplayMode: (Int) -> PreferenceMutableState<LibraryDisplayMode>,
     getColumnsForOrientation: (Boolean) -> PreferenceMutableState<Int>,
     getItemsForCategory: (Category) -> List<LibraryItem>,
+    // KMK -->
+    activeSubcategoryId: Long? = null,
+    onSubcategorySelected: (Long?) -> Unit = {},
+    // KMK <--
 ) {
     // Derive parent categories and child mapping
     val parentCategories = remember(categories) {
@@ -80,9 +86,6 @@ fun LibraryContent(
             .groupBy { it.parentId }
             .mapValues { entry -> entry.value.sortedBy { it.order } }
     }
-
-    // Track selected subcategory (null = show all/parent items)
-    var activeSubcategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     // Track which parent categories have collapsed subcategory chips
     var collapsedParentIds by rememberSaveable { mutableStateOf(setOf<Long>()) }
@@ -165,7 +168,7 @@ fun LibraryContent(
             // Reset activeSubcategoryId if no subcategories for current parent
             LaunchedEffect(subcategoriesForActiveParent) {
                 if (subcategoriesForActiveParent.isEmpty()) {
-                    activeSubcategoryId = null
+                    onSubcategorySelected(null)
                 }
             }
 
@@ -201,7 +204,7 @@ fun LibraryContent(
                                     }
                                 } else {
                                     // Switch to "All" and turn off exclude mode
-                                    activeSubcategoryId = null
+                                    onSubcategorySelected(null)
                                     if (isExcludingSubcategories && activeParent != null) {
                                         excludeSubcategoriesParentIds = excludeSubcategoriesParentIds - activeParent.id
                                     }
@@ -212,18 +215,20 @@ fun LibraryContent(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
-                                    Text(text = "All")
+                                    Text(text = "All", fontSize = 11.sp)
                                     if (isExcludingSubcategories) {
                                         Icon(
                                             imageVector = Icons.Default.Close,
                                             contentDescription = "Excluding subcategories",
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(12.dp),
                                             tint = MaterialTheme.colorScheme.error,
                                         )
                                     }
                                 }
                             },
-                            modifier = Modifier.padding(vertical = 6.dp),
+                            modifier = Modifier
+                                .height(26.dp)
+                                .padding(vertical = 2.dp),
                         )
                     }
 
@@ -233,14 +238,16 @@ fun LibraryContent(
                         FilterChip(
                             selected = selected,
                             onClick = {
-                                activeSubcategoryId = if (selected) null else sub.id
+                                onSubcategorySelected(if (selected) null else sub.id)
                                 // When selecting a subcategory, turn off exclude mode
                                 if (activeParent != null && isExcludingSubcategories) {
                                     excludeSubcategoriesParentIds = excludeSubcategoriesParentIds - activeParent.id
                                 }
                             },
-                            label = { Text(text = sub.visualName) },
-                            modifier = Modifier.padding(vertical = 6.dp),
+                            label = { Text(text = sub.visualName, fontSize = 11.sp) },
+                            modifier = Modifier
+                                .height(26.dp)
+                                .padding(vertical = 2.dp),
                         )
                     }
                 }
@@ -327,7 +334,7 @@ fun LibraryContent(
         LaunchedEffect(pagerState.currentPage) {
             // Reset subcategory selection when parent page changes
             if (showParentFilters) {
-                activeSubcategoryId = null
+                onSubcategorySelected(null)
             }
             onChangeCurrentPage(pagerState.currentPage)
         }

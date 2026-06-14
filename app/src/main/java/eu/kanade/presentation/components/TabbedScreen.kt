@@ -22,8 +22,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
 import eu.kanade.tachiyomi.ui.browse.feed.FeedScreenModel
 import kotlinx.collections.immutable.ImmutableList
@@ -32,6 +34,9 @@ import kotlinx.coroutines.launch
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.TabText
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 fun TabbedScreen(
@@ -118,8 +123,12 @@ fun TabbedScreen(
                 state = state,
                 verticalAlignment = Alignment.Top,
             ) { page ->
+                val uiPreferences = remember { Injekt.get<UiPreferences>() }
+                val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+                val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 80.dp else 0.dp)
+
                 tabs[page].content(
-                    PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                    PaddingValues(bottom = bottomPadding),
                     snackbarHostState,
                 )
             }

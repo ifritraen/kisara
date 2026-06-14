@@ -242,5 +242,9 @@
     <string name="google_drive_secrets_missing">Google Drive client secrets are missing (client_secrets.json is not bundled). This feature is unavailable in this build.</string>
     <!-- KMK -->
     <string name="label_home">Home</string>
+    <string name="pref_floating_bottom_bar">Floating bottom bar</string>
+    <string name="pref_floating_bottom_bar_summary">Use a floating bottom navigation bar with rounded corners</string>
+    <string name="pref_bottom_bar_opacity">Bottom bar opacity</string>
+    <string name="pref_bottom_bar_blur">Bottom bar blur radius</string>
     <!-- KMK -->
 </resources>

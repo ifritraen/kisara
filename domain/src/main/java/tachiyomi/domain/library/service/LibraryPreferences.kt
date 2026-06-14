@@ -166,9 +166,13 @@ class LibraryPreferences(
 
     fun lastUsedCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_category"), 0)
 
-    fun categoryTabs() = preferenceStore.getBoolean("display_category_tabs", true)
+    fun categoryTabs() = preferenceStore.getBoolean("display_category_tabs", false)
 
     fun subcategoryTabs() = preferenceStore.getBoolean("display_subcategory_tabs", false)
+
+    // KMK -->
+    fun categoryBarPinned() = preferenceStore.getBoolean("pref_category_bar_pinned", false)
+    // KMK <--
 
     fun categoryNumberOfItems() = preferenceStore.getBoolean("display_number_of_items", false)
 

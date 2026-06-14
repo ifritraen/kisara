@@ -6,16 +6,19 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
@@ -26,10 +29,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -62,6 +70,7 @@ import tachiyomi.presentation.core.components.material.NavigationBar
 import tachiyomi.presentation.core.components.material.NavigationRail
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -93,6 +102,10 @@ object HomeScreen : Screen() {
         }
         // SY <--
 
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+        val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
+
         TabNavigator(
             tab = LibraryTab,
             key = TAB_NAVIGATOR_KEY,
@@ -114,7 +127,7 @@ object HomeScreen : Screen() {
                         }
                     },
                     bottomBar = {
-                        if (!isTabletUi()) {
+                        if (!isTabletUi() && !floatingBottomBar) {
                             val bottomNavVisible by produceState(initialValue = true) {
                                 showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
                             }
@@ -156,6 +169,36 @@ object HomeScreen : Screen() {
                         ) {
                             tabNavigator.saveableState(key = "currentTab", it) {
                                 it.Content()
+                            }
+                        }
+
+                        // Floating bottom bar overlay
+                        if (!isTabletUi() && floatingBottomBar) {
+                            val bottomNavVisible by produceState(initialValue = true) {
+                                showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
+                            }
+                            AnimatedVisibility(
+                                visible = bottomNavVisible,
+                                enter = expandVertically(),
+                                exit = shrinkVertically(),
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            ) {
+                                val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = bottomBarOpacity / 100f)
+                                NavigationBar(
+                                    modifier = Modifier
+                                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
+                                    containerColor = containerColor,
+                                    tonalElevation = 0.dp,
+                                    height = 60.dp, // Thinner!
+                                ) {
+                                    TABS
+                                        .fastFilter { it.isEnabled() }
+                                        .fastForEach {
+                                            NavigationBarItem(it, alwaysShowLabel)
+                                        }
+                                }
                             }
                         }
                     }
