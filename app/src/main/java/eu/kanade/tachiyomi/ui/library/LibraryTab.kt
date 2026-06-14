@@ -1,12 +1,16 @@
 package eu.kanade.tachiyomi.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -56,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -77,6 +83,9 @@ import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
+import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.library.DeleteLibraryMangaDialog
 import eu.kanade.presentation.library.LibrarySettingsDialog
 import eu.kanade.presentation.library.components.LibraryContent
@@ -109,6 +118,7 @@ import exh.recs.batch.SearchStatus
 import exh.source.MERGED_SOURCE_ID
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -135,6 +145,16 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 data object LibraryTab : Tab {
+    val toggleCategoryBarEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val searchEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val filterSettingsEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val syncEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val randomMangaEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val globalUpdateEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val categoryUpdateEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val reindexDownloadEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val syncFavoritesEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+
     @Suppress("unused")
     private fun readResolve(): Any = LibraryTab
 
@@ -165,42 +185,6 @@ data object LibraryTab : Tab {
         val settingsScreenModel = rememberScreenModel { LibrarySettingsScreenModel() }
         val state by screenModel.state.collectAsState()
 
-        // KMK -->
-        var activeSubcategoryId by remember { mutableStateOf<Long?>(null) }
-        LaunchedEffect(state.activeCategoryIndex) {
-            activeSubcategoryId = null
-        }
-
-        var showCategoryBar by remember { mutableStateOf(false) }
-        val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
-        val categoryBarPinnedPref = libraryPreferences.categoryBarPinned()
-        val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
-
-        var topBarVisible by remember { mutableStateOf(true) }
-        var bottomBarVisible by remember { mutableStateOf(true) }
-        val nestedScrollConnection = remember {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    val delta = available.y
-                    if (delta < -10f) {
-                        if (topBarVisible) topBarVisible = false
-                        if (bottomBarVisible) {
-                            bottomBarVisible = false
-                            scope.launch { HomeScreen.showBottomNav(false) }
-                        }
-                    } else if (delta > 10f) {
-                        if (!topBarVisible) topBarVisible = true
-                        if (!bottomBarVisible) {
-                            bottomBarVisible = true
-                            scope.launch { HomeScreen.showBottomNav(true) }
-                        }
-                    }
-                    return Offset.Zero
-                }
-            }
-        }
-        // KMK <--
-
         val snackbarHostState = remember { SnackbarHostState() }
 
         val onClickRefresh: (Category?) -> Boolean = { category ->
@@ -228,9 +212,123 @@ data object LibraryTab : Tab {
             started
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        // KMK -->
+        var activeSubcategoryId by remember { mutableStateOf<Long?>(null) }
+        LaunchedEffect(state.activeCategoryIndex) {
+            activeSubcategoryId = null
+        }
+
+        var showCategoryBar by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            launch {
+                toggleCategoryBarEvent.receiveAsFlow().collectLatest {
+                    showCategoryBar = !showCategoryBar
+                }
+            }
+            launch {
+                searchEvent.receiveAsFlow().collectLatest {
+                    screenModel.search("")
+                }
+            }
+            launch {
+                filterSettingsEvent.receiveAsFlow().collectLatest {
+                    screenModel.showSettingsDialog()
+                }
+            }
+            launch {
+                syncEvent.receiveAsFlow().collectLatest {
+                    if (!SyncDataJob.isRunning(context)) {
+                        SyncDataJob.startNow(context, manual = true)
+                    }
+                }
+            }
+            launch {
+                randomMangaEvent.receiveAsFlow().collectLatest {
+                    val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
+                    if (randomItem != null) {
+                        navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                    }
+                }
+            }
+            launch {
+                globalUpdateEvent.receiveAsFlow().collectLatest {
+                    onClickRefresh(null)
+                }
+            }
+            launch {
+                categoryUpdateEvent.receiveAsFlow().collectLatest {
+                    onClickRefresh(state.activeCategory)
+                }
+            }
+            launch {
+                reindexDownloadEvent.receiveAsFlow().collectLatest {
+                    Injekt.get<DownloadCache>().invalidateCache()
+                    context.toast(MR.strings.download_cache_invalidated)
+                }
+            }
+            launch {
+                syncFavoritesEvent.receiveAsFlow().collectLatest {
+                    screenModel.openFavoritesSyncDialog()
+                }
+            }
+        }
+
+        val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+        val categoryBarPinnedPref = libraryPreferences.categoryBarPinned()
+        val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
+
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsState()
+        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
+        val showCategoryTabs by uiPreferences.showCategoryTabs().collectAsState()
+        val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
+        val categoryBarCarouselStyle by uiPreferences.categoryBarCarouselStyle().collectAsState()
+
+        var topBarVisible by remember { mutableStateOf(true) }
+        var bottomBarVisible by remember { mutableStateOf(true) }
+        val nestedScrollConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    val delta = available.y
+                    if (delta < -10f) {
+                        if (hideTopBarOnScroll) {
+                            if (topBarVisible) topBarVisible = false
+                        }
+                        if (bottomBarVisible) {
+                            bottomBarVisible = false
+                            scope.launch { HomeScreen.showBottomNav(false) }
+                        }
+                    } else if (delta > 10f) {
+                        if (hideTopBarOnScroll) {
+                            if (!topBarVisible) topBarVisible = true
+                        } else {
+                            topBarVisible = true
+                        }
+                        if (!bottomBarVisible) {
+                            bottomBarVisible = true
+                            scope.launch { HomeScreen.showBottomNav(true) }
+                        }
+                    }
+                    return Offset.Zero
+                }
+            }
+        }
+        // KMK <--
+
+        LaunchedEffect(hideTopBarOnScroll) {
+            if (!hideTopBarOnScroll) {
+                topBarVisible = true
+            }
+        }
+
+        val hazeState = LocalHazeState.current
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+        ) {
             val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+            val showSubcategoryTabs by libraryPreferences.subcategoryTabs().collectAsState()
 
             Scaffold(
                 modifier = Modifier.nestedScroll(nestedScrollConnection),
@@ -374,7 +472,7 @@ data object LibraryTab : Tab {
                 },
                 snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             ) { contentPadding ->
-                val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 80.dp else 0.dp)
+                val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 72.dp else 0.dp)
                 val adjustedContentPadding = PaddingValues(
                     top = contentPadding.calculateTopPadding(),
                     bottom = bottomPadding,
@@ -409,8 +507,9 @@ data object LibraryTab : Tab {
                             contentPadding = adjustedContentPadding,
                             currentPage = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex.coerceAtLeast(0)),
                             hasActiveFilters = state.hasActiveFilters,
-                            showPageTabs = (state.showCategoryTabs || !state.searchQuery.isNullOrEmpty()) && topBarVisible,
-                            showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory } && topBarVisible,
+                            showPageTabs = (showTopTabBar || !state.searchQuery.isNullOrEmpty()) && topBarVisible,
+                            showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory },
+                            showSubcategories = showSubcategoryTabs && topBarVisible,
                             onChangeCurrentPage = screenModel::updateActiveCategoryIndex,
                             onClickManga = { navigator.push(MangaScreen(it)) },
                             onContinueReadingClicked = { it: LibraryManga ->
@@ -448,139 +547,214 @@ data object LibraryTab : Tab {
                 }
             }
 
-            // Floating Category FAB
-            if (state.searchQuery == null && !state.selectionMode && !state.isLoading && !state.isLibraryEmpty) {
-                val fabBottomPadding = if (bottomBarVisible) {
-                    if (floatingBottomBar) 88.dp else 96.dp
-                } else {
-                    16.dp
-                }
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = fabBottomPadding, end = 16.dp)
-                        .size(40.dp) // Smaller!
-                        .combinedClickable(
-                            onClick = { showCategoryBar = !showCategoryBar },
-                            onDoubleClick = { screenModel.search("") },
-                        ),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    tonalElevation = 6.dp,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.Default.Label, // Category icon
-                            contentDescription = "Categories",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
+            // Floating Horizontally Scrollable Category Bar (with Scroll-to-Hide and Swapped Rows)
+            val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
+            val categoryRowState = rememberLazyListState()
+
+            LaunchedEffect(state.activeCategoryIndex) {
+                if (categoryBarCarouselStyle && state.categories.isNotEmpty()) {
+                    val index = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex)
+                    val layoutInfo = categoryRowState.layoutInfo
+                    val visibleItems = layoutInfo.visibleItemsInfo
+                    val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                    val targetItem = visibleItems.firstOrNull { it.index == index }
+                    if (targetItem != null) {
+                        val offset = (viewportWidth - targetItem.size) / 2
+                        categoryRowState.animateScrollToItem(index, -offset)
+                    } else {
+                        categoryRowState.scrollToItem(index)
+                        val targetItemNext = categoryRowState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                        if (targetItemNext != null) {
+                            val offset = (viewportWidth - targetItemNext.size) / 2
+                            categoryRowState.animateScrollToItem(index, -offset)
+                        }
                     }
                 }
             }
 
-            // Floating Horizontally Scrollable Category Bar
-            if ((showCategoryBar || isCategoryBarPinned) && state.searchQuery == null && !state.selectionMode && !state.isLoading && !state.isLibraryEmpty) {
-                val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
-                val fabBottomPadding = if (bottomBarVisible) {
-                    if (floatingBottomBar) 88.dp else 96.dp
-                } else {
-                    16.dp
-                }
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, end = 72.dp, bottom = fabBottomPadding)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = bottomBarOpacity / 100f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    shadowElevation = 6.dp,
+            val fabBottomPadding = if (bottomBarVisible) {
+                if (floatingBottomBar) 72.dp else 80.dp
+            } else {
+                16.dp
+            }
+
+            val categoryBarVisible = showCategoryTabs && (
+                ((bottomBarVisible && showCategoryBar) || isCategoryBarPinned) &&
+                    state.searchQuery == null && !state.selectionMode && !state.isLoading && !state.isLibraryEmpty
+                )
+
+            AnimatedVisibility(
+                visible = categoryBarVisible,
+                enter = expandVertically(expandFrom = Alignment.Bottom),
+                exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, end = 16.dp, bottom = fabBottomPadding)
+                    .fillMaxWidth(),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    // Small attached Pin button above category bar
+                    GlassSurface(
+                        modifier = Modifier.padding(end = 12.dp),
+                        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                        style = GlassDefaults.subtleStyle(),
                     ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            // Category Row
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                itemsIndexed(state.categories) { idx, cat ->
-                                    val isSelected = state.activeCategoryIndex == idx
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { screenModel.updateActiveCategoryIndex(idx) },
-                                        label = { Text(text = cat.visualName, fontSize = 10.sp) },
-                                        modifier = Modifier.height(24.dp),
-                                    )
-                                }
-                            }
-
-                            // Subcategories
-                            val parentCategories = remember(state.categories) {
-                                state.categories.filter { it.parentId == null }.sortedBy { it.order }
-                            }
-                            val childrenByParent = remember(state.categories) {
-                                state.categories.filter { it.parentId != null }
-                                    .groupBy { it.parentId }
-                                    .mapValues { entry -> entry.value.sortedBy { it.order } }
-                            }
-                            val activeParent = parentCategories.getOrNull(state.activeCategoryIndex)
-                            val subcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
-
-                            if (subcategories.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    item {
-                                        FilterChip(
-                                            selected = activeSubcategoryId == null,
-                                            onClick = { activeSubcategoryId = null },
-                                            label = { Text(text = "All", fontSize = 10.sp) },
-                                            modifier = Modifier.height(24.dp),
-                                        )
-                                    }
-                                    items(subcategories) { sub ->
-                                        val isSelected = activeSubcategoryId == sub.id
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = { activeSubcategoryId = if (isSelected) null else sub.id },
-                                            label = { Text(text = sub.visualName, fontSize = 10.sp) },
-                                            modifier = Modifier.height(24.dp),
-                                        )
+                        Box(
+                            modifier = Modifier
+                                .clickable {
+                                    scope.launch {
+                                        categoryBarPinnedPref.set(!isCategoryBarPinned)
                                     }
                                 }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        // Pin button
-                        IconButton(
-                            onClick = {
-                                scope.launch {
-                                    categoryBarPinnedPref.set(!isCategoryBarPinned)
-                                }
-                            },
-                            modifier = Modifier.size(24.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                                 contentDescription = "Pin category bar",
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(12.dp),
                                 tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+
+                    // Main Category Bar Surface
+                    GlassSurface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        style = GlassDefaults.regularStyle(),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                // Subcategories (On top)
+                                val parentCategories = remember(state.categories) {
+                                    state.categories.filter { it.parentId == null }.sortedBy { it.order }
+                                }
+                                val childrenByParent = remember(state.categories) {
+                                    state.categories.filter { it.parentId != null }
+                                        .groupBy { it.parentId }
+                                        .mapValues { entry -> entry.value.sortedBy { it.order } }
+                                }
+                                val showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory }
+                                val tabCategories = if (showParentFilters && parentCategories.isNotEmpty()) {
+                                    parentCategories
+                                } else {
+                                    state.categories
+                                }
+                                val activeCategory = tabCategories.getOrNull(state.activeCategoryIndex)
+                                val activeParent = remember(activeCategory, parentCategories) {
+                                    if (activeCategory == null) {
+                                        null
+                                    } else if (activeCategory.parentId == null) {
+                                        activeCategory
+                                    } else {
+                                        parentCategories.find { it.id == activeCategory.parentId }
+                                    }
+                                }
+                                val subcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
+
+                                val activeSubcategoryIdOfActivePage = if (showParentFilters) {
+                                    activeSubcategoryId
+                                } else {
+                                    if (activeCategory?.parentId != null) activeCategory.id else null
+                                }
+
+                                if (subcategories.isNotEmpty()) {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        item {
+                                            FilterChip(
+                                                selected = activeSubcategoryIdOfActivePage == null,
+                                                onClick = {
+                                                    if (showParentFilters) {
+                                                        activeSubcategoryId = null
+                                                    } else {
+                                                        activeParent?.let { parent ->
+                                                            val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
+                                                            if (actualIndex != -1) {
+                                                                screenModel.updateActiveCategoryIndex(actualIndex)
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                label = { Text(text = "All", fontSize = 10.sp) },
+                                                modifier = Modifier.height(24.dp),
+                                            )
+                                        }
+                                        items(subcategories) { sub ->
+                                            val isSelected = activeSubcategoryIdOfActivePage == sub.id
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = {
+                                                    if (showParentFilters) {
+                                                        activeSubcategoryId = if (isSelected) null else sub.id
+                                                    } else {
+                                                        val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
+                                                        if (actualIndex != -1) {
+                                                            screenModel.updateActiveCategoryIndex(actualIndex)
+                                                        }
+                                                    }
+                                                },
+                                                label = { Text(text = sub.visualName, fontSize = 10.sp) },
+                                                modifier = Modifier.height(24.dp),
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                }
+
+                                // Category Row (On bottom)
+                                LazyRow(
+                                    state = categoryRowState,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    itemsIndexed(tabCategories) { idx, cat ->
+                                        val isSelected = state.activeCategoryIndex == idx
+                                        val scale = if (categoryBarCarouselStyle && isSelected) 1.15f else 1f
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                screenModel.updateActiveCategoryIndex(idx)
+                                                if (showParentFilters) {
+                                                    activeSubcategoryId = null
+                                                }
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = cat.visualName,
+                                                    fontSize = 10.sp,
+                                                    modifier = if (categoryBarCarouselStyle) Modifier.graphicsLayer(scaleX = scale, scaleY = scale) else Modifier,
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .height(24.dp)
+                                                .then(
+                                                    if (categoryBarCarouselStyle && isSelected) {
+                                                        Modifier.padding(horizontal = 6.dp)
+                                                    } else {
+                                                        Modifier
+                                                    },
+                                                ),
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

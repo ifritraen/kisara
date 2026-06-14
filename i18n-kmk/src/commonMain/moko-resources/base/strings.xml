@@ -223,7 +223,7 @@
     <string name="discord_status_scrolling">Scrolling through</string>
     <string name="discord_status_messing">Messing around with</string>
     <string name="discord_download_button">Read on %s</string>
-    <string name="discord_app_description">Komikku - a manga reader app</string>
+    <string name="discord_app_description">Kisara - a manga reader app</string>
     <!-- Discord RPC Customization -->
     <string name="pref_category_discord_customization">Discord Customization</string>
     <string name="pref_discord_custom_message">Custom Message</string>
@@ -246,5 +246,31 @@
     <string name="pref_floating_bottom_bar_summary">Use a floating bottom navigation bar with rounded corners</string>
     <string name="pref_bottom_bar_opacity">Bottom bar opacity</string>
     <string name="pref_bottom_bar_blur">Bottom bar blur radius</string>
+    <string name="pref_show_category_tabs">Show category tabs</string>
+    <string name="pref_show_subcategory_tabs">Show subcategory chips</string>
+    <string name="label_duplicate">Duplicate</string>
+
+    <!-- Kisara Custom Settings -->
+    <string name="label_kisara_settings">Kisara Settings</string>
+    <string name="pref_kisara_settings">Kisara Settings</string>
+    <string name="pref_kisara_settings_summary">Configure custom blur, tab scrolling, deduplication, and layout options</string>
+    <string name="pref_kisara_frosted_glass">Frosted Glass Effect</string>
+    <string name="pref_kisara_frosted_glass_summary">Applies a blur backdrop to the bottom bar and floating menus</string>
+    <string name="pref_kisara_hide_top_bar">Hide Top Tab Row on Scroll</string>
+    <string name="pref_kisara_hide_top_bar_summary">Slides the top tab rows out of view when scrolling down</string>
+    <string name="pref_kisara_duplicate_max_scan">Deduplication scan limit</string>
+    <string name="pref_kisara_duplicate_max_scan_summary">Maximum groups to scan (set to 0 for unlimited library-wide scan)</string>
+    <string name="pref_kisara_chapter_sheet_min_height">Chapters sheet collapsed height</string>
+    <string name="pref_kisara_chapter_sheet_min_height_summary">Height of the handle bar when minimized in dp</string>
+    <string name="pref_kisara_chapter_sheet_max_height">Chapters sheet expanded height %</string>
+    <string name="pref_kisara_chapter_sheet_max_height_summary">Maximum percentage of screen height the sheet can cover</string>
+    <string name="pref_kisara_carousel_category_style">Carousel category style</string>
+    <string name="pref_kisara_carousel_category_style_summary">Toggles category chips to a scrollable carousel with centered scaling</string>
+    <string name="pref_kisara_show_category_tabs">Show Bottom Category Bar</string>
+    <string name="pref_kisara_show_category_tabs_summary">Applies a custom bottom category selection bar in the library screen</string>
+    <string name="pref_kisara_show_top_tab_bar">Show Top Tab/Category Bar</string>
+    <string name="pref_kisara_show_top_tab_bar_summary">Shows the top category/tabs bar on Home, Library, and Browse screens</string>
+    <string name="pref_kisara_always_show_sub_tabs">Always Show Sub-Tabs Bar</string>
+    <string name="pref_kisara_always_show_sub_tabs_summary">If enabled, permanently shows the sub-tabs popup bar above the bottom navigation bar for the active tab (Feed, Updates, History, etc.)</string>
     <!-- KMK -->
 </resources>

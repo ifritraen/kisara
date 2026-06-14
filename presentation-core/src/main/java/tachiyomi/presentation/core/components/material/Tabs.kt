@@ -19,6 +19,7 @@ fun TabText(text: String, badgeCount: Int? = null) {
     ) {
         Text(
             text = text,
+            fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -26,7 +27,7 @@ fun TabText(text: String, badgeCount: Int? = null) {
             Pill(
                 text = "$badgeCount",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = pillAlpha),
-                fontSize = 10.sp,
+                fontSize = 9.sp,
             )
         }
     }

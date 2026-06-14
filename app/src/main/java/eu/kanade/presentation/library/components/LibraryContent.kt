@@ -75,6 +75,7 @@ fun LibraryContent(
     // KMK -->
     activeSubcategoryId: Long? = null,
     onSubcategorySelected: (Long?) -> Unit = {},
+    showSubcategories: Boolean = true,
     // KMK <--
 ) {
     // Derive parent categories and child mapping
@@ -92,6 +93,15 @@ fun LibraryContent(
 
     // Track which parent categories have "exclude subcategories" mode enabled
     var excludeSubcategoriesParentIds by rememberSaveable { mutableStateOf(setOf<Long>()) }
+
+    // Track parent categories where the tab was clicked to bypass showSubcategoryTabs setting
+    var clickedTabParentIds by rememberSaveable { mutableStateOf(setOf<Long>()) }
+
+    LaunchedEffect(searchQuery) {
+        if (!searchQuery.isNullOrEmpty()) {
+            collapsedParentIds = emptySet()
+        }
+    }
 
     Column(
         modifier = Modifier.padding(
@@ -152,7 +162,9 @@ fun LibraryContent(
                         } else {
                             // Navigate to the tab
                             pagerState.animateScrollToPage(it)
+                            collapsedParentIds = collapsedParentIds - targetCategory.id
                         }
+                        clickedTabParentIds = clickedTabParentIds + targetCategory.id
                     }
                 },
             )
@@ -174,7 +186,7 @@ fun LibraryContent(
 
             // Animated visibility for subcategory chips with smooth expand/collapse
             AnimatedVisibility(
-                visible = subcategoriesForActiveParent.isNotEmpty() && !isCollapsed,
+                visible = subcategoriesForActiveParent.isNotEmpty() && !isCollapsed && (showSubcategories || (activeParent != null && activeParent.id in clickedTabParentIds)),
                 enter = expandVertically(
                     animationSpec = tween(durationMillis = 300),
                     expandFrom = androidx.compose.ui.Alignment.Top,

@@ -86,6 +86,18 @@ class UiPreferences(
     fun floatingBottomBar() = preferenceStore.getBoolean("pref_floating_bottom_bar", true)
     fun bottomBarOpacity() = preferenceStore.getInt("pref_bottom_bar_opacity", 80)
     fun bottomBarBlur() = preferenceStore.getInt("pref_bottom_bar_blur", 8)
+
+    // Kisara Settings
+    fun kisaraFrostedGlass() = preferenceStore.getBoolean("kisara_frosted_glass", true)
+    fun showCategoryTabs() = preferenceStore.getBoolean("kisara_show_category_tabs", false)
+    fun hideTopBarOnScroll() = preferenceStore.getBoolean("kisara_hide_top_bar_on_scroll", true)
+    fun duplicateMaxScanCount() = preferenceStore.getInt("kisara_duplicate_max_scan_count", 0)
+    fun chapterSheetMinHeightDp() = preferenceStore.getInt("kisara_chapter_sheet_min_height", 144)
+    fun chapterSheetMaxHeightPct() = preferenceStore.getInt("kisara_chapter_sheet_max_height", 60)
+    fun categoryBarCarouselStyle() = preferenceStore.getBoolean("kisara_category_bar_carousel_style", false)
+    fun duplicateHistory() = preferenceStore.getStringSet("kisara_duplicate_history", emptySet())
+    fun alwaysShowSubTabs() = preferenceStore.getBoolean("kisara_always_show_sub_tabs", true)
+    fun showTopTabBar() = preferenceStore.getBoolean("kisara_show_top_tab_bar", false)
     // KMK <--
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)
