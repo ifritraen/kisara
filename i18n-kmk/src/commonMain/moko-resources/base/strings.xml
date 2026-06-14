@@ -240,4 +240,7 @@
     <string name="pref_discord_show_discord_button_summary">Displays a button to join the Discord server</string>
     <!-- Sync -->
     <string name="google_drive_secrets_missing">Google Drive client secrets are missing (client_secrets.json is not bundled). This feature is unavailable in this build.</string>
+    <!-- KMK -->
+    <string name="label_home">Home</string>
+    <!-- KMK -->
 </resources>

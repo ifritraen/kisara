@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +78,12 @@ fun LibrarySettingsDialog(
     // SY <--
     // KMK -->
     categories: List<Category>,
+    onClickRefresh: (() -> Unit)? = null,
+    onClickGlobalUpdate: (() -> Unit)? = null,
+    onClickOpenRandomManga: (() -> Unit)? = null,
+    onClickSyncNow: (() -> Unit)? = null,
+    onClickSyncExh: (() -> Unit)? = null,
+    onInvalidateDownloadCache: (() -> Unit)? = null,
     // KMK <--
 ) {
     TabbedDialog(
@@ -98,6 +107,12 @@ fun LibrarySettingsDialog(
                     screenModel = screenModel,
                     // KMK -->
                     categories = categories,
+                    onClickRefresh = onClickRefresh,
+                    onClickGlobalUpdate = onClickGlobalUpdate,
+                    onClickOpenRandomManga = onClickOpenRandomManga,
+                    onClickSyncNow = onClickSyncNow,
+                    onClickSyncExh = onClickSyncExh,
+                    onInvalidateDownloadCache = onInvalidateDownloadCache,
                     // KMK <--
                 )
                 1 -> SortPage(
@@ -123,6 +138,12 @@ fun LibrarySettingsDialog(
 private fun ColumnScope.FilterPage(
     screenModel: LibrarySettingsScreenModel,
     categories: List<Category>,
+    onClickRefresh: (() -> Unit)?,
+    onClickGlobalUpdate: (() -> Unit)?,
+    onClickOpenRandomManga: (() -> Unit)?,
+    onClickSyncNow: (() -> Unit)?,
+    onClickSyncExh: (() -> Unit)?,
+    onInvalidateDownloadCache: (() -> Unit)?,
 ) {
     val filterDownloaded by screenModel.libraryPreferences.filterDownloaded().collectAsState()
     val downloadedOnly by screenModel.preferences.downloadedOnly().collectAsState()
@@ -213,6 +234,55 @@ private fun ColumnScope.FilterPage(
             }
         }
     }
+
+    // KMK -->
+    val hasActions = onClickRefresh != null || onClickGlobalUpdate != null || onClickOpenRandomManga != null || onClickSyncNow != null || onClickSyncExh != null || onInvalidateDownloadCache != null
+    if (hasActions) {
+        HeadingItem(stringResource(MR.strings.label_more))
+        if (onClickGlobalUpdate != null) {
+            IconItem(
+                label = stringResource(MR.strings.action_update_library),
+                icon = Icons.Default.Refresh,
+                onClick = onClickGlobalUpdate,
+            )
+        }
+        if (onClickRefresh != null) {
+            IconItem(
+                label = stringResource(MR.strings.action_update_category),
+                icon = Icons.Default.Refresh,
+                onClick = onClickRefresh,
+            )
+        }
+        if (onClickOpenRandomManga != null) {
+            IconItem(
+                label = stringResource(MR.strings.action_open_random_manga),
+                icon = Icons.Default.Shuffle,
+                onClick = onClickOpenRandomManga,
+            )
+        }
+        if (onInvalidateDownloadCache != null) {
+            IconItem(
+                label = stringResource(MR.strings.pref_invalidate_download_cache),
+                icon = Icons.Default.Delete,
+                onClick = onInvalidateDownloadCache,
+            )
+        }
+        if (onClickSyncExh != null) {
+            IconItem(
+                label = stringResource(SYMR.strings.sync_favorites),
+                icon = Icons.Default.Sync,
+                onClick = onClickSyncExh,
+            )
+        }
+        if (onClickSyncNow != null) {
+            IconItem(
+                label = stringResource(SYMR.strings.sync_library),
+                icon = Icons.Default.Sync,
+                onClick = onClickSyncNow,
+            )
+        }
+    }
+    // KMK <--
 }
 
 @Suppress("UnusedReceiverParameter")

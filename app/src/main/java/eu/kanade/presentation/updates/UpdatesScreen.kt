@@ -74,23 +74,26 @@ fun UpdateScreen(
     // KMK -->
     usePanoramaCover: Boolean,
     collapseToggle: (key: String) -> Unit,
+    showAppBar: Boolean = true,
     // KMK <--
 ) {
     BackHandler(enabled = state.selectionMode, onBack = { onSelectAll(false) })
 
     Scaffold(
         topBar = { scrollBehavior ->
-            UpdatesAppBar(
-                onCalendarClicked = { onCalendarClicked() },
-                onUpdateLibrary = { onUpdateLibrary() },
-                onFilterClicked = { onFilterClicked() },
-                hasFilters = hasActiveFilters,
-                actionModeCounter = state.selected.size,
-                onSelectAll = { onSelectAll(true) },
-                onInvertSelection = { onInvertSelection() },
-                onCancelActionMode = { onSelectAll(false) },
-                scrollBehavior = scrollBehavior,
-            )
+            if (showAppBar || state.selectionMode) {
+                UpdatesAppBar(
+                    onCalendarClicked = { onCalendarClicked() },
+                    onUpdateLibrary = { onUpdateLibrary() },
+                    onFilterClicked = { onFilterClicked() },
+                    hasFilters = hasActiveFilters,
+                    actionModeCounter = state.selected.size,
+                    onSelectAll = { onSelectAll(true) },
+                    onInvertSelection = { onInvertSelection() },
+                    onCancelActionMode = { onSelectAll(false) },
+                    scrollBehavior = scrollBehavior,
+                )
+            }
         },
         bottomBar = {
             UpdatesBottomBar(

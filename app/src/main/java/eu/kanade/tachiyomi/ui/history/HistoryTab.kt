@@ -4,6 +4,11 @@ import android.content.Context
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -21,6 +27,8 @@ import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
+import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.history.HistoryScreen
 import eu.kanade.presentation.history.components.HistoryDeleteAllDialog
 import eu.kanade.presentation.history.components.HistoryDeleteDialog
@@ -31,9 +39,11 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.connections.discord.DiscordRPCService
 import eu.kanade.tachiyomi.data.connections.discord.DiscordScreen
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
+import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -43,6 +53,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.theme.active
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -217,3 +228,156 @@ data object HistoryTab : Tab {
         }
     }
 }
+
+// KMK -->
+@Composable
+fun Screen.historyTab(
+    screenModel: HistoryScreenModel,
+    settingsScreenModel: HistorySettingsScreenModel,
+): TabContent {
+    val navigator = LocalNavigator.currentOrThrow
+    val state by screenModel.state.collectAsState()
+
+    return TabContent(
+        titleRes = MR.strings.label_recent_manga,
+        searchEnabled = true,
+        actions = persistentListOf(
+            AppBar.Action(
+                title = stringResource(MR.strings.action_filter),
+                icon = Icons.Outlined.FilterList,
+                iconTint = if (state.hasActiveFilters) MaterialTheme.colorScheme.active else LocalContentColor.current,
+                onClick = screenModel::showFilterDialog,
+            ),
+            AppBar.Action(
+                title = stringResource(MR.strings.pref_clear_history),
+                icon = Icons.Outlined.Checklist,
+                onClick = screenModel::toggleSelectionMode,
+            ),
+        ),
+        content = { contentPadding, snackbarHostState ->
+            val context = LocalContext.current
+            val usePanoramaCover by settingsScreenModel.historyPreferences.usePanoramaCover().collectAsState()
+
+            HistoryScreen(
+                state = state,
+                snackbarHostState = snackbarHostState,
+                onSearchQueryChange = screenModel::updateSearchQuery,
+                onClickCover = { navigator.push(MangaScreen(it)) },
+                onClickResume = screenModel::getNextChapterForManga,
+                onDialogChange = screenModel::setDialog,
+                onClickFavorite = screenModel::addFavorite,
+                toggleSelectionMode = screenModel::toggleSelectionMode,
+                onSelectAll = screenModel::toggleAllSelection,
+                onInvertSelection = screenModel::invertSelection,
+                onHistorySelected = screenModel::toggleSelection,
+                onFilterClicked = screenModel::showFilterDialog,
+                hasActiveFilters = state.hasActiveFilters,
+                usePanoramaCover = usePanoramaCover,
+                showAppBar = false,
+            )
+
+            val onDismissRequest = { screenModel.setDialog(null) }
+            when (val dialog = state.dialog) {
+                is HistoryScreenModel.Dialog.Delete -> {
+                    HistoryDeleteDialog(
+                        onDismissRequest = onDismissRequest,
+                        onDelete = { all ->
+                            if (all) {
+                                screenModel.removeAllFromHistory(dialog.histories)
+                            } else {
+                                screenModel.removeFromHistory(dialog.histories)
+                            }
+                        },
+                    )
+                }
+                is HistoryScreenModel.Dialog.DeleteAll -> {
+                    HistoryDeleteAllDialog(
+                        onDismissRequest = onDismissRequest,
+                        onDelete = screenModel::removeAllHistory,
+                    )
+                }
+                is HistoryScreenModel.Dialog.DuplicateManga -> {
+                    DuplicateMangaDialog(
+                        duplicates = dialog.duplicates,
+                        onDismissRequest = onDismissRequest,
+                        onConfirm = { screenModel.addFavorite(dialog.manga) },
+                        onOpenManga = { navigator.push(MangaScreen(it.id)) },
+                        onMigrate = { screenModel.showMigrateDialog(dialog.manga, it) },
+                        targetManga = dialog.manga,
+                    )
+                }
+                is HistoryScreenModel.Dialog.ChangeCategory -> {
+                    ChangeCategoryDialog(
+                        initialSelection = dialog.initialSelection,
+                        onDismissRequest = onDismissRequest,
+                        onEditCategories = { navigator.push(CategoryScreen()) },
+                        onConfirm = { include, _ ->
+                            screenModel.moveMangaToCategoriesAndAddToLibrary(dialog.manga, include)
+                        },
+                    )
+                }
+                is HistoryScreenModel.Dialog.Migrate -> {
+                    MigrateMangaDialog(
+                        current = dialog.current,
+                        target = dialog.target,
+                        onClickTitle = { navigator.push(MangaScreen(dialog.current.id)) },
+                        onDismissRequest = onDismissRequest,
+                    )
+                }
+                is HistoryScreenModel.Dialog.FilterSheet -> {
+                    HistoryFilterDialog(
+                        onDismissRequest = onDismissRequest,
+                        screenModel = settingsScreenModel,
+                    )
+                }
+                null -> {}
+            }
+
+            LaunchedEffect(state.selectionMode) {
+                HomeScreen.showBottomNav(!state.selectionMode)
+            }
+
+            LaunchedEffect(state.isLoading) {
+                if (!state.isLoading) {
+                    (context as? MainActivity)?.ready = true
+                    with(DiscordRPCService) {
+                        discordScope.launchIO { setScreen(context, DiscordScreen.HISTORY) }
+                    }
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                screenModel.events.collectLatest { e ->
+                    when (e) {
+                        HistoryScreenModel.Event.InternalError ->
+                            snackbarHostState.showSnackbar(context.stringResource(MR.strings.internal_error))
+                        HistoryScreenModel.Event.HistoryCleared ->
+                            snackbarHostState.showSnackbar(context.stringResource(MR.strings.clear_history_completed))
+                        is HistoryScreenModel.Event.OpenChapter -> {
+                            val chapter = e.chapter
+                            if (chapter != null) {
+                                val intent = ReaderActivity.newIntent(context, chapter.mangaId, chapter.id)
+                                context.startActivity(intent)
+                            } else {
+                                snackbarHostState.showSnackbar(context.stringResource(MR.strings.no_next_chapter))
+                            }
+                        }
+                    }
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                eu.kanade.tachiyomi.ui.home.HomeTab.resumeHistoryEvent.receiveAsFlow().collectLatest {
+                    val chapter = screenModel.getNextChapter()
+                    if (chapter != null) {
+                        val intent = ReaderActivity.newIntent(context, chapter.mangaId, chapter.id)
+                        context.startActivity(intent)
+                    } else {
+                        snackbarHostState.showSnackbar(context.stringResource(MR.strings.no_next_chapter))
+                    }
+                }
+            }
+        },
+    )
+}
+// KMK <--

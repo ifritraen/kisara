@@ -60,6 +60,7 @@ fun HistoryScreen(
     hasActiveFilters: Boolean,
     usePanoramaCover: Boolean,
     // KMK <--
+    showAppBar: Boolean = true,
 ) {
     // KMK -->
     BackHandler(enabled = state.selectionMode, onBack = toggleSelectionMode)
@@ -67,43 +68,45 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = { scrollBehavior ->
-            // KMK -->
-            when {
-                state.selectionMode -> HistorySelectionToolbar(
-                    selectedCount = state.selection.size,
-                    onCancelActionMode = toggleSelectionMode,
-                    onClickSelectAll = { onSelectAll(true) },
-                    onClickInvertSelection = onInvertSelection,
-                    onClickClearHistory = { onDialogChange(HistoryScreenModel.Dialog.Delete(state.selected)) },
-                )
-                // KMK <--
-                else -> SearchToolbar(
-                    titleContent = { AppBarTitle(stringResource(MR.strings.history)) },
-                    searchQuery = state.searchQuery,
-                    onChangeSearchQuery = onSearchQueryChange,
-                    actions = {
-                        AppBarActions(
-                            persistentListOf(
-                                // KMK -->
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.action_filter),
-                                    icon = Icons.Outlined.FilterList,
-                                    iconTint = if (hasActiveFilters) MaterialTheme.colorScheme.active else LocalContentColor.current,
-                                    onClick = onFilterClicked,
-                                ),
-                                // KMK <--
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.pref_clear_history),
+            if (showAppBar || state.selectionMode) {
+                // KMK -->
+                when {
+                    state.selectionMode -> HistorySelectionToolbar(
+                        selectedCount = state.selection.size,
+                        onCancelActionMode = toggleSelectionMode,
+                        onClickSelectAll = { onSelectAll(true) },
+                        onClickInvertSelection = onInvertSelection,
+                        onClickClearHistory = { onDialogChange(HistoryScreenModel.Dialog.Delete(state.selected)) },
+                    )
+                    // KMK <--
+                    else -> SearchToolbar(
+                        titleContent = { AppBarTitle(stringResource(MR.strings.history)) },
+                        searchQuery = state.searchQuery,
+                        onChangeSearchQuery = onSearchQueryChange,
+                        actions = {
+                            AppBarActions(
+                                persistentListOf(
                                     // KMK -->
-                                    icon = Icons.Outlined.Checklist,
-                                    onClick = toggleSelectionMode,
+                                    AppBar.Action(
+                                        title = stringResource(MR.strings.action_filter),
+                                        icon = Icons.Outlined.FilterList,
+                                        iconTint = if (hasActiveFilters) MaterialTheme.colorScheme.active else LocalContentColor.current,
+                                        onClick = onFilterClicked,
+                                    ),
                                     // KMK <--
+                                    AppBar.Action(
+                                        title = stringResource(MR.strings.pref_clear_history),
+                                        // KMK -->
+                                        icon = Icons.Outlined.Checklist,
+                                        onClick = toggleSelectionMode,
+                                        // KMK <--
+                                    ),
                                 ),
-                            ),
-                        )
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
+                            )
+                        },
+                        scrollBehavior = scrollBehavior,
+                    )
+                }
             }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },

@@ -3,6 +3,12 @@ package eu.kanade.tachiyomi.ui.updates
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -19,6 +26,8 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.updates.UpdateScreen
 import eu.kanade.presentation.updates.UpdatesDeleteConfirmationDialog
 import eu.kanade.presentation.updates.UpdatesFilterDialog
@@ -32,12 +41,14 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.updates.UpdatesScreenModel.Event
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import mihon.feature.upcoming.UpcomingScreen
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.theme.active
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -177,3 +188,125 @@ data object UpdatesTab : Tab {
         }
     }
 }
+
+// KMK -->
+@Composable
+fun Screen.updatesTab(
+    screenModel: UpdatesScreenModel,
+    settingsScreenModel: UpdatesSettingsScreenModel,
+): TabContent {
+    val navigator = LocalNavigator.currentOrThrow
+    val state by screenModel.state.collectAsState()
+
+    return TabContent(
+        titleRes = MR.strings.label_recent_updates,
+        actions = persistentListOf(
+            AppBar.Action(
+                title = stringResource(MR.strings.action_filter),
+                icon = Icons.Outlined.FilterList,
+                iconTint = if (state.hasActiveFilters) MaterialTheme.colorScheme.active else LocalContentColor.current,
+                onClick = screenModel::showFilterDialog,
+            ),
+            AppBar.Action(
+                title = stringResource(MR.strings.action_view_upcoming),
+                icon = Icons.Outlined.CalendarMonth,
+                onClick = { navigator.push(UpcomingScreen()) },
+            ),
+            AppBar.Action(
+                title = stringResource(MR.strings.action_update_library),
+                icon = Icons.Outlined.Refresh,
+                onClick = { screenModel.updateLibrary() },
+            ),
+        ),
+        content = { contentPadding, snackbarHostState ->
+            val context = LocalContext.current
+            val usePanoramaCover by settingsScreenModel.updatesPreferences.usePanoramaCover().collectAsState()
+
+            UpdateScreen(
+                state = state,
+                snackbarHostState = screenModel.snackbarHostState,
+                lastUpdated = screenModel.lastUpdated,
+                preserveReadingPosition = screenModel.preserveReadingPosition,
+                onClickCover = { item -> navigator.push(MangaScreen(item.update.mangaId)) },
+                onSelectAll = screenModel::toggleAllSelection,
+                onInvertSelection = screenModel::invertSelection,
+                onUpdateLibrary = screenModel::updateLibrary,
+                onDownloadChapter = screenModel::downloadChapters,
+                onMultiBookmarkClicked = screenModel::bookmarkUpdates,
+                onMultiMarkAsReadClicked = screenModel::markUpdatesRead,
+                onMultiDeleteClicked = screenModel::showConfirmDeleteChapters,
+                updateSwipeStartAction = screenModel.chapterSwipeStartAction,
+                updateSwipeEndAction = screenModel.chapterSwipeEndAction,
+                onUpdateSwipe = screenModel::updateSwipe,
+                onUpdateSelected = screenModel::toggleSelection,
+                onOpenChapter = {
+                    val intent = ReaderActivity.newIntent(context, it.update.mangaId, it.update.chapterId)
+                    context.startActivity(intent)
+                },
+                onCalendarClicked = { navigator.push(UpcomingScreen()) },
+                onFilterClicked = screenModel::showFilterDialog,
+                hasActiveFilters = state.hasActiveFilters,
+                usePanoramaCover = usePanoramaCover,
+                collapseToggle = screenModel::toggleExpandedState,
+                showAppBar = false,
+            )
+
+            val onDismissDialog = { screenModel.setDialog(null) }
+            when (val dialog = state.dialog) {
+                is UpdatesScreenModel.Dialog.DeleteConfirmation -> {
+                    UpdatesDeleteConfirmationDialog(
+                        onDismissRequest = onDismissDialog,
+                        onConfirm = { screenModel.deleteChapters(dialog.toDelete) },
+                    )
+                }
+                is UpdatesScreenModel.Dialog.FilterSheet -> {
+                    UpdatesFilterDialog(
+                        onDismissRequest = onDismissDialog,
+                        screenModel = settingsScreenModel,
+                    )
+                }
+                null -> {}
+            }
+
+            LaunchedEffect(Unit) {
+                screenModel.events.collectLatest { event ->
+                    when (event) {
+                        Event.InternalError -> screenModel.snackbarHostState.showSnackbar(
+                            context.stringResource(MR.strings.internal_error),
+                        )
+                        is Event.LibraryUpdateTriggered -> {
+                            val msg = if (event.started) {
+                                MR.strings.updating_library
+                            } else {
+                                MR.strings.update_already_running
+                            }
+                            screenModel.snackbarHostState.showSnackbar(context.stringResource(msg))
+                        }
+                    }
+                }
+            }
+
+            LaunchedEffect(state.selectionMode) {
+                HomeScreen.showBottomNav(!state.selectionMode)
+            }
+
+            LaunchedEffect(state.isLoading) {
+                if (!state.isLoading) {
+                    (context as? MainActivity)?.ready = true
+                    with(DiscordRPCService) {
+                        discordScope.launchIO { setScreen(context, DiscordScreen.UPDATES) }
+                    }
+                }
+            }
+
+            DisposableEffect(Unit) {
+                screenModel.resetNewUpdatesCount()
+
+                onDispose {
+                    screenModel.resetNewUpdatesCount()
+                }
+            }
+        },
+    )
+}
+// KMK <--

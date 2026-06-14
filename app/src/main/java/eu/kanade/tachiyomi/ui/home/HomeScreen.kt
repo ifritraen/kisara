@@ -76,9 +76,8 @@ object HomeScreen : Screen() {
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
     private val TABS = listOf(
+        HomeTab,
         LibraryTab,
-        UpdatesTab,
-        HistoryTab,
         BrowseTab,
         MoreTab,
     )
@@ -180,8 +179,14 @@ object HomeScreen : Screen() {
                     openTabEvent.receiveAsFlow().collectLatest {
                         tabNavigator.current = when (it) {
                             is Tab.Library -> LibraryTab
-                            Tab.Updates -> UpdatesTab
-                            Tab.History -> HistoryTab
+                            Tab.Updates -> {
+                                HomeTab.showSubTab(1)
+                                HomeTab
+                            }
+                            Tab.History -> {
+                                HomeTab.showSubTab(2)
+                                HomeTab
+                            }
                             is Tab.Browse -> {
                                 if (it.toExtensions) {
                                     BrowseTab.showExtension()

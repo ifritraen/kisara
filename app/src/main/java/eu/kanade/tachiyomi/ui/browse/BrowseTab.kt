@@ -15,8 +15,6 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
-import eu.kanade.core.preference.asState
-import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
@@ -25,7 +23,6 @@ import eu.kanade.tachiyomi.data.connections.discord.DiscordScreen
 import eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.extension.extensionsTab
 import eu.kanade.tachiyomi.ui.browse.feed.FeedScreenModel
-import eu.kanade.tachiyomi.ui.browse.feed.feedTab
 import eu.kanade.tachiyomi.ui.browse.migration.sources.migrateSourceTab
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.browse.source.sourcesTab
@@ -69,11 +66,6 @@ data object BrowseTab : Tab {
     @Composable
     override fun Content() {
         val context = LocalContext.current
-        val scope = rememberCoroutineScope()
-        // SY -->
-        val hideFeedTab by remember { Injekt.get<UiPreferences>().hideFeedTab().asState(scope) }
-        val feedTabInFront by remember { Injekt.get<UiPreferences>().feedTabInFront().asState(scope) }
-        // SY <--
 
         // Hoisted for extensions tab's search bar
         val extensionsScreenModel = rememberScreenModel { ExtensionsScreenModel() }
@@ -84,42 +76,11 @@ data object BrowseTab : Tab {
         val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
         // KMK <--
 
-        // SY -->
-        val tabs = when {
-            hideFeedTab ->
-                persistentListOf(
-                    sourcesTab(),
-                    extensionsTab(extensionsScreenModel),
-                    migrateSourceTab(),
-                )
-
-            feedTabInFront ->
-                persistentListOf(
-                    feedTab(
-                        // KMK -->
-                        feedScreenModel,
-                        bulkFavoriteScreenModel,
-                        // KMK <--
-                    ),
-                    sourcesTab(),
-                    extensionsTab(extensionsScreenModel),
-                    migrateSourceTab(),
-                )
-
-            else ->
-                persistentListOf(
-                    sourcesTab(),
-                    feedTab(
-                        // KMK -->
-                        feedScreenModel,
-                        bulkFavoriteScreenModel,
-                        // KMK <--
-                    ),
-                    extensionsTab(extensionsScreenModel),
-                    migrateSourceTab(),
-                )
-        }
-        // SY <--
+        val tabs = persistentListOf(
+            sourcesTab(),
+            extensionsTab(extensionsScreenModel),
+            migrateSourceTab(),
+        )
 
         val state = rememberPagerState { tabs.size }
 
@@ -136,7 +97,7 @@ data object BrowseTab : Tab {
         )
         LaunchedEffect(Unit) {
             switchToExtensionTabChannel.receiveAsFlow()
-                .collectLatest { state.scrollToPage(/* SY --> */2/* SY <-- */) }
+                .collectLatest { state.scrollToPage(/* SY --> */1/* SY <-- */) }
         }
 
         LaunchedEffect(Unit) {

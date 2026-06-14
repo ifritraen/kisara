@@ -7,6 +7,9 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -145,53 +148,67 @@ data object LibraryTab : Tab {
 
         Scaffold(
             topBar = { scrollBehavior ->
-                val title = state.getToolbarTitle(
-                    defaultTitle = stringResource(MR.strings.label_library),
-                    defaultCategoryTitle = stringResource(MR.strings.label_default),
-                    page = state.activeCategoryIndex,
-                )
-                LibraryToolbar(
-                    hasActiveFilters = state.hasActiveFilters,
-                    selectedCount = state.selection.size,
-                    title = title,
-                    onClickUnselectAll = screenModel::clearSelection,
-                    onClickSelectAll = screenModel::selectAll,
-                    onClickInvertSelection = screenModel::invertSelection,
-                    onClickFilter = screenModel::showSettingsDialog,
-                    onClickRefresh = { onClickRefresh(state.activeCategory) },
-                    onClickGlobalUpdate = { onClickRefresh(null) },
-                    onClickOpenRandomManga = {
-                        scope.launch {
-                            val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
-                            if (randomItem != null) {
-                                navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
-                            } else {
-                                snackbarHostState.showSnackbar(
-                                    context.stringResource(MR.strings.information_no_entries_found),
-                                )
+                if (state.searchQuery != null || state.selectionMode) {
+                    val title = state.getToolbarTitle(
+                        defaultTitle = stringResource(MR.strings.label_library),
+                        defaultCategoryTitle = stringResource(MR.strings.label_default),
+                        page = state.activeCategoryIndex,
+                    )
+                    LibraryToolbar(
+                        hasActiveFilters = state.hasActiveFilters,
+                        selectedCount = state.selection.size,
+                        title = title,
+                        onClickUnselectAll = screenModel::clearSelection,
+                        onClickSelectAll = screenModel::selectAll,
+                        onClickInvertSelection = screenModel::invertSelection,
+                        onClickFilter = screenModel::showSettingsDialog,
+                        onClickRefresh = { onClickRefresh(state.activeCategory) },
+                        onClickGlobalUpdate = { onClickRefresh(null) },
+                        onClickOpenRandomManga = {
+                            scope.launch {
+                                val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
+                                if (randomItem != null) {
+                                    navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        context.stringResource(MR.strings.information_no_entries_found),
+                                    )
+                                }
                             }
-                        }
-                    },
-                    onClickSyncNow = {
-                        if (!SyncDataJob.isRunning(context)) {
-                            SyncDataJob.startNow(context, manual = true)
-                        } else {
-                            context.toast(SYMR.strings.sync_in_progress)
-                        }
-                    },
-                    // SY -->
-                    onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
-                    isSyncEnabled = state.isSyncEnabled,
-                    // SY <--
-                    searchQuery = state.searchQuery,
-                    onSearchQueryChange = screenModel::search,
-                    onInvalidateDownloadCache = { context ->
-                        Injekt.get<DownloadCache>().invalidateCache()
-                        context.toast(MR.strings.download_cache_invalidated)
-                    },
-                    // For scroll overlay when no tab
-                    scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
-                )
+                        },
+                        onClickSyncNow = {
+                            if (!SyncDataJob.isRunning(context)) {
+                                SyncDataJob.startNow(context, manual = true)
+                            } else {
+                                context.toast(SYMR.strings.sync_in_progress)
+                            }
+                        },
+                        // SY -->
+                        onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
+                        isSyncEnabled = state.isSyncEnabled,
+                        // SY <--
+                        searchQuery = state.searchQuery,
+                        onSearchQueryChange = screenModel::search,
+                        onInvalidateDownloadCache = { context ->
+                            Injekt.get<DownloadCache>().invalidateCache()
+                            context.toast(MR.strings.download_cache_invalidated)
+                        },
+                        // For scroll overlay when no tab
+                        scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
+                    )
+                }
+            },
+            floatingActionButton = {
+                if (state.searchQuery == null && !state.selectionMode) {
+                    FloatingActionButton(
+                        onClick = { screenModel.search("") },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = stringResource(MR.strings.action_search),
+                        )
+                    }
+                }
             },
             bottomBar = {
                 LibraryBottomActionMenu(
