@@ -19,26 +19,59 @@ class CategoriesRestorer(
             val dbCategoriesByName = dbCategories.associateBy { it.name }
             var nextOrder = dbCategories.maxOfOrNull { it.order }?.plus(1) ?: 0
 
-            val categories = backupCategories
-                .sortedBy { it.order }
-                .map {
-                    val dbCategory = dbCategoriesByName[it.name]
-                    if (dbCategory != null) return@map dbCategory
-                    val order = nextOrder++
-                    handler.awaitOneExecutable {
-                        categoriesQueries.insert(
-                            it.name,
-                            order,
-                            it.flags,
-                            parentId = it.parentId,
-                            // KMK -->
-                            hidden = if (it.hidden) 1L else 0L,
-                            // KMK <--
-                        )
-                        categoriesQueries.selectLastInsertedRowId()
-                    }
-                        .let { id -> it.toCategory(id).copy(order = order) }
+            // KMK -->
+            val idMap = mutableMapOf<Long, Long>()
+            dbCategories.forEach { dbCat ->
+                val backupCat = backupCategories.find { it.name == dbCat.name }
+                if (backupCat != null) {
+                    idMap[backupCat.id] = dbCat.id
                 }
+            }
+
+            val categories = backupCategories
+                .sortedWith(
+                    compareBy<BackupCategory> { it.parentId != null }
+                        .thenBy { it.order },
+                )
+                .map { backupCat ->
+                    val dbCategory = dbCategoriesByName[backupCat.name]
+                    val order = dbCategory?.order ?: nextOrder++
+                    val mappedParentId = backupCat.parentId?.let { oldParentId ->
+                        idMap[oldParentId]
+                    }
+
+                    val id = if (dbCategory != null) {
+                        idMap[backupCat.id] = dbCategory.id
+                        if (mappedParentId != null && dbCategory.parentId != mappedParentId) {
+                            handler.await {
+                                categoriesQueries.update(
+                                    categoryId = dbCategory.id,
+                                    name = dbCategory.name,
+                                    order = dbCategory.order,
+                                    flags = dbCategory.flags,
+                                    parentId = mappedParentId,
+                                    hidden = if (dbCategory.hidden) 1L else 0L,
+                                )
+                            }
+                        }
+                        dbCategory.id
+                    } else {
+                        val newId = handler.awaitOneExecutable {
+                            categoriesQueries.insert(
+                                backupCat.name,
+                                order,
+                                backupCat.flags,
+                                parentId = mappedParentId,
+                                hidden = if (backupCat.hidden) 1L else 0L,
+                            )
+                            categoriesQueries.selectLastInsertedRowId()
+                        }
+                        idMap[backupCat.id] = newId
+                        newId
+                    }
+                    backupCat.toCategory(id).copy(order = order, parentId = mappedParentId)
+                }
+            // KMK <--
 
             libraryPreferences.categorizedDisplaySettings().set(
                 (dbCategories + categories)
