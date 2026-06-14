@@ -21,3 +21,9 @@ local.properties
 /app/google-services.json
 *.jks
 app/standard/preview/*
+
+# Safety Gate
+.aaa/
+.env
+secrets.*
+sensitive.*

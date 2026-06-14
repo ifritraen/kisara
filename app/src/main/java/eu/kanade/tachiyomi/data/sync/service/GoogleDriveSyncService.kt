@@ -27,6 +27,7 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -253,6 +254,26 @@ class GoogleDriveService(private val context: Context) {
         initGoogleDriveService()
     }
 
+    fun isSupported(): Boolean {
+        return try {
+            context.assets.open("client_secrets.json").close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun loadSecrets(jsonFactory: GsonFactory): GoogleClientSecrets {
+        return try {
+            GoogleClientSecrets.load(
+                jsonFactory,
+                context.assets.open("client_secrets.json").reader(),
+            )
+        } catch (e: Exception) {
+            throw Exception(context.stringResource(KMR.strings.google_drive_secrets_missing), e)
+        }
+    }
+
     /**
      * Initializes the Google Drive service by obtaining the access token and refresh token from the SyncPreferences
      * and setting up the service using the obtained tokens.
@@ -266,7 +287,12 @@ class GoogleDriveService(private val context: Context) {
             return
         }
 
-        setupGoogleDriveService(accessToken, refreshToken)
+        try {
+            setupGoogleDriveService(accessToken, refreshToken)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, throwable = e) { "Failed to initialize Google Drive service" }
+            driveService = null
+        }
     }
 
     /**
@@ -293,10 +319,7 @@ class GoogleDriveService(private val context: Context) {
      */
     private fun generateAuthorizationUrl(): String {
         val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance()
-        val secrets = GoogleClientSecrets.load(
-            jsonFactory,
-            context.assets.open("client_secrets.json").reader(),
-        )
+        val secrets = loadSecrets(jsonFactory)
 
         val flow = GoogleAuthorizationCodeFlow.Builder(
             NetHttpTransport(),
@@ -314,10 +337,7 @@ class GoogleDriveService(private val context: Context) {
         val refreshToken = syncPreferences.googleDriveRefreshToken().get()
 
         val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance()
-        val secrets = GoogleClientSecrets.load(
-            jsonFactory,
-            context.assets.open("client_secrets.json").reader(),
-        )
+        val secrets = loadSecrets(jsonFactory)
 
         val credential = GoogleCredential.Builder()
             .setJsonFactory(jsonFactory)
@@ -365,10 +385,7 @@ class GoogleDriveService(private val context: Context) {
      */
     private fun setupGoogleDriveService(accessToken: String, refreshToken: String) {
         val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance()
-        val secrets = GoogleClientSecrets.load(
-            jsonFactory,
-            context.assets.open("client_secrets.json").reader(),
-        )
+        val secrets = loadSecrets(jsonFactory)
 
         val credential = GoogleCredential.Builder()
             .setJsonFactory(jsonFactory)
@@ -404,10 +421,7 @@ class GoogleDriveService(private val context: Context) {
         onFailure: (String) -> Unit,
     ) {
         val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance()
-        val secrets = GoogleClientSecrets.load(
-            jsonFactory,
-            context.assets.open("client_secrets.json").reader(),
-        )
+        val secrets = loadSecrets(jsonFactory)
 
         val tokenResponse: GoogleTokenResponse = GoogleAuthorizationCodeTokenRequest(
             NetHttpTransport(),

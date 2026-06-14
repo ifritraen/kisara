@@ -641,16 +641,22 @@ object SettingsDataScreen : SearchableSettings {
     private fun getGoogleDrivePreferences(): List<Preference> {
         val context = LocalContext.current
         val googleDriveSync = Injekt.get<GoogleDriveService>()
+        val isSupported = remember { googleDriveSync.isSupported() }
         return listOf(
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(SYMR.strings.pref_google_drive_sign_in),
+                subtitle = if (!isSupported) stringResource(KMR.strings.google_drive_secrets_missing) else null,
+                enabled = isSupported,
                 onClick = {
-                    val intent = googleDriveSync.getSignInIntent()
-                    context.startActivity(intent)
+                    try {
+                        val intent = googleDriveSync.getSignInIntent()
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        context.toast(e.localizedMessage ?: "Error signing in")
+                    }
                 },
             ),
-            getGoogleDrivePurge(),
-        )
+        ) + if (isSupported) listOf(getGoogleDrivePurge()) else emptyList()
     }
 
     @Composable
