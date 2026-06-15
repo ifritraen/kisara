@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,12 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,6 +46,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.presentation.util.isTabletUi
 import tachiyomi.i18n.MR
@@ -104,86 +109,130 @@ fun ChapterNavigator(
                 .fillMaxWidth()
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilledIconButton(
-                enabled = if (isRtl) enabledNext else enabledPrevious,
-                onClick = if (isRtl) onNextChapter else onPreviousChapter,
-                colors = buttonColor,
+            val prevEnabled = if (isRtl) enabledNext else enabledPrevious
+            val prevOnClick = if (isRtl) onNextChapter else onPreviousChapter
+            GlassSurface(
+                modifier = Modifier
+                    .size(28.dp)
+                    .graphicsLayer {
+                        alpha = if (prevEnabled) 1f else 0.38f
+                    },
+                shape = RoundedCornerShape(percent = 50),
+                style = GlassDefaults.subtleStyle(),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.SkipPrevious,
-                    contentDescription = stringResource(
-                        if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
-                    ),
-                )
+                IconButton(
+                    enabled = prevEnabled,
+                    onClick = prevOnClick,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SkipPrevious,
+                        modifier = Modifier.size(16.dp),
+                        contentDescription = stringResource(
+                            if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
+                        ),
+                    )
+                }
             }
 
             if (totalPages > 1) {
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(backgroundColor)
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    GlassSurface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        style = GlassDefaults.subtleStyle(),
                     ) {
-                        Box(contentAlignment = Alignment.CenterEnd) {
-                            Text(
-                                // SY -->
-                                text = currentPageText,
-                                // SY <--
-                                // KMK -->
-                                color = textColor,
-                                // KMK <--
-                            )
-                            // Taking up full length so the slider doesn't shift when 'currentPage' length changes
-                            Text(text = totalPages.toString(), color = Color.Transparent)
-                        }
-
-                        val interactionSource = remember { MutableInteractionSource() }
-                        val sliderDragged by interactionSource.collectIsDraggedAsState()
-                        LaunchedEffect(currentPage) {
-                            if (sliderDragged) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                        }
-                        Slider(
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
+                                .height(28.dp)
                                 .padding(horizontal = 8.dp),
-                            value = currentPage,
-                            valueRange = 1..totalPages,
-                            onValueChange = f@{
-                                if (it == currentPage) return@f
-                                onPageIndexChange(it - 1)
-                            },
-                            interactionSource = interactionSource,
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(contentAlignment = Alignment.CenterEnd) {
+                                Text(
+                                    text = currentPageText,
+                                    color = textColor,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                // Taking up full length so the slider doesn't shift when 'currentPage' length changes
+                                Text(
+                                    text = totalPages.toString(),
+                                    color = Color.Transparent,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
 
-                        Text(
-                            text = totalPages.toString(),
-                            // KMK -->
-                            color = textColor,
-                            // KMK <--
-                        )
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val sliderDragged by interactionSource.collectIsDraggedAsState()
+                            LaunchedEffect(currentPage) {
+                                if (sliderDragged) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                            }
+                            Slider(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp),
+                                value = currentPage,
+                                valueRange = 1..totalPages,
+                                onValueChange = f@{
+                                    if (it == currentPage) return@f
+                                    onPageIndexChange(it - 1)
+                                },
+                                interactionSource = interactionSource,
+                                thumb = { sliderState ->
+                                    androidx.compose.material3.SliderDefaults.Thumb(
+                                        interactionSource = interactionSource,
+                                        modifier = Modifier.size(10.dp),
+                                    )
+                                },
+                                track = { sliderState ->
+                                    androidx.compose.material3.SliderDefaults.Track(
+                                        sliderState = sliderState,
+                                        modifier = Modifier.height(2.dp),
+                                    )
+                                },
+                            )
+
+                            Text(
+                                text = totalPages.toString(),
+                                color = textColor,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
             } else {
                 Spacer(Modifier.weight(1f))
             }
 
-            FilledIconButton(
-                enabled = if (isRtl) enabledPrevious else enabledNext,
-                onClick = if (isRtl) onPreviousChapter else onNextChapter,
-                colors = buttonColor,
+            val nextEnabled = if (isRtl) enabledPrevious else enabledNext
+            val nextOnClick = if (isRtl) onPreviousChapter else onNextChapter
+            GlassSurface(
+                modifier = Modifier
+                    .size(28.dp)
+                    .graphicsLayer {
+                        alpha = if (nextEnabled) 1f else 0.38f
+                    },
+                shape = RoundedCornerShape(percent = 50),
+                style = GlassDefaults.subtleStyle(),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.SkipNext,
-                    contentDescription = stringResource(
-                        if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
-                    ),
-                )
+                IconButton(
+                    enabled = nextEnabled,
+                    onClick = nextOnClick,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SkipNext,
+                        modifier = Modifier.size(16.dp),
+                        contentDescription = stringResource(
+                            if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
+                        ),
+                    )
+                }
             }
         }
     }

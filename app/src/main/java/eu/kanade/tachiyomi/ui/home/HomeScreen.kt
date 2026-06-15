@@ -13,12 +13,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -152,7 +152,9 @@ object HomeScreen : Screen() {
         val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
         val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
         val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
-        val alwaysShowSubTabs by uiPreferences.alwaysShowSubTabs().collectAsState()
+        val alwaysShowSubTabsHome by uiPreferences.alwaysShowSubTabsHome().collectAsState()
+        val alwaysShowSubTabsBrowse by uiPreferences.alwaysShowSubTabsBrowse().collectAsState()
+        val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
         var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
@@ -229,9 +231,7 @@ object HomeScreen : Screen() {
                                 .fillMaxSize(),
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
+                                modifier = Modifier.fillMaxSize(),
                             ) {
                                 AnimatedContent(
                                     targetState = tabNavigator.current,
@@ -267,14 +267,10 @@ object HomeScreen : Screen() {
                                 }
 
                                 // 2. Determine which sub-tab popup is active
-                                val activePopup = if (alwaysShowSubTabs) {
-                                    if (currentTab is HomeTab || currentTab is BrowseTab) {
-                                        currentTab
-                                    } else {
-                                        null
-                                    }
-                                } else {
-                                    activeSubTabPopup
+                                val activePopup = when {
+                                    currentTab is HomeTab && alwaysShowSubTabsHome -> currentTab
+                                    currentTab is BrowseTab && alwaysShowSubTabsBrowse -> currentTab
+                                    else -> activeSubTabPopup
                                 }
 
                                 // 3. Sub-tab popup above bottom bar
@@ -283,7 +279,7 @@ object HomeScreen : Screen() {
                                     enter = expandVertically(expandFrom = Alignment.Bottom),
                                     exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                     modifier = Modifier
-                                        .padding(bottom = 72.dp)
+                                        .padding(bottom = (if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp)
                                         .align(Alignment.BottomCenter),
                                 ) {
                                     GlassSurface(
@@ -300,39 +296,39 @@ object HomeScreen : Screen() {
                                                     SubTabButton(text = "Feed", selected = HomeTab.currentPageIndex == 0) {
                                                         tabNavigator.current = HomeTab
                                                         HomeTab.showSubTab(0)
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                     }
                                                     SubTabButton(text = "Updates", selected = HomeTab.currentPageIndex == 1) {
                                                         tabNavigator.current = HomeTab
                                                         HomeTab.showSubTab(1)
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                     }
                                                     SubTabButton(text = "History", selected = HomeTab.currentPageIndex == 2) {
                                                         tabNavigator.current = HomeTab
                                                         HomeTab.showSubTab(2)
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                     }
                                                 }
                                                 is BrowseTab -> {
                                                     SubTabButton(text = "Sources", selected = BrowseTab.currentPageIndex == 0) {
                                                         tabNavigator.current = BrowseTab
                                                         BrowseTab.showSource()
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                     }
                                                     SubTabButton(text = "Extensions", selected = BrowseTab.currentPageIndex == 1) {
                                                         tabNavigator.current = BrowseTab
                                                         BrowseTab.showExtension()
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                     }
                                                     SubTabButton(text = "Migration", selected = BrowseTab.currentPageIndex == 2) {
                                                         tabNavigator.current = BrowseTab
                                                         BrowseTab.showMigration()
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                     }
                                                     SubTabButton(text = "Duplicate", selected = BrowseTab.currentPageIndex == 3) {
                                                         tabNavigator.current = BrowseTab
                                                         BrowseTab.showDuplicate()
-                                                        if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                     }
                                                 }
                                                 else -> {}
@@ -382,12 +378,22 @@ object HomeScreen : Screen() {
                                                                     } else {
                                                                         scope.launch { tab.onReselect(navigator) }
                                                                     }
-                                                                    if (!alwaysShowSubTabs) activeSubTabPopup = null
+                                                                    if (tab is HomeTab && !alwaysShowSubTabsHome) {
+                                                                        activeSubTabPopup = null
+                                                                    } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
+                                                                        activeSubTabPopup = null
+                                                                    } else if (tab !is HomeTab && tab !is BrowseTab) {
+                                                                        activeSubTabPopup = null
+                                                                    }
                                                                 },
                                                                 onLongClick = {
                                                                     if (tab is LibraryTab) {
                                                                         LibraryTab.toggleCategoryBarEvent.trySend(Unit)
-                                                                    } else if (!alwaysShowSubTabs && (tab is HomeTab || tab is BrowseTab)) {
+                                                                    } else if (tab is MoreTab) {
+                                                                        showActionPopup = !showActionPopup
+                                                                    } else if (tab is HomeTab && !alwaysShowSubTabsHome) {
+                                                                        activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                                                                    } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
                                                                         activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
                                                                     }
                                                                 },
@@ -402,20 +408,22 @@ object HomeScreen : Screen() {
                                             }
 
                                             // Divider & Right part: Contextual Action Buttons in-place
-                                            if (hasActions) {
-                                                VerticalDivider(
-                                                    modifier = Modifier
-                                                        .height(24.dp)
-                                                        .padding(horizontal = 4.dp),
-                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                                )
-
-                                                // Expanded Actions in-place
-                                                AnimatedVisibility(
-                                                    visible = showActionPopup,
-                                                    enter = expandHorizontally(),
-                                                    exit = shrinkHorizontally(),
+                                            AnimatedVisibility(
+                                                visible = hasActions && showActionPopup,
+                                                enter = expandHorizontally(),
+                                                exit = shrinkHorizontally(),
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                 ) {
+                                                    VerticalDivider(
+                                                        modifier = Modifier
+                                                            .height(24.dp)
+                                                            .padding(horizontal = 4.dp),
+                                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                                    )
+
                                                     Row(
                                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                         verticalAlignment = Alignment.CenterVertically,
@@ -701,18 +709,6 @@ object HomeScreen : Screen() {
                                                             }
                                                         }
                                                     }
-                                                }
-
-                                                IconButton(
-                                                    onClick = { showActionPopup = !showActionPopup },
-                                                    modifier = Modifier.size(36.dp),
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.MoreVert,
-                                                        contentDescription = "Actions",
-                                                        modifier = Modifier.size(20.dp),
-                                                        tint = if (showActionPopup) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
                                                 }
                                             }
                                         }

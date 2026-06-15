@@ -4,36 +4,34 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.reader.components.ChapterNavigator
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
 import kotlinx.collections.immutable.ImmutableSet
-import tachiyomi.presentation.core.components.material.padding
 
 private val readerBarsSlideAnimationSpec = tween<IntOffset>(200)
 private val readerBarsFadeAnimationSpec = tween<Float>(150)
@@ -101,9 +99,6 @@ fun ReaderAppBars(
     // SY <--
 ) {
     val isRtl = viewer is R2LPagerViewer
-    val backgroundColor = MaterialTheme.colorScheme
-        .surfaceColorAtElevation(3.dp)
-        .copy(alpha = if (isSystemInDarkTheme()) 0.9f else 0.95f)
 
     Column(modifier = Modifier.fillMaxHeight()) {
         AnimatedVisibility(
@@ -113,25 +108,35 @@ fun ReaderAppBars(
             exit = slideOutVertically(targetOffsetY = { -it }, animationSpec = readerBarsSlideAnimationSpec) +
                 fadeOut(animationSpec = readerBarsFadeAnimationSpec),
         ) {
-            // SY -->
             Column {
-                // SY <--
-                ReaderTopBar(
+                Box(
                     modifier = Modifier
-                        .background(backgroundColor)
-                        .clickable(onClick = onClickTopAppBar),
-                    mangaTitle = mangaTitle,
-                    chapterTitle = chapterTitle,
-                    navigateUp = navigateUp,
-                    bookmarked = bookmarked,
-                    onToggleBookmarked = onToggleBookmarked,
-                    // SY -->
-                    onOpenInWebView = null, // onOpenInWebView,
-                    onOpenInBrowser = null, // onOpenInBrowser,
-                    onShare = null, // onShare,
-                    // SY <--
-                )
-                // SY -->
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                ) {
+                    GlassSurface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        style = GlassDefaults.prominentStyle(),
+                    ) {
+                        ReaderTopBar(
+                            modifier = Modifier
+                                .clickable(onClick = onClickTopAppBar),
+                            mangaTitle = mangaTitle,
+                            chapterTitle = chapterTitle,
+                            navigateUp = navigateUp,
+                            bookmarked = bookmarked,
+                            onToggleBookmarked = onToggleBookmarked,
+                            onOpenInWebView = null,
+                            onOpenInBrowser = null,
+                            onShare = null,
+                            windowInsets = WindowInsets(0),
+                        )
+                    }
+                }
+
+                /* // EXH/KMK -->
                 ExhUtils(
                     isVisible = isExhToolsVisible,
                     onSetExhUtilsVisibility = onSetExhUtilsVisibility,
@@ -147,82 +152,12 @@ fun ReaderAppBars(
                     onClickBoostPage = onClickBoostPage,
                     onClickBoostPageHelp = onClickBoostPageHelp,
                 )
+                // <-- EXH/KMK */
             }
-            // SY <--
         }
 
-        // KMK -->
-        when (navBarType) {
-            NavBarType.VerticalLeft -> {
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = slideInHorizontally(
-                        initialOffsetX = { -it },
-                        animationSpec = readerBarsSlideAnimationSpec,
-                    ) +
-                        fadeIn(animationSpec = readerBarsFadeAnimationSpec),
-                    exit = slideOutHorizontally(
-                        targetOffsetX = { -it },
-                        animationSpec = readerBarsSlideAnimationSpec,
-                    ) +
-                        fadeOut(animationSpec = readerBarsFadeAnimationSpec),
-                    modifier = Modifier
-                        .weight(1f)
-                        .align(Alignment.Start),
-                ) {
-                    ChapterNavigator(
-                        isRtl = isRtl,
-                        onNextChapter = onNextChapter,
-                        enabledNext = enabledNext,
-                        onPreviousChapter = onPreviousChapter,
-                        enabledPrevious = enabledPrevious,
-                        currentPage = currentPage,
-                        totalPages = totalPages,
-                        onPageIndexChange = onPageIndexChange,
-                        // SY -->
-                        isVerticalSlider = true,
-                        currentPageText = currentPageText,
-                        // SY <--
-                    )
-                }
-            }
-
-            NavBarType.VerticalRight -> {
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = slideInHorizontally(
-                        initialOffsetX = { it },
-                        animationSpec = readerBarsSlideAnimationSpec,
-                    ) +
-                        fadeIn(animationSpec = readerBarsFadeAnimationSpec),
-                    exit = slideOutHorizontally(
-                        targetOffsetX = { it },
-                        animationSpec = readerBarsSlideAnimationSpec,
-                    ) +
-                        fadeOut(animationSpec = readerBarsFadeAnimationSpec),
-                    modifier = Modifier
-                        .weight(1f)
-                        .align(Alignment.End),
-                ) {
-                    ChapterNavigator(
-                        isRtl = isRtl,
-                        onNextChapter = onNextChapter,
-                        enabledNext = enabledNext,
-                        onPreviousChapter = onPreviousChapter,
-                        enabledPrevious = enabledPrevious,
-                        currentPage = currentPage,
-                        totalPages = totalPages,
-                        onPageIndexChange = onPageIndexChange,
-                        // SY -->
-                        isVerticalSlider = true,
-                        currentPageText = currentPageText,
-                        // SY <--
-                    )
-                }
-            }
-            // KMK <--
-            else -> Spacer(modifier = Modifier.weight(1f))
-        }
+        // We bypass the vertical sliders by rendering a Spacer always
+        Spacer(modifier = Modifier.weight(1f))
 
         AnimatedVisibility(
             visible = visible,
@@ -231,51 +166,63 @@ fun ReaderAppBars(
             exit = slideOutVertically(targetOffsetY = { it }, animationSpec = readerBarsSlideAnimationSpec) +
                 fadeOut(animationSpec = readerBarsFadeAnimationSpec),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
-                // SY -->
-                if (navBarType == NavBarType.Bottom) {
-                    // SY <--
-                    ChapterNavigator(
-                        isRtl = isRtl,
-                        onNextChapter = onNextChapter,
-                        enabledNext = enabledNext,
-                        onPreviousChapter = onPreviousChapter,
-                        enabledPrevious = enabledPrevious,
-                        currentPage = currentPage,
-                        totalPages = totalPages,
-                        onPageIndexChange = onPageIndexChange,
-                        // SY -->
-                        isVerticalSlider = false,
-                        currentPageText = currentPageText,
-                        // SY <--
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            ) {
+                GlassSurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    style = GlassDefaults.prominentStyle(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        // Horizontal Page Slider with Next/Prev buttons on the left
+                        Box(modifier = Modifier.weight(1f)) {
+                            ChapterNavigator(
+                                isRtl = isRtl,
+                                onNextChapter = onNextChapter,
+                                enabledNext = enabledNext,
+                                onPreviousChapter = onPreviousChapter,
+                                enabledPrevious = enabledPrevious,
+                                currentPage = currentPage,
+                                totalPages = totalPages,
+                                onPageIndexChange = onPageIndexChange,
+                                isVerticalSlider = false,
+                                currentPageText = currentPageText,
+                            )
+                        }
+
+                        // Bottom bar buttons (Chapter List, Settings) on the right
+                        ReaderBottomBar(
+                            modifier = Modifier.padding(start = 8.dp),
+                            readingMode = readingMode,
+                            onClickReadingMode = onClickReadingMode,
+                            orientation = orientation,
+                            onClickOrientation = onClickOrientation,
+                            cropEnabled = cropEnabled,
+                            onClickCropBorder = onClickCropBorder,
+                            onClickSettings = onClickSettings,
+                            enabledButtons = enabledButtons,
+                            currentReadingMode = currentReadingMode,
+                            dualPageSplitEnabled = dualPageSplitEnabled,
+                            doublePages = doublePages,
+                            onClickChapterList = onClickChapterList,
+                            onClickWebView = onOpenInWebView,
+                            onClickBrowser = onOpenInBrowser,
+                            onClickShare = onShare,
+                            onClickPageLayout = onClickPageLayout,
+                            onClickShiftPage = onClickShiftPage,
+                        )
+                    }
                 }
-                ReaderBottomBar(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(backgroundColor)
-                        .padding(horizontal = MaterialTheme.padding.small)
-                        .windowInsetsPadding(WindowInsets.navigationBars),
-                    readingMode = readingMode,
-                    onClickReadingMode = onClickReadingMode,
-                    orientation = orientation,
-                    onClickOrientation = onClickOrientation,
-                    cropEnabled = cropEnabled,
-                    onClickCropBorder = onClickCropBorder,
-                    onClickSettings = onClickSettings,
-                    // SY -->
-                    enabledButtons = enabledButtons,
-                    currentReadingMode = currentReadingMode,
-                    dualPageSplitEnabled = dualPageSplitEnabled,
-                    doublePages = doublePages,
-                    onClickChapterList = onClickChapterList,
-                    onClickWebView = onOpenInWebView,
-                    onClickBrowser = onOpenInBrowser,
-                    onClickShare = onShare,
-                    onClickPageLayout = onClickPageLayout,
-                    onClickShiftPage = onClickShiftPage,
-                    // SY <--
-                )
             }
         }
     }

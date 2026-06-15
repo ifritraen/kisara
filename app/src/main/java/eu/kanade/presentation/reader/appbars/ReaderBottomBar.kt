@@ -61,10 +61,14 @@ fun ReaderBottomBar(
     ) {
         // SY -->
         if (ReaderBottomButton.ViewChapters.isIn(enabledButtons)) {
-            IconButton(onClick = onClickChapterList) {
+            IconButton(
+                onClick = onClickChapterList,
+                modifier = Modifier.size(36.dp),
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.FormatListNumbered,
                     contentDescription = stringResource(MR.strings.chapters),
+                    modifier = Modifier.size(20.dp),
                     // KMK -->
                     tint = iconColor,
                     // KMK <--
@@ -72,6 +76,7 @@ fun ReaderBottomBar(
             }
         }
 
+        /* // KMK/EXH -->
         if (ReaderBottomButton.WebView.isIn(enabledButtons) && onClickWebView != null) {
             IconButton(onClick = onClickWebView) {
                 Icon(
@@ -83,7 +88,9 @@ fun ReaderBottomBar(
                 )
             }
         }
+        // <-- KMK/EXH */
 
+        /* KMK/EXH -->
         if (ReaderBottomButton.Browser.isIn(enabledButtons) && onClickBrowser != null) {
             IconButton(onClick = onClickBrowser) {
                 Icon(
@@ -108,6 +115,7 @@ fun ReaderBottomBar(
             }
         }
 
+        /* // KMK/EXH -->
         if (ReaderBottomButton.ReadingMode.isIn(enabledButtons)) {
             IconButton(onClick = onClickReadingMode) {
                 Icon(
@@ -119,6 +127,7 @@ fun ReaderBottomBar(
                 )
             }
         }
+        // <-- KMK/EXH */
 
         if (ReaderBottomButton.Rotation.isIn(enabledButtons)) {
             IconButton(onClick = onClickOrientation) {
@@ -178,11 +187,16 @@ fun ReaderBottomBar(
                 )
             }
         }
+        <-- KMK/EXH */
 
-        IconButton(onClick = onClickSettings) {
+        IconButton(
+            onClick = onClickSettings,
+            modifier = Modifier.size(36.dp),
+        ) {
             Icon(
                 imageVector = Icons.Outlined.Settings,
                 contentDescription = stringResource(MR.strings.action_settings),
+                modifier = Modifier.size(20.dp),
                 // KMK -->
                 tint = iconColor,
                 // KMK <--

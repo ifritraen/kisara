@@ -272,5 +272,13 @@
     <string name="pref_kisara_show_top_tab_bar_summary">Shows the top category/tabs bar on Home, Library, and Browse screens</string>
     <string name="pref_kisara_always_show_sub_tabs">Always Show Sub-Tabs Bar</string>
     <string name="pref_kisara_always_show_sub_tabs_summary">If enabled, permanently shows the sub-tabs popup bar above the bottom navigation bar for the active tab (Feed, Updates, History, etc.)</string>
+    <string name="pref_kisara_always_show_sub_tabs_home">Always Show Home Sub-Tabs</string>
+    <string name="pref_kisara_always_show_sub_tabs_home_summary">Permanently show sub-tabs popup for Home tab (Feed, Updates, History)</string>
+    <string name="pref_kisara_always_show_sub_tabs_library">Always Show Library Categories</string>
+    <string name="pref_kisara_always_show_sub_tabs_library_summary">Permanently show Category bar in Library screen (if category tabs option is enabled)</string>
+    <string name="pref_kisara_always_show_sub_tabs_browse">Always Show Browse Sub-Tabs</string>
+    <string name="pref_kisara_always_show_sub_tabs_browse_summary">Permanently show sub-tabs popup for Browse tab (Sources, Extensions, Migration, Duplicate)</string>
+    <string name="pref_sub_tabs_bottom_margin">Sub-Tabs Bar Distance from Bottom Bar</string>
+    <string name="pref_sub_tabs_bottom_margin_summary">Customize the vertical spacing between the bottom navigation bar and the sub-tabs popup bar</string>
     <!-- KMK -->
 </resources>

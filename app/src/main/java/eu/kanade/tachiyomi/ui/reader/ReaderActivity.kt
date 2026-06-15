@@ -334,22 +334,31 @@ class ReaderActivity : BaseActivity() {
                 )
             }
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (!state.menuVisible && showPageNumber) {
-                    ReaderPageIndicator(
-                        // SY -->
-                        currentPage = state.currentPageText,
-                        // SY <--
-                        totalPages = state.totalPages,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .navigationBarsPadding(),
-                    )
+            val hazeState = remember { dev.chrisbanes.haze.HazeState() }
+            CompositionLocalProvider(
+                eu.kanade.presentation.components.LocalHazeState provides hazeState,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .dev.chrisbanes.haze.hazeSource(state = hazeState),
+                ) {
+                    if (!state.menuVisible && showPageNumber) {
+                        ReaderPageIndicator(
+                            // SY -->
+                            currentPage = state.currentPageText,
+                            // SY <--
+                            totalPages = state.totalPages,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding(),
+                        )
+                    }
+
+                    ContentOverlay(state = state)
+
+                    AppBars(state = state)
                 }
-
-                ContentOverlay(state = state)
-
-                AppBars(state = state)
             }
 
             // KMK -->
@@ -445,6 +454,14 @@ class ReaderActivity : BaseActivity() {
                             }
                         },
                         hasExtraPage = (state.dialog as? ReaderViewModel.Dialog.PageActions)?.extraPage != null,
+                        bookmarked = state.bookmarked,
+                        onToggleBookmarked = viewModel::toggleChapterBookmark,
+                        isAutoScroll = state.autoScroll,
+                        onToggleAutoscroll = viewModel::toggleAutoScroll,
+                        onClickRetryAll = ::exhRetryAll,
+                        onClickBoostPage = ::exhBoostPage,
+                        autoScrollFrequency = state.ehAutoscrollFreq,
+                        onSetAutoScrollFrequency = viewModel::setAutoScrollFrequency,
                     )
                 }
 
@@ -452,6 +469,7 @@ class ReaderActivity : BaseActivity() {
                     var chapters by remember {
                         mutableStateOf(viewModel.getChapters().toImmutableList())
                     }
+                    val isHttpSource = viewModel.getSource() is HttpSource
                     ChapterListDialog(
                         onDismissRequest = onDismissRequest,
                         screenModel = settingsScreenModel,
@@ -470,12 +488,14 @@ class ReaderActivity : BaseActivity() {
                                 }
                             }.toImmutableList()
                         },
-                        state.dateRelativeTime,
+                        dateRelativeTime = state.dateRelativeTime,
                         // KMK -->
                         onDownloadAction = { chapter, action ->
                             viewModel.handleDownloadAction(chapter, action)
                         },
                         // KMK <--
+                        isHttpSource = isHttpSource,
+                        onBrowserClick = ::openChapterInBrowser.takeIf { isHttpSource },
                     )
                 }
 
@@ -779,30 +799,28 @@ class ReaderActivity : BaseActivity() {
     // EXH -->
     private fun enableExhAutoScroll() {
         readerPreferences.autoscrollInterval().changes()
-            .combine(viewModel.state.map { it.autoScroll }.distinctUntilChanged()) { interval, enabled ->
-                interval.toDouble() to enabled
-            }.mapLatest { (intervalFloat, enabled) ->
-                if (enabled) {
+            .combine(
+                viewModel.state.map { it.autoScroll to it.menuVisible }.distinctUntilChanged(),
+            ) { interval, (autoScroll, menuVisible) ->
+                Triple(interval.toDouble(), autoScroll, menuVisible)
+            }.mapLatest { (intervalFloat, autoScroll, menuVisible) ->
+                if (autoScroll && !menuVisible) {
                     repeatOnLifecycle(Lifecycle.State.STARTED) {
                         val interval = intervalFloat.seconds
                         while (true) {
-                            if (!viewModel.state.value.menuVisible) {
-                                viewModel.state.value.viewer.let { v ->
-                                    when (v) {
-                                        is PagerViewer -> v.moveToNext()
-                                        is WebtoonViewer -> {
-                                            if (readerPreferences.smoothAutoScroll().get()) {
-                                                v.linearScroll(interval)
-                                            } else {
-                                                v.scrollDown()
-                                            }
+                            viewModel.state.value.viewer.let { v ->
+                                when (v) {
+                                    is PagerViewer -> v.moveToNext()
+                                    is WebtoonViewer -> {
+                                        if (readerPreferences.smoothAutoScroll().get()) {
+                                            v.linearScroll(interval)
+                                        } else {
+                                            v.scrollDown()
                                         }
                                     }
                                 }
-                                delay(interval)
-                            } else {
-                                delay(100)
                             }
+                            delay(interval)
                         }
                     }
                 }

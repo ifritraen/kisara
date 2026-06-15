@@ -97,6 +97,10 @@ class UiPreferences(
     fun categoryBarCarouselStyle() = preferenceStore.getBoolean("kisara_category_bar_carousel_style", false)
     fun duplicateHistory() = preferenceStore.getStringSet("kisara_duplicate_history", emptySet())
     fun alwaysShowSubTabs() = preferenceStore.getBoolean("kisara_always_show_sub_tabs", true)
+    fun alwaysShowSubTabsHome() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_home", true)
+    fun alwaysShowSubTabsLibrary() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_library", true)
+    fun alwaysShowSubTabsBrowse() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_browse", true)
+    fun subTabsBottomMargin() = preferenceStore.getInt("kisara_sub_tabs_bottom_margin", 0)
     fun showTopTabBar() = preferenceStore.getBoolean("kisara_show_top_tab_bar", false)
     // KMK <--
 

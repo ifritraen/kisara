@@ -43,6 +43,9 @@ object SettingsKisaraScreen : SearchableSettings {
         val showTopTabBarPref = uiPreferences.showTopTabBar()
         val showTopTabBar by showTopTabBarPref.collectAsState()
 
+        val subTabsBottomMarginPref = uiPreferences.subTabsBottomMargin()
+        val subTabsBottomMargin by subTabsBottomMarginPref.collectAsState()
+
         return listOf(
             Preference.PreferenceGroup(
                 title = stringResource(KMR.strings.label_kisara_settings),
@@ -77,6 +80,29 @@ object SettingsKisaraScreen : SearchableSettings {
                         preference = uiPreferences.alwaysShowSubTabs(),
                         title = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs),
                         subtitle = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_summary),
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.alwaysShowSubTabsHome(),
+                        title = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_home),
+                        subtitle = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_home_summary),
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.alwaysShowSubTabsLibrary(),
+                        title = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_library),
+                        subtitle = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_library_summary),
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.alwaysShowSubTabsBrowse(),
+                        title = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_browse),
+                        subtitle = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_browse_summary),
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = subTabsBottomMargin,
+                        valueRange = 0..80,
+                        title = stringResource(KMR.strings.pref_sub_tabs_bottom_margin),
+                        subtitle = stringResource(KMR.strings.pref_sub_tabs_bottom_margin_summary),
+                        valueString = if (subTabsBottomMargin > 0) "$subTabsBottomMargin dp" else stringResource(MR.strings.disabled),
+                        onValueChanged = { subTabsBottomMarginPref.set(it) },
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = showTopTabBarPref,
