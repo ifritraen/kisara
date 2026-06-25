@@ -86,6 +86,8 @@ class UiPreferences(
     fun floatingBottomBar() = preferenceStore.getBoolean("pref_floating_bottom_bar", true)
     fun bottomBarOpacity() = preferenceStore.getInt("pref_bottom_bar_opacity", 80)
     fun bottomBarBlur() = preferenceStore.getInt("pref_bottom_bar_blur", 8)
+    fun readerAppBarOpacity() = preferenceStore.getInt("reader_app_bar_opacity", 80)
+    fun readerAppBarColorMix() = preferenceStore.getInt("reader_app_bar_color_mix", 0)
 
     // Kisara Settings
     fun kisaraFrostedGlass() = preferenceStore.getBoolean("kisara_frosted_glass", true)

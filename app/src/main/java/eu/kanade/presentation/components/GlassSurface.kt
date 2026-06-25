@@ -76,14 +76,23 @@ fun GlassSurface(
     style: GlassStyle = GlassDefaults.regularStyle(),
     shape: Shape = GlassDefaults.shape,
     dialogSurface: Boolean = false,
+    isReaderSurface: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val isGlassEnabled by uiPreferences.kisaraFrostedGlass().collectAsState()
-    val hazeOpacity by uiPreferences.bottomBarOpacity().collectAsState()
+    val hazeOpacity by if (isReaderSurface) {
+        uiPreferences.readerAppBarOpacity().collectAsState()
+    } else {
+        uiPreferences.bottomBarOpacity().collectAsState()
+    }
     val hazeBlur by uiPreferences.bottomBarBlur().collectAsState()
     val mixColorType by uiPreferences.kisaraGlassColorType().collectAsState()
-    val mixColorRatioVal by uiPreferences.kisaraGlassColorMix().collectAsState()
+    val mixColorRatioVal by if (isReaderSurface) {
+        uiPreferences.readerAppBarColorMix().collectAsState()
+    } else {
+        uiPreferences.kisaraGlassColorMix().collectAsState()
+    }
     val mixCustomColorVal by uiPreferences.kisaraGlassCustomColor().collectAsState()
 
     val hazeState = LocalHazeState.current
@@ -154,14 +163,14 @@ fun GlassSurface(
     val hazeStyle = remember(blurRadius, baseTintColor, containerColor, dialogSurface) {
         HazeStyle(
             backgroundColor = Color.Transparent,
-            tint = HazeDefaults.tint(if (dialogSurface) Color.Transparent else baseTintColor),
+            tint = HazeDefaults.tint(Color.Transparent),
             blurRadius = blurRadius,
             noiseFactor = 0.03f, // premium frosted feel noise
         )
     }
 
     val hazeBackgroundColor = if (dialogSurface) Color.Transparent else containerColor
-    val surfaceColor = if (useRuntimeHaze && !dialogSurface) Color.Transparent else containerColor
+    val surfaceColor = if (useRuntimeHaze && !isReaderSurface) Color.Transparent else containerColor
 
     CompositionLocalProvider(LocalAbsoluteTonalElevation provides 0.dp) {
         Surface(
@@ -182,8 +191,8 @@ fun GlassSurface(
             color = surfaceColor,
             contentColor = colorScheme.onSurface,
             tonalElevation = style.tonalElevation,
-            shadowElevation = style.shadowElevation,
-            border = border,
+            shadowElevation = if (useRuntimeHaze && !isReaderSurface) 0.dp else style.shadowElevation,
+            border = if (useRuntimeHaze && !isReaderSurface) null else border,
         ) {
             Box(content = content)
         }

@@ -77,6 +77,12 @@ object SettingsKisaraScreen : SearchableSettings {
         val kisaraGlassCustomColorPref = uiPreferences.kisaraGlassCustomColor()
         val kisaraGlassCustomColor by kisaraGlassCustomColorPref.collectAsState()
 
+        val readerAppBarOpacityPref = uiPreferences.readerAppBarOpacity()
+        val readerAppBarOpacity by readerAppBarOpacityPref.collectAsState()
+
+        val readerAppBarColorMixPref = uiPreferences.readerAppBarColorMix()
+        val readerAppBarColorMix by readerAppBarColorMixPref.collectAsState()
+
         var showColorPicker by remember { mutableStateOf(false) }
 
         val kisaraShowItemCountInTabsPref = uiPreferences.kisaraShowItemCountInTabs()
@@ -184,6 +190,23 @@ object SettingsKisaraScreen : SearchableSettings {
                         valueString = "$kisaraGlassColorMix%",
                         enabled = kisaraGlassColorType != 0,
                         onValueChanged = { kisaraGlassColorMixPref.set(it) },
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = readerAppBarOpacity,
+                        valueRange = 0..100,
+                        title = "Reader App Bar Opacity",
+                        subtitle = "Opacity of the reader top and bottom bars",
+                        valueString = "$readerAppBarOpacity%",
+                        onValueChanged = { readerAppBarOpacityPref.set(it) },
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = readerAppBarColorMix,
+                        valueRange = 0..100,
+                        title = "Reader App Bar Color Mix",
+                        subtitle = "Color mix ratio of custom color on the reader app bars",
+                        valueString = "$readerAppBarColorMix%",
+                        enabled = kisaraGlassColorType != 0,
+                        onValueChanged = { readerAppBarColorMixPref.set(it) },
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = uiPreferences.alwaysShowSubTabs(),

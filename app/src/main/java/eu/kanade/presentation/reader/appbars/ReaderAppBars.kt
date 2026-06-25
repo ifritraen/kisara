@@ -119,6 +119,7 @@ fun ReaderAppBars(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
                         style = GlassDefaults.prominentStyle(),
+                        isReaderSurface = true,
                     ) {
                         ReaderTopBar(
                             modifier = Modifier
@@ -176,6 +177,7 @@ fun ReaderAppBars(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     style = GlassDefaults.prominentStyle(),
+                    isReaderSurface = true,
                 ) {
                     Row(
                         modifier = Modifier
