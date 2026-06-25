@@ -163,7 +163,7 @@ fun GlassSurface(
     val hazeStyle = remember(blurRadius, baseTintColor, containerColor, dialogSurface) {
         HazeStyle(
             backgroundColor = Color.Transparent,
-            tint = HazeDefaults.tint(Color.Transparent),
+            tint = HazeDefaults.tint(baseTintColor),
             blurRadius = blurRadius,
             noiseFactor = 0.03f, // premium frosted feel noise
         )
