@@ -2,6 +2,7 @@ package eu.kanade.presentation.browse
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,10 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastAny
+import eu.kanade.presentation.browse.components.EmptyResultItem
 import eu.kanade.presentation.browse.components.GlobalSearchCardRow
 import eu.kanade.presentation.browse.components.GlobalSearchErrorResultItem
 import eu.kanade.presentation.browse.components.GlobalSearchLoadingResultItem
 import eu.kanade.presentation.browse.components.GlobalSearchResultItem
+import eu.kanade.presentation.browse.components.MangaItem
 import eu.kanade.presentation.browse.components.SourceIcon
 import eu.kanade.presentation.components.SourcesSearchBox
 import eu.kanade.tachiyomi.source.CatalogueSource
@@ -44,6 +51,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.domain.source.model.FeedSavedSearch
 import tachiyomi.domain.source.model.SavedSearch
 import tachiyomi.domain.source.model.Source
@@ -83,6 +91,7 @@ fun FeedScreen(
     selection: List<Manga>,
     // KMK <--
     onRefresh: () -> Unit,
+    onRefreshSection: (Long) -> Unit,
     getMangaState: @Composable (Manga) -> State<Manga>,
 ) {
     when {
@@ -118,9 +127,23 @@ fun FeedScreen(
                         key = { it.feed.key },
                     ) { item ->
                         // KMK <--
+                        val siteTitle = item.source?.name ?: item.title
+                        val category = if (item.savedSearch != null) {
+                            item.savedSearch.name
+                        } else if (item.source != null) {
+                            if (item.source.supportsLatest) {
+                                stringResource(MR.strings.latest)
+                            } else {
+                                stringResource(MR.strings.popular)
+                            }
+                        } else {
+                            item.subtitle
+                        }
+
                         GlobalSearchResultItem(
-                            title = item.title,
-                            subtitle = item.subtitle,
+                            title = siteTitle,
+                            subtitle = category,
+                            isFeed = true,
                             onLongClick = {
                                 // KMK -->
                                 onLongClickFeed(item)
@@ -133,6 +156,7 @@ fun FeedScreen(
                                     onClickSource(item.source)
                                 }
                             },
+                            onRefresh = { onRefreshSection(item.feed.id) },
                             modifier = Modifier.animateItem(),
                         ) {
                             FeedItem(
@@ -167,17 +191,50 @@ fun FeedItem(
             GlobalSearchLoadingResultItem()
         }
         item.results.isEmpty() -> {
-            GlobalSearchErrorResultItem(message = stringResource(MR.strings.no_results_found))
+            // Renders nothing when empty, showing only header
         }
         else -> {
-            GlobalSearchCardRow(
+            FeedCardGrid(
                 titles = item.results,
                 getManga = getMangaState,
                 onClick = onClickManga,
-                // KMK -->
                 onLongClick = onLongClickManga,
                 selection = selection,
-                // KMK <--
+            )
+        }
+    }
+}
+
+@Composable
+fun FeedCardGrid(
+    titles: List<Manga>,
+    getManga: @Composable (Manga) -> State<Manga>,
+    onClick: (Manga) -> Unit,
+    onLongClick: (Manga) -> Unit,
+    selection: List<Manga>,
+) {
+    if (titles.isEmpty()) {
+        EmptyResultItem()
+        return
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = Modifier
+            .height(450.dp)
+            .padding(horizontal = MaterialTheme.padding.small),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+    ) {
+        items(titles) {
+            val title by getManga(it)
+            MangaItem(
+                title = title.title,
+                cover = title.asMangaCover(),
+                isFavorite = title.favorite,
+                onClick = { onClick(title) },
+                onLongClick = { onLongClick(title) },
+                isSelected = selection.fastAny { selected -> selected.id == title.id },
             )
         }
     }

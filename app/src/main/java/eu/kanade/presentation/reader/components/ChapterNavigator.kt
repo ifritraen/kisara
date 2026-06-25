@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -88,6 +90,11 @@ fun ChapterNavigator(
     val horizontalPadding = if (isTabletUi) 24.dp else 8.dp
     val layoutDirection = if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
     val haptic = LocalHapticFeedback.current
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = MaterialTheme.colorScheme.primary,
+        activeTrackColor = MaterialTheme.colorScheme.primary,
+        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+    )
 
     // Match with toolbar background color set in ReaderActivity
     val backgroundColor = MaterialTheme.colorScheme
@@ -113,28 +120,25 @@ fun ChapterNavigator(
         ) {
             val prevEnabled = if (isRtl) enabledNext else enabledPrevious
             val prevOnClick = if (isRtl) onNextChapter else onPreviousChapter
-            GlassSurface(
-                modifier = Modifier
-                    .size(28.dp)
-                    .graphicsLayer {
-                        alpha = if (prevEnabled) 1f else 0.38f
-                    },
+            FilledIconButton(
+                enabled = prevEnabled,
+                onClick = prevOnClick,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                ),
+                modifier = Modifier.size(28.dp),
                 shape = RoundedCornerShape(percent = 50),
-                style = GlassDefaults.subtleStyle(),
             ) {
-                IconButton(
-                    enabled = prevEnabled,
-                    onClick = prevOnClick,
-                    modifier = Modifier.size(28.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.SkipPrevious,
-                        modifier = Modifier.size(16.dp),
-                        contentDescription = stringResource(
-                            if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
-                        ),
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Outlined.SkipPrevious,
+                    modifier = Modifier.size(16.dp),
+                    contentDescription = stringResource(
+                        if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
+                    ),
+                )
             }
 
             if (totalPages > 1) {
@@ -183,15 +187,18 @@ fun ChapterNavigator(
                                     onPageIndexChange(it - 1)
                                 },
                                 interactionSource = interactionSource,
+                                colors = sliderColors,
                                 thumb = { sliderState ->
-                                    androidx.compose.material3.SliderDefaults.Thumb(
+                                    SliderDefaults.Thumb(
                                         interactionSource = interactionSource,
+                                        colors = sliderColors,
                                         modifier = Modifier.size(10.dp),
                                     )
                                 },
                                 track = { sliderState ->
-                                    androidx.compose.material3.SliderDefaults.Track(
+                                    SliderDefaults.Track(
                                         sliderState = sliderState,
+                                        colors = sliderColors,
                                         modifier = Modifier.height(2.dp),
                                     )
                                 },
@@ -211,28 +218,25 @@ fun ChapterNavigator(
 
             val nextEnabled = if (isRtl) enabledPrevious else enabledNext
             val nextOnClick = if (isRtl) onPreviousChapter else onNextChapter
-            GlassSurface(
-                modifier = Modifier
-                    .size(28.dp)
-                    .graphicsLayer {
-                        alpha = if (nextEnabled) 1f else 0.38f
-                    },
+            FilledIconButton(
+                enabled = nextEnabled,
+                onClick = nextOnClick,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                ),
+                modifier = Modifier.size(28.dp),
                 shape = RoundedCornerShape(percent = 50),
-                style = GlassDefaults.subtleStyle(),
             ) {
-                IconButton(
-                    enabled = nextEnabled,
-                    onClick = nextOnClick,
-                    modifier = Modifier.size(28.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.SkipNext,
-                        modifier = Modifier.size(16.dp),
-                        contentDescription = stringResource(
-                            if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
-                        ),
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Outlined.SkipNext,
+                    modifier = Modifier.size(16.dp),
+                    contentDescription = stringResource(
+                        if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
+                    ),
+                )
             }
         }
     }
@@ -255,6 +259,11 @@ fun ChapterNavigatorVert(
     val verticalPadding = if (isTabletUi) 24.dp else 8.dp
 
     val haptic = LocalHapticFeedback.current
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = MaterialTheme.colorScheme.primary,
+        activeTrackColor = MaterialTheme.colorScheme.primary,
+        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+    )
 
     Column(
         modifier = Modifier
@@ -267,11 +276,10 @@ fun ChapterNavigatorVert(
             .surfaceColorAtElevation(3.dp)
             .copy(alpha = if (isSystemInDarkTheme()) 0.9f else 0.95f)
         val buttonColor = IconButtonDefaults.filledIconButtonColors(
-            containerColor = backgroundColor,
-            disabledContainerColor = backgroundColor,
-            // KMK -->
-            contentColor = MaterialTheme.colorScheme.primary,
-            // KMK <--
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
         )
         val textColor = MaterialTheme.colorScheme.onSurface
 
@@ -340,6 +348,7 @@ fun ChapterNavigatorVert(
                         onPageIndexChange(it - 1)
                     },
                     interactionSource = interactionSource,
+                    colors = sliderColors,
                 )
 
                 Text(

@@ -92,8 +92,18 @@ class ExtensionsScreenModel(
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
-                    if (installed.isNotEmpty() || untrusted.isNotEmpty()) {
-                        put(ExtensionUiModel.Header.Resource(MR.strings.ext_installed), installed + untrusted)
+
+                    val (sideloaded, standardInstalled) = installed.partition {
+                        val ext = it.extension
+                        ext is Extension.Installed && !ext.isShared
+                    }
+
+                    if (sideloaded.isNotEmpty()) {
+                        put(ExtensionUiModel.Header.Resource(KMR.strings.ext_sideloaded), sideloaded)
+                    }
+
+                    if (standardInstalled.isNotEmpty() || untrusted.isNotEmpty()) {
+                        put(ExtensionUiModel.Header.Resource(MR.strings.ext_installed), standardInstalled + untrusted)
                     }
 
                     val languagesWithExtensions = _available
@@ -189,6 +199,12 @@ class ExtensionsScreenModel(
     fun installExtension(extension: Extension.Available) {
         screenModelScope.launchIO {
             extensionManager.installExtension(extension).collectToInstallUpdate(extension)
+        }
+    }
+
+    fun sideloadExtension(extension: Extension.Available) {
+        screenModelScope.launchIO {
+            extensionManager.sideloadExtension(extension).collectToInstallUpdate(extension)
         }
     }
 

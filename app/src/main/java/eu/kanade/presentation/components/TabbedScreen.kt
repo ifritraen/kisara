@@ -1,11 +1,17 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -45,6 +51,8 @@ fun TabbedScreen(
     state: PagerState = rememberPagerState { tabs.size },
     searchQuery: String? = null,
     onChangeSearchQuery: (String?) -> Unit = {},
+    showAppBar: Boolean = true,
+    showTabs: Boolean = true,
     // KMK -->
     feedScreenModel: FeedScreenModel,
     bulkFavoriteScreenModel: BulkFavoriteScreenModel,
@@ -60,61 +68,77 @@ fun TabbedScreen(
 
     Scaffold(
         topBar = {
-            val tab = tabs[state.currentPage]
-            val searchEnabled = tab.searchEnabled
-            // KMK -->
-            if (bulkFavoriteState.selectionMode) {
-                BulkSelectionToolbar(
-                    selectedCount = bulkFavoriteState.selection.size,
-                    isRunning = bulkFavoriteState.isRunning,
-                    onClickClearSelection = bulkFavoriteScreenModel::toggleSelectionMode,
-                    onChangeCategoryClick = bulkFavoriteScreenModel::addFavorite,
-                    onSelectAll = {
-                        feedState.items?.let { result ->
-                            result.mapNotNull { it.results }
-                                .flatten()
-                                .forEach { bulkFavoriteScreenModel.select(it) }
-                        }
-                    },
-                    onReverseSelection = {
-                        feedState.items?.let { result ->
-                            result.mapNotNull { it.results }
-                                .flatten()
-                                .let { bulkFavoriteScreenModel.reverseSelection(it) }
-                        }
-                    },
-                )
-            } else {
-                // KMK <--
-                SearchToolbar(
-                    titleContent = { AppBarTitle(stringResource(titleRes)) },
-                    searchEnabled = searchEnabled,
-                    searchQuery = if (searchEnabled) searchQuery else null,
-                    onChangeSearchQuery = onChangeSearchQuery,
-                    actions = { AppBarActions(tab.actions) },
-                )
+            if (showAppBar || searchQuery != null) {
+                val tab = tabs[state.currentPage]
+                val searchEnabled = tab.searchEnabled
+                // KMK -->
+                if (bulkFavoriteState.selectionMode) {
+                    BulkSelectionToolbar(
+                        selectedCount = bulkFavoriteState.selection.size,
+                        isRunning = bulkFavoriteState.isRunning,
+                        onClickClearSelection = bulkFavoriteScreenModel::toggleSelectionMode,
+                        onChangeCategoryClick = bulkFavoriteScreenModel::addFavorite,
+                        onSelectAll = {
+                            feedState.items?.let { result ->
+                                result.mapNotNull { it.results }
+                                    .flatten()
+                                    .forEach { bulkFavoriteScreenModel.select(it) }
+                            }
+                        },
+                        onReverseSelection = {
+                            feedState.items?.let { result ->
+                                result.mapNotNull { it.results }
+                                    .flatten()
+                                    .let { bulkFavoriteScreenModel.reverseSelection(it) }
+                            }
+                        },
+                    )
+                } else {
+                    // KMK <--
+                    SearchToolbar(
+                        titleContent = { AppBarTitle(stringResource(titleRes)) },
+                        searchEnabled = searchEnabled,
+                        searchQuery = if (searchEnabled) searchQuery else null,
+                        onChangeSearchQuery = onChangeSearchQuery,
+                        actions = { AppBarActions(tab.actions) },
+                    )
+                }
             }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { contentPadding ->
         Column(
-            modifier = Modifier.padding(
-                top = contentPadding.calculateTopPadding(),
-                start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
-                end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
-            ),
+            modifier = Modifier
+                .padding(
+                    start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
+                    end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
+                )
+                .then(
+                    if (showAppBar || searchQuery != null) {
+                        Modifier.padding(top = contentPadding.calculateTopPadding())
+                    } else {
+                        Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
+                    },
+                ),
         ) {
-            PrimaryTabRow(
-                selectedTabIndex = state.currentPage,
-                modifier = Modifier.zIndex(1f),
+            AnimatedVisibility(
+                visible = showTabs,
+                enter = expandVertically(),
+                exit = shrinkVertically(),
             ) {
-                tabs.forEachIndexed { index, tab ->
-                    Tab(
-                        selected = state.currentPage == index,
-                        onClick = { scope.launch { state.animateScrollToPage(index) } },
-                        text = { TabText(text = stringResource(tab.titleRes), badgeCount = tab.badgeNumber) },
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurface,
-                    )
+                PrimaryTabRow(
+                    selectedTabIndex = state.currentPage,
+                    modifier = Modifier.zIndex(1f).height(36.dp),
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        Tab(
+                            selected = state.currentPage == index,
+                            onClick = { scope.launch { state.animateScrollToPage(index) } },
+                            text = { TabText(text = stringResource(tab.titleRes), badgeCount = tab.badgeNumber) },
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.height(36.dp),
+                        )
+                    }
                 }
             }
 
@@ -125,7 +149,7 @@ fun TabbedScreen(
             ) { page ->
                 val uiPreferences = remember { Injekt.get<UiPreferences>() }
                 val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
-                val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 80.dp else 0.dp)
+                val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 72.dp else 0.dp)
 
                 tabs[page].content(
                     PaddingValues(bottom = bottomPadding),

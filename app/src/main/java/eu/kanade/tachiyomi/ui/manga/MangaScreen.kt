@@ -11,6 +11,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,6 +47,7 @@ import eu.kanade.domain.manga.model.hasCustomCover
 import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.presentation.browse.components.BulkFavoriteDialogs
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
+import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.manga.ChapterSettingsDialog
 import eu.kanade.presentation.manga.DuplicateMangaDialog
@@ -169,6 +171,7 @@ class MangaScreen(
         val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
         val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
 
+        val hazeState = remember { HazeState() }
         val showingRelatedMangasScreen = rememberSaveable { mutableStateOf(false) }
 
         BackHandler(enabled = bulkFavoriteState.selectionMode || showingRelatedMangasScreen.value) {
@@ -206,10 +209,12 @@ class MangaScreen(
         }
 
         val seedColor = successState.seedColor
-        TachiyomiTheme(
-            seedColor = seedColor.takeIf { screenModel.themeCoverBased },
-        ) {
-            content()
+        CompositionLocalProvider(LocalHazeState provides hazeState) {
+            TachiyomiTheme(
+                seedColor = seedColor.takeIf { screenModel.themeCoverBased },
+            ) {
+                content()
+            }
         }
 
         BulkFavoriteDialogs(
@@ -259,7 +264,7 @@ class MangaScreen(
 
         // KMK -->
         val coverRatio = remember { mutableFloatStateOf(1f) }
-        val hazeState = remember { HazeState() }
+        val hazeState = LocalHazeState.current
         val fullCoverBackground = MaterialTheme.colorScheme.surfaceTint.blend(MaterialTheme.colorScheme.surface)
 
         val isHentaiEnabled: Boolean = Injekt.get<ExhPreferences>().isHentaiEnabled().get()
@@ -275,8 +280,15 @@ class MangaScreen(
             chapterSwipeStartAction = screenModel.chapterSwipeStartAction,
             chapterSwipeEndAction = screenModel.chapterSwipeEndAction,
             navigateUp = navigator::pop,
-            onChapterClicked = { openChapter(context, it) },
+            onChapterClicked = { chapter, showTranslations ->
+                if (showTranslations != null) {
+                    val readerPreferences = Injekt.get<eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences>()
+                    readerPreferences.showTranslations().set(showTranslations)
+                }
+                openChapter(context, chapter)
+            },
             onDownloadChapter = screenModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
+            onTranslationChapter = screenModel::runChapterTranslationActions.takeIf { !successState.source.isLocalOrStub() },
             onAddToLibraryClicked = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 screenModel.toggleFavorite()
@@ -329,6 +341,9 @@ class MangaScreen(
                 } else {
                     screenModel.showTrackDialog()
                 }
+            },
+            onDuplicateClicked = {
+                navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(successState.manga.id))
             },
             onTagSearch = { scope.launch { performGenreSearch(navigator, it, screenModel.source!!) } },
             onFilterButtonClicked = screenModel::showSettingsDialog,

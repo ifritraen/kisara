@@ -82,23 +82,43 @@ fun GlassSurface(
     val isGlassEnabled by uiPreferences.kisaraFrostedGlass().collectAsState()
     val hazeOpacity by uiPreferences.bottomBarOpacity().collectAsState()
     val hazeBlur by uiPreferences.bottomBarBlur().collectAsState()
+    val mixColorType by uiPreferences.kisaraGlassColorType().collectAsState()
+    val mixColorRatioVal by uiPreferences.kisaraGlassColorMix().collectAsState()
+    val mixCustomColorVal by uiPreferences.kisaraGlassCustomColor().collectAsState()
 
     val hazeState = LocalHazeState.current
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = colorScheme.background.luminance() < 0.5f
 
+    val mixRatio = mixColorRatioVal.coerceIn(0, 100) / 100f
+    val mixColor = when (mixColorType) {
+        1 -> colorScheme.primary
+        2 -> colorScheme.surface
+        3 -> Color.Black
+        4 -> Color.White
+        5 -> Color(mixCustomColorVal)
+        else -> null
+    }
+
     val preferenceAlpha = (hazeOpacity.coerceIn(0, 100)) / 100f
     val effectiveContainerAlpha = (preferenceAlpha * style.containerAlpha).coerceIn(0f, 1f)
+    val adjustedContainerAlpha = if (mixColor != null) {
+        effectiveContainerAlpha + (0.95f - effectiveContainerAlpha) * mixRatio
+    } else {
+        effectiveContainerAlpha
+    }
 
     // Base color formula from Kototoro
     val baseColor = when {
-        effectiveContainerAlpha >= 0.86f -> colorScheme.surfaceContainerHigh
-        effectiveContainerAlpha >= 0.80f -> colorScheme.surfaceContainer
+        adjustedContainerAlpha >= 0.86f -> colorScheme.surfaceContainerHigh
+        adjustedContainerAlpha >= 0.80f -> colorScheme.surfaceContainer
         else -> colorScheme.surfaceContainerLow
     }.let { candidate ->
         if (isDarkTheme) lerp(candidate, colorScheme.surfaceBright, 0.16f) else candidate
+    }.let { candidate ->
+        if (mixColor != null && mixRatio > 0f) lerp(candidate, mixColor, mixRatio) else candidate
     }
-    val containerColor = baseColor.copy(alpha = effectiveContainerAlpha)
+    val containerColor = baseColor.copy(alpha = adjustedContainerAlpha)
 
     // Base blur radius formula from Kototoro
     val baseBlurRadius = when {
@@ -115,7 +135,12 @@ fun GlassSurface(
         .let { alpha ->
             if (isDarkTheme) (alpha + 0.10f).coerceAtMost(0.50f) else alpha
         }
-    val baseTintColor = baseColor.copy(alpha = tintAlpha)
+    val adjustedTintAlpha = if (mixColor != null) {
+        tintAlpha + (0.75f - tintAlpha) * mixRatio
+    } else {
+        tintAlpha
+    }
+    val baseTintColor = baseColor.copy(alpha = adjustedTintAlpha)
 
     val border = BorderStroke(
         width = 1.dp,
@@ -146,8 +171,8 @@ fun GlassSurface(
                     .hazeChild(hazeState, hazeStyle) {
                         backgroundColor = hazeBackgroundColor
                         blurredEdgeTreatment = BlurredEdgeTreatment(shape)
-                        clipToAreasBounds = true
-                        expandLayerBounds = !dialogSurface
+                        clipToAreasBounds = false
+                        expandLayerBounds = false
                         forceInvalidateOnPreDraw = true
                     }
             } else {

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.browse.migration.sources
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalUriHandler
@@ -13,8 +14,11 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.MigrateSourceScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.migration.manga.MigrateMangaScreen
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -24,6 +28,12 @@ fun Screen.migrateSourceTab(): TabContent {
     val navigator = LocalNavigator.currentOrThrow
     val screenModel = rememberScreenModel { MigrateSourceScreenModel() }
     val state by screenModel.state.collectAsState()
+
+    LaunchedEffect(Unit) {
+        BrowseTab.migrateHelpEvent.receiveAsFlow().collectLatest {
+            uriHandler.openUri("https://komikku-app.github.io/docs/guides/source-migration")
+        }
+    }
 
     return TabContent(
         titleRes = MR.strings.label_migration,

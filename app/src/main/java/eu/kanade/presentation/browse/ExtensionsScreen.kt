@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.AlertDialog
@@ -83,6 +84,7 @@ fun ExtensionScreen(
     onClickItemCancel: (Extension) -> Unit,
     onOpenWebView: (Extension.Available) -> Unit,
     onInstallExtension: (Extension.Available) -> Unit,
+    onSideloadExtension: (Extension.Available) -> Unit,
     onUninstallExtension: (Extension) -> Unit,
     onUpdateExtension: (Extension.Installed) -> Unit,
     onTrustExtension: (Extension.Untrusted) -> Unit,
@@ -125,6 +127,7 @@ fun ExtensionScreen(
                     onClickItemCancel = onClickItemCancel,
                     onOpenWebView = onOpenWebView,
                     onInstallExtension = onInstallExtension,
+                    onSideloadExtension = onSideloadExtension,
                     onUninstallExtension = onUninstallExtension,
                     onUpdateExtension = onUpdateExtension,
                     onTrustExtension = onTrustExtension,
@@ -144,6 +147,7 @@ private fun ExtensionContent(
     onClickItemCancel: (Extension) -> Unit,
     onOpenWebView: (Extension.Available) -> Unit,
     onInstallExtension: (Extension.Available) -> Unit,
+    onSideloadExtension: (Extension.Available) -> Unit,
     onUninstallExtension: (Extension) -> Unit,
     onUpdateExtension: (Extension.Installed) -> Unit,
     onTrustExtension: (Extension.Untrusted) -> Unit,
@@ -276,6 +280,19 @@ private fun ExtensionContent(
                             }
                         }
                     },
+                    onClickItemSideload = {
+                        if (it is Extension.Available) {
+                            onSideloadExtension(it)
+                        } else if (it is Extension.Installed && it.hasUpdate) {
+                            // Update as sideload
+                            val availableExt = state.items.values.flatten().map { it.extension }
+                                .filterIsInstance<Extension.Available>()
+                                .firstOrNull { avail -> avail.pkgName == it.pkgName }
+                            if (availableExt != null) {
+                                onSideloadExtension(availableExt)
+                            }
+                        }
+                    },
                 )
             }
         }
@@ -305,6 +322,7 @@ private fun ExtensionItem(
     onClickItemCancel: (Extension) -> Unit,
     onClickItemAction: (Extension) -> Unit,
     onClickItemSecondaryAction: (Extension) -> Unit,
+    onClickItemSideload: (Extension) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val (extension, installStep) = item
@@ -346,6 +364,7 @@ private fun ExtensionItem(
                 onClickItemCancel = onClickItemCancel,
                 onClickItemAction = onClickItemAction,
                 onClickItemSecondaryAction = onClickItemSecondaryAction,
+                onClickItemSideload = onClickItemSideload,
             )
         },
     ) {
@@ -426,7 +445,8 @@ private fun ExtensionItemContent(
                 if (extension is Extension.Installed && !extension.isShared) {
                     if (hasAlreadyShownAnElement) DotSeparatorNoSpaceText()
                     Text(
-                        text = stringResource(MR.strings.ext_installer_private),
+                        text = stringResource(KMR.strings.ext_sideload).uppercase(),
+                        color = MaterialTheme.colorScheme.secondary,
                     )
                 }
 
@@ -454,6 +474,7 @@ private fun ExtensionItemActions(
     onClickItemCancel: (Extension) -> Unit = {},
     onClickItemAction: (Extension) -> Unit = {},
     onClickItemSecondaryAction: (Extension) -> Unit = {},
+    onClickItemSideload: (Extension) -> Unit = {},
 ) {
     val isIdle = installStep.isCompleted()
 
@@ -489,6 +510,13 @@ private fun ExtensionItemActions(
                         }
 
                         if (extension.hasUpdate) {
+                            IconButton(onClick = { onClickItemSideload(extension) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.SaveAlt,
+                                    contentDescription = stringResource(KMR.strings.ext_sideload),
+                                )
+                            }
+
                             IconButton(onClick = { onClickItemAction(extension) }) {
                                 Icon(
                                     imageVector = Icons.Outlined.GetApp,
@@ -515,6 +543,13 @@ private fun ExtensionItemActions(
                                     contentDescription = stringResource(MR.strings.action_open_in_web_view),
                                 )
                             }
+                        }
+
+                        IconButton(onClick = { onClickItemSideload(extension) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.SaveAlt,
+                                contentDescription = stringResource(KMR.strings.ext_sideload),
+                            )
                         }
 
                         IconButton(onClick = { onClickItemAction(extension) }) {

@@ -1,13 +1,34 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import com.github.skydoves.colorpicker.compose.BrightnessSlider
+import com.github.skydoves.colorpicker.compose.HsvColorPicker
+import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.Preference
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableMap
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -26,6 +47,7 @@ object SettingsKisaraScreen : SearchableSettings {
 
     @Composable
     override fun getPreferences(): List<Preference> {
+        val navigator = LocalNavigator.currentOrThrow
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
 
         val floatingBottomBarPref = uiPreferences.floatingBottomBar()
@@ -45,6 +67,65 @@ object SettingsKisaraScreen : SearchableSettings {
 
         val subTabsBottomMarginPref = uiPreferences.subTabsBottomMargin()
         val subTabsBottomMargin by subTabsBottomMarginPref.collectAsState()
+
+        val kisaraGlassColorTypePref = uiPreferences.kisaraGlassColorType()
+        val kisaraGlassColorType by kisaraGlassColorTypePref.collectAsState()
+
+        val kisaraGlassColorMixPref = uiPreferences.kisaraGlassColorMix()
+        val kisaraGlassColorMix by kisaraGlassColorMixPref.collectAsState()
+
+        val kisaraGlassCustomColorPref = uiPreferences.kisaraGlassCustomColor()
+        val kisaraGlassCustomColor by kisaraGlassCustomColorPref.collectAsState()
+
+        var showColorPicker by remember { mutableStateOf(false) }
+
+        val kisaraShowItemCountInTabsPref = uiPreferences.kisaraShowItemCountInTabs()
+        val kisaraShowItemCountInTabs by kisaraShowItemCountInTabsPref.collectAsState()
+
+        if (showColorPicker) {
+            val controller = rememberColorPickerController()
+            AlertDialog(
+                onDismissRequest = { showColorPicker = false },
+                title = { Text(text = "Choose Custom Glass Color") },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        HsvColorPicker(
+                            modifier = Modifier.size(240.dp),
+                            controller = controller,
+                            initialColor = Color(kisaraGlassCustomColor),
+                            onColorChanged = { },
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        BrightnessSlider(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp),
+                            controller = controller,
+                            initialColor = Color(kisaraGlassCustomColor),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val selectedColor = controller.selectedColor.value
+                            kisaraGlassCustomColorPref.set(selectedColor.toArgb())
+                            showColorPicker = false
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showColorPicker = false }) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
 
         return listOf(
             Preference.PreferenceGroup(
@@ -76,6 +157,34 @@ object SettingsKisaraScreen : SearchableSettings {
                         title = stringResource(KMR.strings.pref_kisara_frosted_glass),
                         subtitle = stringResource(KMR.strings.pref_kisara_frosted_glass_summary),
                     ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = kisaraGlassColorTypePref,
+                        entries = mapOf(
+                            0 to stringResource(KMR.strings.glass_color_type_default),
+                            1 to stringResource(KMR.strings.glass_color_type_accent),
+                            2 to stringResource(KMR.strings.glass_color_type_surface),
+                            3 to stringResource(KMR.strings.glass_color_type_black),
+                            4 to stringResource(KMR.strings.glass_color_type_white),
+                            5 to "Custom Color",
+                        ).toImmutableMap(),
+                        title = stringResource(KMR.strings.pref_glass_color_type),
+                        subtitle = "%s",
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Custom Glass Color",
+                        subtitle = if (kisaraGlassColorType == 5) "#%08X".format(kisaraGlassCustomColor) else "Tap to choose a custom color",
+                        enabled = kisaraGlassColorType == 5,
+                        onClick = { showColorPicker = true },
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = kisaraGlassColorMix,
+                        valueRange = 0..100,
+                        title = stringResource(KMR.strings.pref_glass_color_mix),
+                        subtitle = stringResource(KMR.strings.pref_glass_color_mix_summary),
+                        valueString = "$kisaraGlassColorMix%",
+                        enabled = kisaraGlassColorType != 0,
+                        onValueChanged = { kisaraGlassColorMixPref.set(it) },
+                    ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = uiPreferences.alwaysShowSubTabs(),
                         title = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs),
@@ -98,11 +207,16 @@ object SettingsKisaraScreen : SearchableSettings {
                     ),
                     Preference.PreferenceItem.SliderPreference(
                         value = subTabsBottomMargin,
-                        valueRange = 0..80,
+                        valueRange = -20..80,
                         title = stringResource(KMR.strings.pref_sub_tabs_bottom_margin),
                         subtitle = stringResource(KMR.strings.pref_sub_tabs_bottom_margin_summary),
-                        valueString = if (subTabsBottomMargin > 0) "$subTabsBottomMargin dp" else stringResource(MR.strings.disabled),
+                        valueString = if (subTabsBottomMargin != 0) "$subTabsBottomMargin dp" else stringResource(MR.strings.disabled),
                         onValueChanged = { subTabsBottomMarginPref.set(it) },
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = kisaraShowItemCountInTabsPref,
+                        title = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs),
+                        subtitle = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs_summary),
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = showTopTabBarPref,
@@ -145,6 +259,11 @@ object SettingsKisaraScreen : SearchableSettings {
                         onValueChanged = {
                             uiPreferences.chapterSheetMaxHeightPct().set(it)
                         },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_category_translations),
+                        subtitle = stringResource(KMR.strings.pref_translation_summary),
+                        onClick = { navigator.push(SettingsTranslationScreen) },
                     ),
                 ),
             ),

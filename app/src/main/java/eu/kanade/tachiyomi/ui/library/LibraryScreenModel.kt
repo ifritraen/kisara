@@ -1784,8 +1784,8 @@ class LibraryScreenModel(
         }
         // KMK <--
 
-        fun getItemCountForCategory(category: Category): Int? {
-            if (!showMangaCount && searchQuery.isNullOrEmpty()) return null
+        fun getItemCountForCategory(category: Category, force: Boolean = false): Int? {
+            if (!force && !showMangaCount && searchQuery.isNullOrEmpty()) return null
 
             // Get this category + all its subcategories
             val categoriesToCount = listOf(category) + getAllSubcategories(category.id, displayedCategories)

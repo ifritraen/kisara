@@ -55,6 +55,11 @@ class StorageManager(
                     parent.createDirectory(DOWNLOADS_PATH).also {
                         DiskUtil.createNoMediaFile(it, context)
                     }
+                    // KMK -->
+                    parent.createDirectory(TRANSLATION_PATH).also {
+                        DiskUtil.createNoMediaFile(it, context)
+                    }
+                    // KMK <--
                 }
                 _changes.send(Unit)
             }
@@ -87,6 +92,12 @@ class StorageManager(
         return baseDir?.createDirectory(LOGS_PATH)
     }
     // SY <--
+
+    // KMK -->
+    fun getTranslationsDirectory(): UniFile? {
+        return baseDir?.createDirectory(TRANSLATION_PATH)
+    }
+    // KMK <--
 
     companion object {
         // KMK -->
@@ -226,3 +237,7 @@ private const val LOCAL_SOURCE_PATH = "local"
 // SY -->
 private const val LOGS_PATH = "logs"
 // SY <--
+
+// KMK -->
+private const val TRANSLATION_PATH = "translations"
+// KMK <--

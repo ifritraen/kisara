@@ -54,7 +54,7 @@ internal class ExtensionInstaller(
      * @param url The url of the apk.
      * @param extension The extension to install.
      */
-    fun downloadAndInstall(url: String, extension: Extension): Flow<InstallStep> {
+    fun downloadAndInstall(url: String, extension: Extension, isSideload: Boolean = false): Flow<InstallStep> {
         val pkgName = extension.pkgName +
             // KMK -->
             "_${extension.signatureHash}"
@@ -88,7 +88,18 @@ internal class ExtensionInstaller(
                     }
 
                 step.value = InstallStep.Installing
-                installApk(downloadId, tmpFile)
+                if (isSideload) {
+                    try {
+                        LocalApkExtensionSupport.storeSideloadedApk(context, extension.pkgName, tmpFile)
+                        step.value = InstallStep.Installed
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR, e) { "Failed to store sideloaded extension" }
+                        step.value = InstallStep.Error
+                    }
+                    tmpFile.delete()
+                } else {
+                    installApk(downloadId, tmpFile)
+                }
             } catch (e: Exception) {
                 if (e is InterruptedException) {
                     // Canceled

@@ -529,6 +529,14 @@ object SettingsLibraryScreen : SearchableSettings {
                 ),
                 // KMK -->
                 Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.categoryTabs(),
+                    title = stringResource(KMR.strings.pref_show_category_tabs),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.subcategoryTabs(),
+                    title = stringResource(KMR.strings.pref_show_subcategory_tabs),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
                     preference = libraryPreferences.showEmptyCategoriesSearch(),
                     title = stringResource(KMR.strings.pref_show_empty_categories_search),
                 ),

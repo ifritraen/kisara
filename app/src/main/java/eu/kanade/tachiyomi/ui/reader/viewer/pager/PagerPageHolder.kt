@@ -3,7 +3,9 @@ package eu.kanade.tachiyomi.ui.reader.viewer.pager
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.PointF
 import android.view.LayoutInflater
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.annotation.ColorInt
 import androidx.core.view.isVisible
 import eu.kanade.presentation.util.formattedMessage
@@ -15,10 +17,14 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
+import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.presentation.PagerTranslationsView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
@@ -31,7 +37,10 @@ import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.decoder.ImageDecoder
+import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.MR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.math.max
 
 /**
@@ -66,6 +75,14 @@ class PagerPageHolder(
 
     private val scope = MainScope()
 
+    // KMK -->
+    private val readerPreferences: eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences = uy.kohesive.injekt.Injekt.get()
+    private val translationPreferences: TranslationPreferences = uy.kohesive.injekt.Injekt.get()
+    private val font: TranslationFont = TranslationFont.fromPref(translationPreferences.translationFont())
+    private var showTranslations = true
+    private var translationsView: PagerTranslationsView? = null
+    // KMK <--
+
     /**
      * Job for loading the page and processing changes to the page's status.
      */
@@ -81,6 +98,17 @@ class PagerPageHolder(
         // SY -->
         extraLoadJob = scope.launch { loadPageAndProcessStatus(2) }
         // SY <--
+        // KMK -->
+        showTranslations = readerPreferences.showTranslations().get()
+        readerPreferences.showTranslations().changes().onEach {
+            showTranslations = it
+            if (it) {
+                translationsView?.show()
+            } else {
+                translationsView?.hide()
+            }
+        }.launchIn(scope)
+        // KMK <--
     }
 
     /**
@@ -133,7 +161,12 @@ class PagerPageHolder(
                             progressIndicator?.setProgress(value)
                         }
                     }
-                    Page.State.Ready -> setImage()
+                    Page.State.Ready -> {
+                        setImage()
+                        // KMK -->
+                        addTranslationsView()
+                        // KMK <--
+                    }
                     is Page.State.Error -> setError(state.error)
                 }
             }
@@ -426,11 +459,20 @@ class PagerPageHolder(
     private fun setError(error: Throwable?) {
         progressIndicator?.hide()
         showErrorLayout(error)
+        // KMK -->
+        translationsView?.hide()
+        // KMK <--
     }
 
     override fun onImageLoaded() {
         super.onImageLoaded()
         progressIndicator?.hide()
+        // KMK -->
+        (pageImageView as? com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView)?.let {
+            updateTranslationCoords(it)
+        }
+        translationsView?.show()
+        // KMK <--
     }
 
     /**
@@ -439,6 +481,9 @@ class PagerPageHolder(
     override fun onImageLoadError(error: Throwable?) {
         super.onImageLoadError(error)
         setError(error)
+        // KMK -->
+        translationsView?.hide()
+        // KMK <--
     }
 
     /**
@@ -447,7 +492,38 @@ class PagerPageHolder(
     override fun onScaleChanged(newScale: Float) {
         super.onScaleChanged(newScale)
         viewer.activity.hideMenu()
+        // KMK -->
+        (pageImageView as? com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView)?.let {
+            updateTranslationCoords(it)
+        }
+        // KMK <--
     }
+
+    // KMK -->
+    override fun onCenterChanged(newCenter: PointF?) {
+        super.onCenterChanged(newCenter)
+        (pageImageView as? com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView)?.let {
+            updateTranslationCoords(it)
+        }
+    }
+
+    private fun addTranslationsView() {
+        if (page.translation == null) return
+        removeView(translationsView)
+        translationsView = PagerTranslationsView(context, translation = page.translation!!, font = font)
+        if (!showTranslations) translationsView?.hide()
+        addView(translationsView, MATCH_PARENT, MATCH_PARENT)
+    }
+
+    private fun updateTranslationCoords(vi: com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView) {
+        if (page.translation == null) return
+        val coords = vi.sourceToViewCoord(0f, 0f)
+        if (coords != null) {
+            translationsView?.viewTLState?.value = coords
+        }
+        translationsView?.scaleState?.value = vi.scale
+    }
+    // KMK <--
 
     private fun showErrorLayout(error: Throwable?): ReaderErrorBinding {
         if (errorLayout == null) {

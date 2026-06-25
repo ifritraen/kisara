@@ -14,10 +14,19 @@ markdown = "0.39.2"
 junit = "6.0.3"
 materialKolor = "5.0.0-alpha06"
 material3-version = "1.4.0"
+mlkit-text-recognition-version = "16.0.1"
+mlkit-text-translate-version = "17.0.3"
+google-generativeai-version = "0.9.0"
 
 [libraries]
 desugar = "com.android.tools:desugar_jdk_libs:2.1.5"
 android-shortcut-gradle = "com.github.komikku-app:android-shortcut-gradle-plugin:0.2.0"
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-recognition-chinese = { module = "com.google.mlkit:text-recognition-chinese", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-japanese", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-recognition-korean = { module = "com.google.mlkit:text-recognition-korean", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-text-translate-version" }
+google-generativeai = { module = "com.google.ai.client.generativeai:generativeai", version.ref = "google-generativeai-version" }
 
 rxjava = "io.reactivex:rxjava:1.3.8"
 

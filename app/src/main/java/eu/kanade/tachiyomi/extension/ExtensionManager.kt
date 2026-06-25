@@ -22,6 +22,7 @@ import exh.source.EXHENTAI_EXT_SOURCES
 import exh.source.ExhPreferences
 import exh.source.MERGED_SOURCE_ID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
@@ -84,7 +86,9 @@ class ExtensionManager(
     val untrustedExtensionsFlow = untrustedExtensionMapFlow.mapExtensions(scope)
 
     init {
-        initExtensions()
+        scope.launch(Dispatchers.IO) {
+            initExtensions()
+        }
         ExtensionInstallReceiver(InstallationListener()).register(context)
     }
 
@@ -109,9 +113,17 @@ class ExtensionManager(
     fun getAppIconForSource(sourceId: Long): Drawable? {
         val pkgName = getExtensionPackage(sourceId)
         if (pkgName != null) {
-            return iconMap[pkgName] ?: iconMap.getOrPut(pkgName) {
-                ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)!!.applicationInfo!!
-                    .loadIcon(context.packageManager)
+            val cachedIcon = iconMap[pkgName]
+            if (cachedIcon != null) return cachedIcon
+            val icon = try {
+                ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)?.applicationInfo
+                    ?.loadIcon(context.packageManager)
+            } catch (e: Exception) {
+                null
+            }
+            if (icon != null) {
+                iconMap[pkgName] = icon
+                return icon
             }
         }
 
@@ -299,6 +311,10 @@ class ExtensionManager(
      */
     fun installExtension(extension: Extension.Available): Flow<InstallStep> {
         return installer.downloadAndInstall(api.getApkUrl(extension), extension)
+    }
+
+    fun sideloadExtension(extension: Extension.Available): Flow<InstallStep> {
+        return installer.downloadAndInstall(api.getApkUrl(extension), extension, isSideload = true)
     }
 
     /**

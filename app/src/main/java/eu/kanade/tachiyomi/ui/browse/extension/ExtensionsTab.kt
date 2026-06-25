@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,10 +23,14 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.more.settings.screen.browse.ExtensionReposScreen
 import eu.kanade.tachiyomi.extension.model.Extension
+import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -39,6 +44,37 @@ fun extensionsTab(
 
     val state by extensionsScreenModel.state.collectAsState()
     var privateExtensionToUninstall by remember { mutableStateOf<Extension?>(null) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            BrowseTab.extensionsSearchEvent.receiveAsFlow().collectLatest {
+                extensionsScreenModel.search("")
+            }
+        }
+        launch {
+            BrowseTab.extensionsNsfwToggleEvent.receiveAsFlow().collectLatest {
+                extensionsScreenModel.toggleNsfwOnly()
+            }
+        }
+        launch {
+            BrowseTab.extensionsWebViewRefreshEvent.receiveAsFlow().collectLatest {
+                extensionsScreenModel.findAvailableExtensions()
+            }
+        }
+        launch {
+            BrowseTab.extensionsFilterEvent.receiveAsFlow().collectLatest {
+                navigator.push(ExtensionFilterScreen())
+            }
+        }
+        launch {
+            BrowseTab.extensionsReposEvent.receiveAsFlow().collectLatest {
+                navigator.push(ExtensionReposScreen())
+            }
+        }
+    }
+    LaunchedEffect(state.nsfwOnly) {
+        BrowseTab.extensionsNsfwOnly = state.nsfwOnly
+    }
 
     return TabContent(
         titleRes = MR.strings.label_extensions,
@@ -100,6 +136,7 @@ fun extensionsTab(
                     }
                 },
                 onInstallExtension = extensionsScreenModel::installExtension,
+                onSideloadExtension = extensionsScreenModel::sideloadExtension,
                 onOpenExtension = { navigator.push(ExtensionDetailsScreen(it.pkgName)) },
                 onTrustExtension = { extensionsScreenModel.trustExtension(it) },
                 onUninstallExtension = { extensionsScreenModel.uninstallExtension(it) },

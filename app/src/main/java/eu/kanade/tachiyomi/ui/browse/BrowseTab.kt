@@ -36,7 +36,9 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
@@ -149,6 +151,8 @@ data object BrowseTab : Tab {
         val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
         val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsState()
         val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
+        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
+        val hazeState = LocalHazeState.current
 
         var bottomBarVisible by remember { mutableStateOf(true) }
         val nestedScrollConnection = remember {
@@ -174,6 +178,7 @@ data object BrowseTab : Tab {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier)
                 .nestedScroll(nestedScrollConnection),
         ) {
             TabbedScreen(

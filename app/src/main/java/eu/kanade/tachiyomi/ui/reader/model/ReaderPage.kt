@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.model
 
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.translation.model.PageTranslation
 import java.io.InputStream
 
 open class ReaderPage(
@@ -25,4 +26,8 @@ open class ReaderPage(
             field = value
             if (value) shiftedPage = false
         }
+
+    // KMK -->
+    var translation: PageTranslation? = null
+    // KMK <--
 }

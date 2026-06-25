@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -70,6 +71,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAll
@@ -287,6 +292,7 @@ data object LibraryTab : Tab {
         val categoryBarCarouselStyle by uiPreferences.categoryBarCarouselStyle().collectAsState()
         val alwaysShowSubTabsLibrary by uiPreferences.alwaysShowSubTabsLibrary().collectAsState()
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
+        val kisaraShowItemCountInTabs by uiPreferences.kisaraShowItemCountInTabs().collectAsState()
 
         var topBarVisible by remember { mutableStateOf(true) }
         var bottomBarVisible by remember { mutableStateOf(true) }
@@ -582,7 +588,7 @@ data object LibraryTab : Tab {
             }
 
             val fabBottomPadding = if (bottomBarVisible) {
-                (if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp
+                ((if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp).coerceAtLeast(0.dp)
             } else {
                 16.dp
             }
@@ -700,12 +706,51 @@ data object LibraryTab : Tab {
                                                         }
                                                     }
                                                 },
-                                                label = { Text(text = "All", fontSize = 10.sp) },
+                                                label = {
+                                                    val contentColor = LocalContentColor.current
+                                                    val allText = remember(activeParent, kisaraShowItemCountInTabs, state, contentColor) {
+                                                        if (kisaraShowItemCountInTabs && activeParent != null) {
+                                                            val count = state.getItemCountForCategory(activeParent, force = true)
+                                                            if (count != null) {
+                                                                buildAnnotatedString {
+                                                                    append("All")
+                                                                    withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
+                                                                        append(" ($count)")
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                AnnotatedString("All")
+                                                            }
+                                                        } else {
+                                                            AnnotatedString("All")
+                                                        }
+                                                    }
+                                                    Text(text = allText, fontSize = 10.sp)
+                                                },
                                                 modifier = Modifier.height(24.dp),
                                             )
                                         }
                                         items(subcategories) { sub ->
                                             val isSelected = activeSubcategoryIdOfActivePage == sub.id
+                                            val contentColor = LocalContentColor.current
+                                            val visualName = sub.visualName
+                                            val subTitleText = remember(sub, visualName, kisaraShowItemCountInTabs, state, contentColor) {
+                                                if (kisaraShowItemCountInTabs) {
+                                                    val count = state.getItemCountForCategory(sub, force = true)
+                                                    if (count != null) {
+                                                        buildAnnotatedString {
+                                                            append(visualName)
+                                                            withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
+                                                                append(" ($count)")
+                                                            }
+                                                        }
+                                                    } else {
+                                                        AnnotatedString(visualName)
+                                                    }
+                                                } else {
+                                                    AnnotatedString(visualName)
+                                                }
+                                            }
                                             FilterChip(
                                                 selected = isSelected,
                                                 onClick = {
@@ -718,7 +763,7 @@ data object LibraryTab : Tab {
                                                         }
                                                     }
                                                 },
-                                                label = { Text(text = sub.visualName, fontSize = 10.sp) },
+                                                label = { Text(text = subTitleText, fontSize = 10.sp) },
                                                 modifier = Modifier.height(24.dp),
                                             )
                                         }
@@ -736,6 +781,25 @@ data object LibraryTab : Tab {
                                     itemsIndexed(tabCategories) { idx, cat ->
                                         val isSelected = state.activeCategoryIndex == idx
                                         val scale = if (categoryBarCarouselStyle && isSelected) 1.15f else 1f
+                                        val contentColor = LocalContentColor.current
+                                        val visualName = cat.visualName
+                                        val catTitleText = remember(cat, visualName, kisaraShowItemCountInTabs, state, contentColor) {
+                                            if (kisaraShowItemCountInTabs) {
+                                                val count = state.getItemCountForCategory(cat, force = true)
+                                                if (count != null) {
+                                                    buildAnnotatedString {
+                                                        append(visualName)
+                                                        withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
+                                                            append(" ($count)")
+                                                        }
+                                                    }
+                                                } else {
+                                                    AnnotatedString(visualName)
+                                                }
+                                            } else {
+                                                AnnotatedString(visualName)
+                                            }
+                                        }
                                         FilterChip(
                                             selected = isSelected,
                                             onClick = {
@@ -746,7 +810,7 @@ data object LibraryTab : Tab {
                                             },
                                             label = {
                                                 Text(
-                                                    text = cat.visualName,
+                                                    text = catTitleText,
                                                     fontSize = 10.sp,
                                                     modifier = if (categoryBarCarouselStyle) Modifier.graphicsLayer(scaleX = scale, scaleY = scale) else Modifier,
                                                 )

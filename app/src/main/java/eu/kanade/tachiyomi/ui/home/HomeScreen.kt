@@ -231,7 +231,9 @@ object HomeScreen : Screen() {
                                 .fillMaxSize(),
                         ) {
                             Box(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
                             ) {
                                 AnimatedContent(
                                     targetState = tabNavigator.current,
@@ -279,7 +281,7 @@ object HomeScreen : Screen() {
                                     enter = expandVertically(expandFrom = Alignment.Bottom),
                                     exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                     modifier = Modifier
-                                        .padding(bottom = (if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp)
+                                        .padding(bottom = ((if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp).coerceAtLeast(0.dp))
                                         .align(Alignment.BottomCenter),
                                 ) {
                                     GlassSurface(

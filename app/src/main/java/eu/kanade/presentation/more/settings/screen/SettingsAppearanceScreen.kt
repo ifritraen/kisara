@@ -333,43 +333,9 @@ object SettingsAppearanceScreen : SearchableSettings {
 
     @Composable
     fun getNavbarGroup(uiPreferences: UiPreferences): Preference.PreferenceGroup {
-        // KMK -->
-        val floatingBottomBarPref = uiPreferences.floatingBottomBar()
-        val floatingBottomBar by floatingBottomBarPref.collectAsState()
-
-        val bottomBarOpacityPref = uiPreferences.bottomBarOpacity()
-        val bottomBarOpacity by bottomBarOpacityPref.collectAsState()
-
-        val bottomBarBlurPref = uiPreferences.bottomBarBlur()
-        val bottomBarBlur by bottomBarBlurPref.collectAsState()
-        // KMK <--
-
         return Preference.PreferenceGroup(
             stringResource(SYMR.strings.pref_category_navbar),
             preferenceItems = persistentListOf(
-                // KMK -->
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = floatingBottomBarPref,
-                    title = stringResource(KMR.strings.pref_floating_bottom_bar),
-                    subtitle = stringResource(KMR.strings.pref_floating_bottom_bar_summary),
-                ),
-                Preference.PreferenceItem.SliderPreference(
-                    value = bottomBarOpacity,
-                    valueRange = 0..100,
-                    title = stringResource(KMR.strings.pref_bottom_bar_opacity),
-                    valueString = "$bottomBarOpacity%",
-                    enabled = floatingBottomBar,
-                    onValueChanged = { bottomBarOpacityPref.set(it) },
-                ),
-                Preference.PreferenceItem.SliderPreference(
-                    value = bottomBarBlur,
-                    valueRange = 0..24,
-                    title = stringResource(KMR.strings.pref_bottom_bar_blur),
-                    valueString = if (bottomBarBlur > 0) "$bottomBarBlur dp" else stringResource(MR.strings.disabled),
-                    enabled = floatingBottomBar,
-                    onValueChanged = { bottomBarBlurPref.set(it) },
-                ),
-                // KMK <--
                 Preference.PreferenceItem.SwitchPreference(
                     preference = uiPreferences.showNavUpdates(),
                     title = stringResource(SYMR.strings.pref_hide_updates_button),

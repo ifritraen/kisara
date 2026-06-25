@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -247,6 +248,8 @@ fun MangaActionRow(
     // KMK -->
     status: Long,
     interval: Int,
+    duplicateCount: Int,
+    onDuplicateClicked: () -> Unit,
     // KMK <--
     modifier: Modifier = Modifier,
 ) {
@@ -346,6 +349,16 @@ fun MangaActionRow(
             )
         }
         // SY <--
+        // KMK -->
+        if (duplicateCount > 0) {
+            MangaActionButton(
+                title = stringResource(MR.strings.possible_duplicates_title),
+                icon = Icons.Outlined.ContentCopy,
+                color = MaterialTheme.colorScheme.primary,
+                onClick = onDuplicateClicked,
+            )
+        }
+        // KMK <--
     }
 }
 

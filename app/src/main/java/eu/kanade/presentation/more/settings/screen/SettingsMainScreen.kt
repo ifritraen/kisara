@@ -18,8 +18,10 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
@@ -253,6 +255,12 @@ object SettingsMainScreen : Screen() {
             screen = SettingsMangadexScreen,
         ),
         // SY <--
+        Item(
+            titleRes = KMR.strings.label_kisara_settings,
+            subtitleRes = KMR.strings.pref_kisara_settings_summary,
+            icon = Icons.Outlined.Settings,
+            screen = SettingsKisaraScreen,
+        ),
         Item(
             titleRes = MR.strings.pref_category_advanced,
             subtitleRes = MR.strings.pref_advanced_summary,

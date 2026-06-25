@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -45,6 +47,7 @@ fun TabbedDialog(
     modifier: Modifier = Modifier,
     tabOverflowMenuContent: (@Composable ColumnScope.(() -> Unit) -> Unit)? = null,
     pagerState: PagerState = rememberPagerState { tabTitles.size },
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (Int) -> Unit,
 ) {
     AdaptiveSheet(
@@ -54,11 +57,13 @@ fun TabbedDialog(
         val scope = rememberCoroutineScope()
 
         Column {
-            Row {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 PrimaryTabRow(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).height(36.dp),
                     selectedTabIndex = pagerState.currentPage,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     divider = {},
                 ) {
                     tabTitles.fastForEachIndexed { index, tab ->
@@ -67,9 +72,12 @@ fun TabbedDialog(
                             onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
                             text = { TabText(text = tab) },
                             unselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.height(36.dp),
                         )
                     }
                 }
+
+                actions()
 
                 tabOverflowMenuContent?.let { MoreMenu(it) }
             }

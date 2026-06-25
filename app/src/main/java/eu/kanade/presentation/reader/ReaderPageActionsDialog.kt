@@ -3,14 +3,24 @@ package eu.kanade.presentation.reader
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Photo
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,19 +41,24 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun ReaderPageActionsDialog(
     onDismissRequest: () -> Unit,
-    onSetAsCover: (/* SY --> */useExtraPage: Boolean/* SY <-- */) -> Unit,
-    onShare: (copyToClipboard: Boolean, /* SY --> */useExtraPage: Boolean/* SY <-- */) -> Unit,
-    onSave: (/* SY --> */useExtraPage: Boolean/* SY <-- */) -> Unit,
-    // SY -->
+    onSetAsCover: (useExtraPage: Boolean) -> Unit,
+    onShare: (copyToClipboard: Boolean, useExtraPage: Boolean) -> Unit,
+    onSave: (useExtraPage: Boolean) -> Unit,
     onShareCombined: (copyToClipboard: Boolean) -> Unit,
     onSaveCombined: () -> Unit,
     hasExtraPage: Boolean,
-    // SY <--
+
+    bookmarked: Boolean,
+    onToggleBookmarked: () -> Unit,
+    isAutoScroll: Boolean,
+    onToggleAutoscroll: (Boolean) -> Unit,
+    onClickRetryAll: () -> Unit,
+    onClickBoostPage: () -> Unit,
+    autoScrollFrequency: String,
+    onSetAutoScrollFrequency: (String) -> Unit,
 ) {
     var showSetCoverDialog by remember { mutableStateOf(false) }
-    // SY -->
     var useExtraPage by remember { mutableStateOf(false) }
-    // SY <--
 
     AdaptiveSheet(onDismissRequest = onDismissRequest) {
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
@@ -53,13 +68,11 @@ fun ReaderPageActionsDialog(
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     title = stringResource(
-                        // SY -->
                         if (hasExtraPage) {
                             SYMR.strings.action_set_first_page_cover
                         } else {
                             MR.strings.set_as_cover
                         },
-                        // SY <--
                     ),
                     icon = Icons.Outlined.Photo,
                     onClick = { showSetCoverDialog = true },
@@ -67,57 +80,45 @@ fun ReaderPageActionsDialog(
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     title = stringResource(
-                        // SY -->
                         if (hasExtraPage) {
                             KMR.strings.action_copy_to_clipboard_first_page
                         } else {
                             MR.strings.action_copy_to_clipboard
                         },
-                        // SY <--
                     ),
                     icon = Icons.Outlined.ContentCopy,
                     onClick = {
-                        // SY -->
                         onShare(true, false)
-                        // SY <--
                         onDismissRequest()
                     },
                 )
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     title = stringResource(
-                        // SY -->
                         if (hasExtraPage) {
                             SYMR.strings.action_share_first_page
                         } else {
                             MR.strings.action_share
                         },
-                        // SY <--
                     ),
                     icon = Icons.Outlined.Share,
                     onClick = {
-                        // SY -->
                         onShare(false, false)
-                        // SY <--
                         onDismissRequest()
                     },
                 )
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     title = stringResource(
-                        // SY -->
                         if (hasExtraPage) {
                             SYMR.strings.action_save_first_page
                         } else {
                             MR.strings.action_save
                         },
-                        // SY <--
                     ),
                     icon = Icons.Outlined.Save,
                     onClick = {
-                        // SY -->
                         onSave(false)
-                        // SY <--
                         onDismissRequest()
                     },
                 )
@@ -194,17 +195,93 @@ fun ReaderPageActionsDialog(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+            ) {
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(
+                        if (bookmarked) {
+                            MR.strings.action_remove_bookmark
+                        } else {
+                            MR.strings.action_bookmark
+                        },
+                    ),
+                    icon = if (bookmarked) {
+                        Icons.Outlined.Bookmark
+                    } else {
+                        Icons.Outlined.BookmarkBorder
+                    },
+                    onClick = {
+                        onToggleBookmarked()
+                        onDismissRequest()
+                    },
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(SYMR.strings.eh_autoscroll),
+                    icon = if (isAutoScroll) {
+                        Icons.Outlined.Pause
+                    } else {
+                        Icons.Outlined.PlayArrow
+                    },
+                    onClick = {
+                        onToggleAutoscroll(!isAutoScroll)
+                        onDismissRequest()
+                    },
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(SYMR.strings.eh_retry_all),
+                    icon = Icons.Outlined.Refresh,
+                    onClick = {
+                        onClickRetryAll()
+                        onDismissRequest()
+                    },
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(SYMR.strings.eh_boost_page),
+                    icon = Icons.Outlined.Bolt,
+                    onClick = {
+                        onClickBoostPage()
+                        onDismissRequest()
+                    },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            var sliderValue by remember(autoScrollFrequency) {
+                mutableStateOf(autoScrollFrequency.toFloatOrNull() ?: 3.0f)
+            }
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = stringResource(SYMR.strings.eh_autoscroll) + ": ${String.format(java.util.Locale.US, "%.1f", sliderValue)}s",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Slider(
+                    value = sliderValue,
+                    valueRange = 0.5f..15.0f,
+                    steps = 28,
+                    onValueChange = {
+                        sliderValue = it
+                        onSetAutoScrollFrequency(String.format(java.util.Locale.US, "%.1f", it))
+                    },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         }
     }
 
     if (showSetCoverDialog) {
         SetCoverDialog(
             onConfirm = {
-                // SY -->
                 onSetAsCover(useExtraPage)
                 showSetCoverDialog = false
                 useExtraPage = false
-                // SY <--
             },
             onDismiss = { showSetCoverDialog = false },
         )

@@ -27,6 +27,8 @@ import eu.kanade.tachiyomi.network.JavaScriptEngine
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.AndroidSourceManager
 import eu.kanade.tachiyomi.util.system.isDebugBuildType
+import eu.kanade.translation.TranslationManager
+import eu.kanade.translation.data.TranslationProvider
 import exh.eh.EHentaiUpdateHelper
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import kotlinx.serialization.json.Json
@@ -180,6 +182,8 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { BackupRestoreStatus() }
         addSingletonFactory { SyncStatus() }
         addSingletonFactory { LibraryUpdateStatus() }
+        addSingletonFactory { TranslationProvider(app) }
+        addSingletonFactory { TranslationManager(app) }
         // KMK <--
 
         // AM (CONNECTIONS) -->

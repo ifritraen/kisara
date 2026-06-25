@@ -58,6 +58,8 @@ class ReaderPreferences(
     // KMK -->
     fun pagedDoubleTapZoomEnabled() = preferenceStore.getBoolean("pref_enable_double_tap_zoom_paged", true)
 
+    fun showTranslations() = preferenceStore.getBoolean("show_translations", true)
+
     fun webtoonPinchToZoomEnabled() = preferenceStore.getBoolean("pref_enable_pinch_to_zoom_webtoon", true)
     // KMK <--
 

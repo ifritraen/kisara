@@ -102,6 +102,10 @@ class UiPreferences(
     fun alwaysShowSubTabsBrowse() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_browse", true)
     fun subTabsBottomMargin() = preferenceStore.getInt("kisara_sub_tabs_bottom_margin", 0)
     fun showTopTabBar() = preferenceStore.getBoolean("kisara_show_top_tab_bar", false)
+    fun kisaraGlassColorType() = preferenceStore.getInt("kisara_glass_color_type", 0)
+    fun kisaraGlassColorMix() = preferenceStore.getInt("kisara_glass_color_mix", 0)
+    fun kisaraGlassCustomColor() = preferenceStore.getInt("kisara_glass_custom_color", 0xFFFFFFFF.toInt())
+    fun kisaraShowItemCountInTabs() = preferenceStore.getBoolean("kisara_show_item_count_in_tabs", false)
     // KMK <--
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)

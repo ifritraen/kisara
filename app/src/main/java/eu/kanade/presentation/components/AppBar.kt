@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
@@ -85,6 +86,7 @@ fun AppBar(
     onCancelActionMode: () -> Unit = {},
     actionModeActions: @Composable RowScope.() -> Unit = {},
 
+    windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     val isActionMode by remember(actionModeCounter) {
@@ -112,6 +114,7 @@ fun AppBar(
         },
         isActionMode = isActionMode,
         onCancelActionMode = onCancelActionMode,
+        windowInsets = windowInsets,
         scrollBehavior = scrollBehavior,
     )
 }
@@ -136,6 +139,7 @@ fun AppBar(
     goHome: (() -> Boolean?)? = null,
     // KMK <--
 
+    windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     Column(
@@ -176,6 +180,7 @@ fun AppBar(
                     elevation = if (isActionMode) 3.dp else 0.dp,
                 ),
             ),
+            windowInsets = windowInsets,
             scrollBehavior = scrollBehavior,
         )
     }

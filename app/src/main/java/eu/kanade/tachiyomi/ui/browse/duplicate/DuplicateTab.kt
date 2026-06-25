@@ -30,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -94,6 +95,7 @@ import tachiyomi.domain.track.model.Track
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.PullRefresh
+import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.util.collectAsState
@@ -118,6 +120,7 @@ data class DuplicateScreenState(
 )
 
 class DuplicateScreenModel(
+    val targetMangaId: Long? = null,
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getCategories: GetCategories = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
@@ -211,6 +214,11 @@ class DuplicateScreenModel(
                         main = group.first(),
                         duplicates = group.drop(1),
                     )
+                }
+                .filter { group ->
+                    targetMangaId == null ||
+                        group.main.manga.id == targetMangaId ||
+                        group.duplicates.any { it.manga.id == targetMangaId }
                 }
                 .take(limit)
 
@@ -698,6 +706,101 @@ fun DuplicateGroupItem(
                     )
                 }
             }
+        }
+    }
+}
+
+class DuplicateMangaScreen(val mangaId: Long) : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        val screenModel = rememberScreenModel { DuplicateScreenModel(targetMangaId = mangaId) }
+        val state by screenModel.state.collectAsState()
+        var showWarningDialog by remember { mutableStateOf(false) }
+
+        if (showWarningDialog) {
+            val groups = state.groups
+            val selectedIds = state.selectedIds
+
+            var keepCount = 0
+            var deleteCount = 0
+            var skipCount = 0
+
+            groups.forEach { group ->
+                if (group.isResolved) return@forEach
+                if (group.isSkipped) {
+                    skipCount += 1 + group.duplicates.size
+                    return@forEach
+                }
+                val groupItems = listOf(group.main) + group.duplicates
+                val selectedInGroup = groupItems.filter { it.manga.id in selectedIds }
+                if (selectedInGroup.isNotEmpty()) {
+                    keepCount += selectedInGroup.size
+                    deleteCount += (groupItems.size - selectedInGroup.size)
+                } else {
+                    skipCount += groupItems.size
+                }
+            }
+
+            AlertDialog(
+                onDismissRequest = { showWarningDialog = false },
+                title = { Text(text = "Confirm Resolution") },
+                text = {
+                    Text(
+                        text = "Are you sure you want to resolve duplicates?\n\n" +
+                            "Keeping: $keepCount manga(s)\n" +
+                            "Deleting: $deleteCount manga(s)\n" +
+                            "Skipping: $skipCount manga(s)",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showWarningDialog = false
+                            screenModel.processResolvedGroups()
+                        },
+                    ) {
+                        Text(text = "Yes")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showWarningDialog = false },
+                    ) {
+                        Text(text = "No")
+                    }
+                },
+            )
+        }
+
+        Scaffold(
+            topBar = { scrollBehavior ->
+                AppBar(
+                    title = stringResource(KMR.strings.label_duplicate),
+                    navigateUp = navigator::pop,
+                    actions = {
+                        IconButton(onClick = { showWarningDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Done",
+                            )
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
+                )
+            },
+        ) { contentPadding ->
+            DuplicateScreen(
+                state = state,
+                onEntryClick = screenModel::toggleSelection,
+                onEntryLongClick = { navigator.push(MangaScreen(it)) },
+                onCategoryClick = screenModel::showChangeCategory,
+                onSkipGroup = screenModel::skipGroup,
+                onConfirmCategory = screenModel::changeMangaCategories,
+                onDismissCategory = screenModel::closeChangeCategory,
+                onRefresh = screenModel::refreshDuplicates,
+                contentPadding = contentPadding,
+            )
         }
     }
 }

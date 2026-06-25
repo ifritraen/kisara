@@ -32,24 +32,36 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import exh.pref.DelegateSourcePreferences
 import exh.source.ExhPreferences
+import kotlinx.coroutines.launch
 import tachiyomi.core.common.Constants
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
@@ -94,13 +106,42 @@ fun MoreScreen(
     val delegateSourcePreferences = remember { Injekt.get<DelegateSourcePreferences>() }
     // SY <--
 
-    Scaffold { contentPadding ->
-        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val scope = rememberCoroutineScope()
+    var bottomBarVisible by remember { mutableStateOf(true) }
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta < -10f) {
+                    if (bottomBarVisible) {
+                        bottomBarVisible = false
+                        scope.launch { HomeScreen.showBottomNav(false) }
+                    }
+                } else if (delta > 10f) {
+                    if (!bottomBarVisible) {
+                        bottomBarVisible = true
+                        scope.launch { HomeScreen.showBottomNav(true) }
+                    }
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
+    val hazeState = LocalHazeState.current
+
+    Scaffold(
+        modifier = Modifier
+            .nestedScroll(nestedScrollConnection)
+            .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
+    ) { contentPadding ->
         val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
         val adjustedContentPadding = if (floatingBottomBar) {
             PaddingValues(
                 top = contentPadding.calculateTopPadding(),
-                bottom = contentPadding.calculateBottomPadding() + 80.dp,
+                bottom = contentPadding.calculateBottomPadding() + 72.dp,
                 start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
                 end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
             )

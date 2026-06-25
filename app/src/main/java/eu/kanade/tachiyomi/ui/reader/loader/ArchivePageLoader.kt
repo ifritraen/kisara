@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
+import eu.kanade.translation.model.PageTranslation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,10 @@ import java.io.File
 /**
  * Loader used to load a chapter from an archive file.
  */
-internal class ArchivePageLoader(private val reader: ArchiveReader) : PageLoader() {
+internal class ArchivePageLoader(
+    private val reader: ArchiveReader,
+    private val translations: Map<String, PageTranslation> = emptyMap(),
+) : PageLoader() {
     // SY -->
     private val mutex = Mutex()
     private val context: Application by injectLazy()
@@ -62,7 +66,17 @@ internal class ArchivePageLoader(private val reader: ArchiveReader) : PageLoader
     override suspend fun getPages(): List<ReaderPage> = reader.useEntries { entries ->
         // SY -->
         if (readerPreferences.archiveReaderMode().get() == ReaderPreferences.ArchiveReaderMode.CACHE_TO_DISK) {
-            return DirectoryPageLoader(UniFile.fromFile(tmpDir)!!).getPages()
+            val pages = DirectoryPageLoader(UniFile.fromFile(tmpDir)!!).getPages()
+            val list = entries
+                .filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
+                .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
+                .toList()
+            pages.forEachIndexed { i, page ->
+                list.getOrNull(i)?.name?.let { entryName ->
+                    page.translation = translations[entryName]
+                }
+            }
+            return pages
         }
         // SY <--
         entries
@@ -91,6 +105,9 @@ internal class ArchivePageLoader(private val reader: ArchiveReader) : PageLoader
                     stream = { imageBytes?.copyOf()?.inputStream() ?: reader.getInputStream(entry.name)!! }
                     // SY <--
                     status = Page.State.Ready
+                    // KMK -->
+                    translation = translations[entry.name]
+                    // KMK <--
                 }
             }
             .toList()

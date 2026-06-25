@@ -20,6 +20,7 @@ import eu.kanade.presentation.browse.SourceOptionsDialog
 import eu.kanade.presentation.browse.SourcesScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreen.SmartSearchConfig
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
@@ -29,6 +30,7 @@ import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import exh.ui.smartsearch.SmartSearchScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
@@ -42,6 +44,27 @@ fun Screen.sourcesTab(
     val navigator = LocalNavigator.currentOrThrow
     val screenModel = rememberScreenModel { SourcesScreenModel(smartSearchConfig = smartSearchConfig) }
     val state by screenModel.state.collectAsState()
+
+    LaunchedEffect(Unit) {
+        launch {
+            BrowseTab.sourcesGlobalSearchEvent.receiveAsFlow().collectLatest {
+                navigator.push(GlobalSearchScreen(smartSearchConfig?.origTitle ?: ""))
+            }
+        }
+        launch {
+            BrowseTab.sourcesNsfwToggleEvent.receiveAsFlow().collectLatest {
+                screenModel.toggleNsfwOnly()
+            }
+        }
+        launch {
+            BrowseTab.sourcesFilterEvent.receiveAsFlow().collectLatest {
+                navigator.push(SourcesFilterScreen())
+            }
+        }
+    }
+    LaunchedEffect(state.nsfwOnly) {
+        BrowseTab.sourcesNsfwOnly = state.nsfwOnly
+    }
 
     return TabContent(
         // SY -->

@@ -114,6 +114,7 @@ internal object ExtensionLoader {
 
     fun uninstallPrivateExtension(context: Context, pkgName: String) {
         File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").delete()
+        LocalApkExtensionSupport.deleteSideloadedApk(context, pkgName)
     }
 
     /**
@@ -135,7 +136,7 @@ internal object ExtensionLoader {
             .filter { isPackageAnExtension(it) }
             .map { ExtensionInfo(packageInfo = it, isShared = true) }
 
-        val privateExtPkgs = getPrivateExtensionDir(context)
+        val legacyPrivateExtPkgs = getPrivateExtensionDir(context)
             .listFiles()
             ?.asSequence()
             ?.filter { it.isFile && it.extension == PRIVATE_EXTENSION_EXTENSION }
@@ -152,6 +153,18 @@ internal object ExtensionLoader {
             ?.filter { isPackageAnExtension(it) }
             ?.map { ExtensionInfo(packageInfo = it, isShared = false) }
             ?: emptySequence()
+
+        val sideloadedExtPkgs = LocalApkExtensionSupport.getLocalApkFiles(context)
+            .asSequence()
+            .mapNotNull {
+                val path = it.absolutePath
+                pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)
+                    ?.apply { applicationInfo!!.fixBasePaths(path) }
+            }
+            .filter { isPackageAnExtension(it) }
+            .map { ExtensionInfo(packageInfo = it, isShared = false) }
+
+        val privateExtPkgs = legacyPrivateExtPkgs + sideloadedExtPkgs
 
         val extPkgs = (sharedExtPkgs + privateExtPkgs)
             // Remove duplicates. Shared takes priority than private by default
@@ -216,7 +229,20 @@ internal object ExtensionLoader {
                     )
                 }
         } else {
-            null
+            val sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
+            if (sideloadedFile.isFile) {
+                context.packageManager.getPackageArchiveInfo(sideloadedFile.absolutePath, PACKAGE_FLAGS)
+                    ?.takeIf { isPackageAnExtension(it) }
+                    ?.let {
+                        it.applicationInfo!!.fixBasePaths(sideloadedFile.absolutePath)
+                        ExtensionInfo(
+                            packageInfo = it,
+                            isShared = false,
+                        )
+                    }
+            } else {
+                null
+            }
         }
 
         val sharedPkg = try {
@@ -305,8 +331,14 @@ internal object ExtensionLoader {
             return LoadResult.Error
         }
 
+        val isSideloaded = LocalApkExtensionSupport.getLocalApkFiles(context).any { it.nameWithoutExtension == pkgName }
+        val loadPath = if (isSideloaded) {
+            LocalApkExtensionSupport.prepareLoadableApkPath(context, pkgName, appInfo.sourceDir)
+        } else {
+            appInfo.sourceDir
+        }
         val classLoader = try {
-            ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
+            ChildFirstPathClassLoader(loadPath, null, context.classLoader)
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Extension load error: $extName ($pkgName)" }
             return LoadResult.Error

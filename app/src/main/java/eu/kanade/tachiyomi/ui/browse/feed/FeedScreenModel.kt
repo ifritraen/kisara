@@ -84,12 +84,13 @@ open class FeedScreenModel(
             .distinctUntilChanged()
             .onEach {
                 sourceManager.isInitialized.first { it }
+                val cache = getCache()
                 val items = getSourcesToGetFeed(it).map { (feed, savedSearch) ->
                     createCatalogueSearchItem(
                         feed = feed,
                         savedSearch = savedSearch,
                         source = sourceManager.get(feed.source) as? CatalogueSource,
-                        results = null,
+                        results = cache?.get(feed.id),
                     )
                 }
                 mutableState.update { state ->
@@ -108,6 +109,26 @@ open class FeedScreenModel(
 
     fun init() {
         pushed = false
+        screenModelScope.launchIO {
+            val cache = getCache()
+            val newItems = state.value.items?.map { itemUI ->
+                itemUI.copy(results = itemUI.results ?: cache?.get(itemUI.feed.id))
+            } ?: return@launchIO
+            mutableState.update { state ->
+                state.copy(
+                    items = newItems
+                        // KMK -->
+                        .toImmutableList(),
+                    // KMK <--
+                )
+            }
+            getFeed(newItems)
+        }
+    }
+
+    fun refresh() {
+        pushed = false
+        clearCache()
         screenModelScope.launchIO {
             val newItems = state.value.items?.map { it.copy(results = null) } ?: return@launchIO
             mutableState.update { state ->
@@ -272,6 +293,8 @@ open class FeedScreenModel(
         screenModelScope.launch {
             feedSavedSearch.map { itemUI ->
                 async {
+                    if (itemUI.results != null) return@async
+
                     val page = try {
                         if (itemUI.source != null) {
                             withContext(coroutineDispatcher) {
@@ -300,17 +323,19 @@ open class FeedScreenModel(
                         emptyList()
                     }
 
-                    val result = withIOContext {
-                        itemUI.copy(
-                            results = page
-                                .map { it.toDomainManga(itemUI.source!!.id) }
-                                .distinctBy { it.url }
-                                .let { networkToLocalManga(it) }
-                                // KMK -->
-                                .filter { !hideInLibraryFeedItems.get() || !it.favorite },
-                            // KMK <--
-                        )
+                    val mappedResults = withIOContext {
+                        page
+                            .map { it.toDomainManga(itemUI.source!!.id) }
+                            .distinctBy { it.url }
+                            .let { networkToLocalManga(it) }
+                            // KMK -->
+                            .filter { !hideInLibraryFeedItems.get() || !it.favorite }
+                        // KMK <--
                     }
+
+                    putCache(itemUI.feed.id, mappedResults)
+
+                    val result = itemUI.copy(results = mappedResults)
 
                     mutableState.update { state ->
                         state.copy(
@@ -355,6 +380,25 @@ open class FeedScreenModel(
     }
 
     // KMK -->
+    fun refreshFeed(feedId: Long) {
+        synchronized(Companion) {
+            val currentCache = cachedResults ?: emptyMap()
+            cachedResults = currentCache - feedId
+        }
+        screenModelScope.launchIO {
+            val currentItems = state.value.items ?: return@launchIO
+            val newItems = currentItems.map {
+                if (it.feed.id == feedId) it.copy(results = null) else it
+            }
+            mutableState.update { state ->
+                state.copy(
+                    items = newItems.toImmutableList(),
+                )
+            }
+            getFeed(newItems)
+        }
+    }
+
     fun showDialog(dialog: Dialog) {
         if (!state.value.isLoading) {
             mutableState.update {
@@ -383,6 +427,29 @@ open class FeedScreenModel(
     sealed class Event {
         data object FailedFetchingSources : Event()
         data object TooManyFeeds : Event()
+    }
+    companion object {
+        @Volatile
+        private var cachedResults: Map<Long, List<DomainManga>>? = null
+
+        fun clearCache() {
+            synchronized(this) {
+                cachedResults = null
+            }
+        }
+
+        private fun getCache(): Map<Long, List<DomainManga>>? {
+            synchronized(this) {
+                return cachedResults
+            }
+        }
+
+        private fun putCache(feedId: Long, results: List<DomainManga>) {
+            synchronized(this) {
+                val currentCache = cachedResults ?: emptyMap()
+                cachedResults = currentCache + (feedId to results)
+            }
+        }
     }
 }
 

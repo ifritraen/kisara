@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,6 +58,7 @@ import tachiyomi.presentation.core.icons.FlagEmoji
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.theme.header
+import tachiyomi.presentation.core.util.plus
 import tachiyomi.presentation.core.util.secondaryItemAlpha
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -126,8 +129,12 @@ private fun MigrateSourceList(
         onChangeSearchQuery("")
     }
 
+    val topPadding = contentPadding.calculateTopPadding()
+    val startPadding = contentPadding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current)
+    val endPadding = contentPadding.calculateEndPadding(androidx.compose.ui.platform.LocalLayoutDirection.current)
+
     Column(
-        modifier = Modifier.padding(contentPadding),
+        modifier = Modifier.padding(top = topPadding, start = startPadding, end = endPadding),
     ) {
         // KMK <--
         Row(
@@ -185,7 +192,7 @@ private fun MigrateSourceList(
 
             FastScrollLazyColumn(
                 state = lazyListState,
-                contentPadding = PaddingValues(top = searchBoxHeight),
+                contentPadding = PaddingValues(top = searchBoxHeight) + PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                 // KMK <--
             ) {
                 items(

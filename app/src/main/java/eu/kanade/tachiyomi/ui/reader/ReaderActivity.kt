@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +62,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.google.android.material.transition.platform.MaterialContainerTransform
 import com.hippo.unifile.UniFile
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import eu.kanade.core.util.ifSourcesLoaded
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.connections.service.ConnectionsPreferences
@@ -334,14 +337,14 @@ class ReaderActivity : BaseActivity() {
                 )
             }
 
-            val hazeState = remember { dev.chrisbanes.haze.HazeState() }
+            val hazeState = remember { HazeState() }
             CompositionLocalProvider(
                 eu.kanade.presentation.components.LocalHazeState provides hazeState,
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .dev.chrisbanes.haze.hazeSource(state = hazeState),
+                        .hazeSource(state = hazeState),
                 ) {
                     if (!state.menuVisible && showPageNumber) {
                         ReaderPageIndicator(

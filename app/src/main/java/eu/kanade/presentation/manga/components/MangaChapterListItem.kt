@@ -61,11 +61,18 @@ fun MangaChapterListItem(
     downloadIndicatorEnabled: Boolean,
     downloadStateProvider: () -> Download.State,
     downloadProgressProvider: () -> Int,
+    // KMK -->
+    translationStateProvider: () -> eu.kanade.translation.model.Translation.State = { eu.kanade.translation.model.Translation.State.NOT_TRANSLATED },
+    // KMK <--
     chapterSwipeStartAction: LibraryPreferences.ChapterSwipeAction,
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
+    onDoubleClick: (() -> Unit)? = null,
     onDownloadClick: ((ChapterDownloadAction) -> Unit)?,
+    // KMK -->
+    onTranslationClick: ((ChapterTranslationAction) -> Unit)? = null,
+    // KMK <--
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -107,6 +114,7 @@ fun MangaChapterListItem(
                 .selectedBackground(selected)
                 .combinedClickable(
                     onClick = onClick,
+                    onDoubleClick = onDoubleClick,
                     onLongClick = onLongClick,
                 )
                 .padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
@@ -199,6 +207,16 @@ fun MangaChapterListItem(
                 }
             }
 
+            // KMK -->
+            if (downloadStateProvider() == Download.State.DOWNLOADED) {
+                ChapterTranslationIndicator(
+                    enabled = true,
+                    modifier = Modifier.padding(start = 4.dp),
+                    translationStateProvider = translationStateProvider,
+                    onClick = { onTranslationClick?.invoke(it) },
+                )
+            }
+            // KMK <--
             ChapterDownloadIndicator(
                 enabled = downloadIndicatorEnabled,
                 modifier = Modifier.padding(start = 4.dp),

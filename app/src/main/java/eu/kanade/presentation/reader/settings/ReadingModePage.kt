@@ -30,6 +30,13 @@ internal fun ReadingModePage(screenModel: ReaderSettingsScreenModel) {
     HeadingItem(MR.strings.pref_category_for_this_series)
     val manga by screenModel.mangaFlow.collectAsState()
 
+    // KMK -->
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_show_translations),
+        pref = screenModel.preferences.showTranslations(),
+    )
+    // KMK <--
+
     val readingMode = remember(manga) { ReadingMode.fromPreference(manga?.readingMode?.toInt()) }
     SettingsChipRow(MR.strings.pref_category_reading_mode) {
         ReadingMode.entries.map {
