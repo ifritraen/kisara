@@ -18,8 +18,7 @@ object LocalApkExtensionSupport {
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else 0)
 
     fun getSideloadDir(context: Context): File {
-        val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
-        return File(baseDir, SIDELOAD_DIR).apply { mkdirs() }
+        return File(context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
     }
 
     fun getLocalApkFiles(context: Context): List<File> {
@@ -118,31 +117,41 @@ object LocalApkExtensionSupport {
         packageName: String,
     ): Boolean {
         val root = getSideloadDir(context)
-        val apkFile = File(root, "$packageName.apk")
         val cacheRoot = File(context.codeCacheDir, LOAD_CACHE_DIR)
-        val cacheFile = File(cacheRoot, "$packageName.apk")
 
-        var deleted = false
-        if (apkFile.exists()) {
-            apkFile.setWritable(true)
-            val del = apkFile.delete()
-            if (!del && apkFile.exists()) {
-                try {
-                    apkFile.writeBytes(ByteArray(0))
-                } catch (_: Exception) {}
+        fun deleteFromDir(dir: File): Boolean {
+            var deleted = false
+            val files = dir.listFiles()?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) } ?: return false
+            for (file in files) {
+                val name = file.nameWithoutExtension
+                val matchesName = name == packageName || name.startsWith("$packageName-") || name.startsWith("${packageName}_")
+                val matchesPackage = matchesName || try {
+                    val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong()))
+                    } else {
+                        context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_META_DATA)
+                    }
+                    info?.packageName == packageName
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (matchesPackage) {
+                    file.setWritable(true)
+                    val del = file.delete()
+                    if (!del && file.exists()) {
+                        try {
+                            file.writeBytes(ByteArray(0))
+                        } catch (_: Exception) {}
+                    }
+                    deleted = true
+                }
             }
-            deleted = del || deleted
+            return deleted
         }
-        if (cacheFile.exists()) {
-            cacheFile.setWritable(true)
-            val del = cacheFile.delete()
-            if (!del && cacheFile.exists()) {
-                try {
-                    cacheFile.writeBytes(ByteArray(0))
-                } catch (_: Exception) {}
-            }
-            deleted = del || deleted
-        }
-        return deleted
+
+        val d1 = deleteFromDir(root)
+        val d2 = deleteFromDir(cacheRoot)
+        return d1 || d2
     }
 }
