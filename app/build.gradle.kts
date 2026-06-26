@@ -306,6 +306,8 @@ dependencies {
     implementation(libs.mlkit.text.recognition.chinese)
     implementation(libs.mlkit.text.translate)
     implementation(libs.google.generativeai)
+    // KMK: optional ONNX pipeline (MangaOCR + Bubble Detector)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
     // KMK <--
 
     // Logging

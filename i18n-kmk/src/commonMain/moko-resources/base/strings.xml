@@ -312,6 +312,17 @@
     <string name="pref_engine_model">LLM Model</string>
     <string name="pref_engine_temperature">LLM Temperature</string>
     <string name="pref_engine_max_output">LLM Max Output Token Count</string>
+    <string name="pref_group_ocr">OCR Engine (Experimental)</string>
+    <string name="pref_ocr_engine">OCR Engine</string>
+    <string name="pref_ocr_engine_mlkit">ML Kit (Built-in, No Download)</string>
+    <string name="pref_ocr_engine_mangaocr">MangaOCR ONNX (Better for Manga, ~100MB)</string>
+    <string name="pref_bubble_detection">Bubble Detection (ONNX)</string>
+    <string name="pref_bubble_detection_summary">Detects speech bubble regions before OCR for more accurate text extraction. Requires ~10MB download.</string>
+    <string name="pref_download_ocr_model">Download MangaOCR Models</string>
+    <string name="pref_download_bubble_model">Download Bubble Detector Model</string>
+    <string name="translation_model_download_started">Downloading model… check back in a moment</string>
+    <string name="translation_model_ready">Model ready ✓</string>
+
     <string name="ext_sideload">Sideload</string>
     <string name="ext_sideloaded">Sideloaded</string>
     <string name="ext_sideload_success">Successfully sideloaded %1$s</string>

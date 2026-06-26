@@ -85,19 +85,29 @@ class PagerTranslationsView :
     @Composable
     fun TextBlockBackground(zoomScale: Float) {
         translation.blocks.forEach { block ->
-            val padX = block.symWidth / 2
-            val padY = block.symHeight / 2
-            val bgX = ((block.x - padX / 2) * 1) * zoomScale
-            val bgY = ((block.y - padY / 2) * 1) * zoomScale
-            val bgWidth = (block.width + padX) * zoomScale
-            val bgHeight = (block.height + padY) * zoomScale
-            val isVertical = block.angle > 85
+            val isVertical = block.angle > 85f || (block.height > block.width * 1.3f)
+            val padX = block.symWidth * 2
+            val padY = block.symHeight
+            val centroidX = block.x + block.width / 2f
+            val centroidY = block.y + block.height / 2f
+            val rawWidth = if (isVertical) {
+                maxOf(block.width + padX, (block.height + padY) * 0.65f)
+            } else {
+                block.width + padX
+            }
+            val rawHeight = if (isVertical) {
+                val area = (block.width + padX) * (block.height + padY)
+                maxOf(area / rawWidth, (block.height + padY) * 0.3f)
+            } else {
+                block.height + padY
+            }
+            val bgX = maxOf(centroidX * zoomScale - rawWidth * zoomScale / 2f, 0f)
+            val bgY = maxOf(centroidY * zoomScale - rawHeight * zoomScale / 2f, 0f)
             Box(
                 modifier = Modifier
                     .wrapContentSize(Alignment.CenterStart, true)
                     .offset(bgX.pxToDp(), bgY.pxToDp())
-                    .requiredSize(bgWidth.pxToDp(), bgHeight.pxToDp())
-                    .rotate(if (isVertical) 0f else block.angle)
+                    .requiredSize((rawWidth * zoomScale).pxToDp(), (rawHeight * zoomScale).pxToDp())
                     .background(Color.White, shape = RoundedCornerShape(4.dp)),
             )
         }

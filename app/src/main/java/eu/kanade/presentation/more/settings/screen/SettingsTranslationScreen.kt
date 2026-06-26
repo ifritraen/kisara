@@ -4,13 +4,17 @@ package eu.kanade.presentation.more.settings.screen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.recognizer.BubbleDetector
+import eu.kanade.translation.recognizer.MangaOcrTextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.launch
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -38,6 +42,7 @@ object SettingsTranslationScreen : SearchableSettings {
             ),
             getTranslationLangGroup(translationPreferences),
             getTranslatioEngineGroup(translationPreferences),
+            getOcrGroup(translationPreferences),
             getTranslatioAdvancedGroup(translationPreferences),
         )
     }
@@ -105,6 +110,50 @@ object SettingsTranslationScreen : SearchableSettings {
                 Preference.PreferenceItem.EditTextPreference(
                     preference = translationPreferences.translationEngineMaxOutputTokens(),
                     title = stringResource(KMR.strings.pref_engine_max_output),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getOcrGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        val scope = rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.pref_group_ocr),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = translationPreferences.ocrEngine(),
+                    title = stringResource(KMR.strings.pref_ocr_engine),
+                    entries = mapOf(
+                        0 to stringResource(KMR.strings.pref_ocr_engine_mlkit),
+                        1 to stringResource(KMR.strings.pref_ocr_engine_mangaocr),
+                    ).toImmutableMap(),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = translationPreferences.bubbleDetectionEnabled(),
+                    title = stringResource(KMR.strings.pref_bubble_detection),
+                    subtitle = stringResource(KMR.strings.pref_bubble_detection_summary),
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_download_ocr_model),
+                    onClick = {
+                        scope.launch {
+                            val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
+                            val recognizer = MangaOcrTextRecognizer(context, fromLang)
+                            recognizer.ensureModels()
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_download_bubble_model),
+                    onClick = {
+                        scope.launch {
+                            BubbleDetector(context).downloadModel()
+                        }
+                    },
                 ),
             ),
         )

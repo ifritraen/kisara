@@ -1,6 +1,7 @@
 package eu.kanade.translation
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.hippo.unifile.UniFile
@@ -12,6 +13,8 @@ import eu.kanade.translation.data.TranslationProvider
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.Translation
 import eu.kanade.translation.model.TranslationBlock
+import eu.kanade.translation.recognizer.BubbleDetector
+import eu.kanade.translation.recognizer.MangaOcrTextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import eu.kanade.translation.translator.TextTranslator
@@ -76,6 +79,11 @@ class ChapterTranslator(
 
     private var textRecognizer: TextRecognizer
     private var textTranslator: TextTranslator
+
+    // KMK --> optional advanced OCR pipeline
+    private var mangaOcrRecognizer: MangaOcrTextRecognizer? = null
+    private var bubbleDetector: BubbleDetector? = null
+    // KMK <--
 
     init {
         val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
@@ -226,17 +234,86 @@ class ChapterTranslator(
             val streams = getChapterPages(chapterPath)
             // saving the stream to tmp file cuz i can't get the
             // BitmapFactory.decodeStream() to work with the stream from .cbz archive
-            withContext(Dispatchers.IO) {
-                for ((fileName, streamFn) in streams) {
-                    coroutineContext.ensureActive()
-                    streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
-                    val image = InputImage.fromFilePath(context, tmpFile.uri)
-                    val result = textRecognizer.recognize(image)
-                    val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
-                    val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
-                    if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
+            // KMK --> optional advanced pipeline: MangaOCR + BubbleDetector
+            val useMangaOcr = translationPreferences.ocrEngine().get() == 1
+            val useBubbleDetection = translationPreferences.bubbleDetectionEnabled().get()
+
+            if (useMangaOcr) {
+                val recognizer = mangaOcrRecognizer
+                    ?: MangaOcrTextRecognizer(context, translation.fromLang).also { mangaOcrRecognizer = it }
+                if (!recognizer.isReady) {
+                    // Models not downloaded yet — fall back to ML Kit silently
+                    withContext(Dispatchers.IO) {
+                        for ((fileName, streamFn) in streams) {
+                            coroutineContext.ensureActive()
+                            streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
+                            val image = InputImage.fromFilePath(context, tmpFile.uri)
+                            val result = textRecognizer.recognize(image)
+                            val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                            val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                            if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
+                        }
+                    }
+                } else {
+                    val detector = if (useBubbleDetection) {
+                        bubbleDetector ?: BubbleDetector(context).also { bubbleDetector = it }
+                    } else {
+                        null
+                    }
+
+                    withContext(Dispatchers.IO) {
+                        for ((fileName, streamFn) in streams) {
+                            coroutineContext.ensureActive()
+                            streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
+                            val fullBitmap = BitmapFactory.decodeFile(tmpFile.uri.path) ?: continue
+                            val regions = detector?.detect(fullBitmap)
+                                ?.map { it.rect }
+                                ?: listOf(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height))
+
+                            val pageTranslation = PageTranslation(imgWidth = fullBitmap.width.toFloat(), imgHeight = fullBitmap.height.toFloat())
+                            for (region in regions) {
+                                val crop = android.graphics.Bitmap.createBitmap(
+                                    fullBitmap,
+                                    region.left.coerceAtLeast(0),
+                                    region.top.coerceAtLeast(0),
+                                    region.width().coerceAtMost(fullBitmap.width - region.left),
+                                    region.height().coerceAtMost(fullBitmap.height - region.top),
+                                )
+                                val text = recognizer.engine.recognize(crop)
+                                if (text.isBlank()) continue
+                                pageTranslation.blocks.add(
+                                    TranslationBlock(
+                                        text = text,
+                                        width = region.width().toFloat(),
+                                        height = region.height().toFloat(),
+                                        x = region.left.toFloat(),
+                                        y = region.top.toFloat(),
+                                        symWidth = (region.width() / (text.length.coerceAtLeast(1))).toFloat(),
+                                        symHeight = (region.height() / (text.length.coerceAtLeast(1))).toFloat(),
+                                        angle = if (region.height() > region.width() * 1.3f) 90f else 0f,
+                                    ),
+                                )
+                            }
+                            if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
+                        }
+                    }
                 }
+            } else {
+                // KMK <--
+                withContext(Dispatchers.IO) {
+                    for ((fileName, streamFn) in streams) {
+                        coroutineContext.ensureActive()
+                        streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
+                        val image = InputImage.fromFilePath(context, tmpFile.uri)
+                        val result = textRecognizer.recognize(image)
+                        val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                        val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                        if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
+                    }
+                }
+                // KMK -->
             }
+            // KMK <--
             tmpFile.delete()
             withContext(Dispatchers.IO) {
                 // Translate the text in blocks , this mutates the original blocks
@@ -297,28 +374,49 @@ class ChapterTranslator(
         return translation
     }
 
+    // KMK -->
+    // DSU-based merge: builds full pairwise graph so multi-column Japanese vertical text
+    // (e.g. 3 columns each 20px wide) all gets grouped into one block, not just sequential pairs.
     private fun smartMergeBlocks(
         blocks: List<TranslationBlock>,
         widthThreshold: Int,
         xThreshold: Int,
         yThreshold: Int,
     ): MutableList<TranslationBlock> {
-        if (blocks.isEmpty()) return mutableListOf()
+        if (blocks.size < 2) return blocks.toMutableList()
 
-        val merged = mutableListOf<TranslationBlock>()
-        var current = blocks[0]
-        for (i in 1 until blocks.size) {
-            val next = blocks[i]
-            if (shouldMergeTextBlock(current, next, widthThreshold, xThreshold, yThreshold)) {
-                current = mergeTextBlock(current, next)
-            } else {
-                merged.add(current)
-                current = next
+        val parent = IntArray(blocks.size) { it }
+
+        fun find(x: Int): Int {
+            var c = x
+            while (parent[c] != c) {
+                parent[c] = parent[parent[c]]
+                c = parent[c]
+            }
+            return c
+        }
+        fun union(a: Int, b: Int) {
+            val ra = find(a)
+            val rb = find(b)
+            if (ra != rb) parent[rb] = ra
+        }
+
+        for (i in blocks.indices) {
+            for (j in i + 1 until blocks.size) {
+                if (shouldMergeTextBlock(blocks[i], blocks[j], widthThreshold, xThreshold, yThreshold)) {
+                    union(i, j)
+                }
             }
         }
-        merged.add(current)
-        return merged
+
+        val groups = linkedMapOf<Int, MutableList<TranslationBlock>>()
+        for (i in blocks.indices) groups.getOrPut(find(i)) { mutableListOf() }.add(blocks[i])
+
+        return groups.values.map { group ->
+            group.reduce { acc, b -> mergeTextBlock(acc, b) }
+        }.toMutableList()
     }
+    // KMK <--
 
     private fun shouldMergeTextBlock(
         a: TranslationBlock,

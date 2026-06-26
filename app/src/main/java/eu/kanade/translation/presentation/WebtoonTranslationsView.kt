@@ -88,18 +88,28 @@ class WebtoonTranslationsView :
     @Composable
     fun TextBlockBackground(scaleFactor: Float) {
         translation.blocks.forEach { block ->
-            val padX = block.symWidth / 2
-            val padY = block.symHeight / 2
-            val bgX = (block.x - padX / 2) * scaleFactor
-            val bgY = (block.y - padY / 2) * scaleFactor
-            val bgWidth = (block.width + padX) * scaleFactor
-            val bgHeight = (block.height + padY) * scaleFactor
-            val isVertical = block.angle > 85
+            val isVertical = block.angle > 85f || (block.height > block.width * 1.3f)
+            val padX = block.symWidth * 2
+            val padY = block.symHeight
+            val centroidX = block.x + block.width / 2f
+            val centroidY = block.y + block.height / 2f
+            val rawWidth = if (isVertical) {
+                maxOf(block.width + padX, (block.height + padY) * 0.65f)
+            } else {
+                block.width + padX
+            }
+            val rawHeight = if (isVertical) {
+                val area = (block.width + padX) * (block.height + padY)
+                maxOf(area / rawWidth, (block.height + padY) * 0.3f)
+            } else {
+                block.height + padY
+            }
+            val bgX = maxOf(centroidX * scaleFactor - rawWidth * scaleFactor / 2f, 0f)
+            val bgY = maxOf(centroidY * scaleFactor - rawHeight * scaleFactor / 2f, 0f)
             Box(
                 modifier = Modifier
                     .offset(bgX.pxToDp(), bgY.pxToDp())
-                    .size(bgWidth.pxToDp(), bgHeight.pxToDp())
-                    .rotate(if (isVertical) 0f else block.angle)
+                    .size((rawWidth * scaleFactor).pxToDp(), (rawHeight * scaleFactor).pxToDp())
                     .background(Color.White, shape = RoundedCornerShape(4.dp)),
             )
         }

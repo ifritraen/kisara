@@ -26,12 +26,10 @@ class PageTranslationHelper {
         }
 
         private fun mergeBlocks(r1: TranslationBlock, r2: TranslationBlock): TranslationBlock {
-            var height = maxOf(r1.height + r1.y, r2.height + r2.y)
-            var width = maxOf(r1.width + r1.x, r2.width + r2.x)
             val x = minOf(r1.x, r2.x)
             val y = minOf(r1.y, r2.y)
-            width = width - r1.x
-            height = height - r1.y
+            val width = maxOf(r1.x + r1.width, r2.x + r2.width) - x
+            val height = maxOf(r1.y + r1.height, r2.y + r2.height) - y
 
             return TranslationBlock(
                 text = "${r1.text}\n${r2.text}",
