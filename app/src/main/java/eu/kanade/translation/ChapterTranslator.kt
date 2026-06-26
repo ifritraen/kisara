@@ -67,6 +67,17 @@ class ChapterTranslator(
     private val _queueState = MutableStateFlow<List<Translation>>(emptyList())
     val queueState = _queueState.asStateFlow()
 
+    data class Progress(
+        val chapterId: Long,
+        val chapterName: String,
+        val currentPage: Int,
+        val totalPages: Int,
+        val step: String,
+    )
+
+    private val _progressState = MutableStateFlow<Progress?>(null)
+    val progressState = _progressState.asStateFlow()
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var translationJob: Job? = null
@@ -201,6 +212,17 @@ class ChapterTranslator(
 
     private suspend fun translateChapter(translation: Translation) {
         try {
+            translateChapterInternal(translation)
+        } catch (error: Throwable) {
+            translation.status = Translation.State.ERROR
+            logcat(LogPriority.ERROR, error)
+        } finally {
+            _progressState.value = null
+        }
+    }
+
+    private suspend fun translateChapterInternal(translation: Translation) {
+        try {
             // Check if recognizer reinitialization is needed
             if (translation.fromLang != textRecognizer.language) {
                 textRecognizer.close()
@@ -244,9 +266,23 @@ class ChapterTranslator(
                 if (!recognizer.isReady) {
                     // Models not downloaded yet — fall back to ML Kit silently
                     withContext(Dispatchers.IO) {
-                        for ((fileName, streamFn) in streams) {
+                        streams.forEachIndexed { index, (fileName, streamFn) ->
                             coroutineContext.ensureActive()
+                            _progressState.value = Progress(
+                                chapterId = translation.chapter.id,
+                                chapterName = translation.chapter.name,
+                                currentPage = index + 1,
+                                totalPages = streams.size,
+                                step = "Loading page (Fallback to ML Kit)...",
+                            )
                             streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
+                            _progressState.value = Progress(
+                                chapterId = translation.chapter.id,
+                                chapterName = translation.chapter.name,
+                                currentPage = index + 1,
+                                totalPages = streams.size,
+                                step = "Running MLKit OCR...",
+                            )
                             val image = InputImage.fromFilePath(context, tmpFile.uri)
                             val result = textRecognizer.recognize(image)
                             val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
@@ -262,16 +298,47 @@ class ChapterTranslator(
                     }
 
                     withContext(Dispatchers.IO) {
-                        for ((fileName, streamFn) in streams) {
+                        streams.forEachIndexed { index, (fileName, streamFn) ->
                             coroutineContext.ensureActive()
+                            _progressState.value = Progress(
+                                chapterId = translation.chapter.id,
+                                chapterName = translation.chapter.name,
+                                currentPage = index + 1,
+                                totalPages = streams.size,
+                                step = "Loading page...",
+                            )
                             streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
-                            val fullBitmap = BitmapFactory.decodeFile(tmpFile.uri.path) ?: continue
-                            val regions = detector?.detect(fullBitmap)
-                                ?.map { it.rect }
-                                ?: listOf(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height))
+                            val fullBitmap = tmpFile.openInputStream().use { BitmapFactory.decodeStream(it) } ?: return@forEachIndexed
+                            val regions = if (detector != null) {
+                                _progressState.value = Progress(
+                                    chapterId = translation.chapter.id,
+                                    chapterName = translation.chapter.name,
+                                    currentPage = index + 1,
+                                    totalPages = streams.size,
+                                    step = "Detecting speech bubbles...",
+                                )
+                                val detected = detector.detect(fullBitmap).map { it.rect }
+                                _progressState.value = Progress(
+                                    chapterId = translation.chapter.id,
+                                    chapterName = translation.chapter.name,
+                                    currentPage = index + 1,
+                                    totalPages = streams.size,
+                                    step = "Bubble detection done (${detected.size} found)",
+                                )
+                                detected
+                            } else {
+                                listOf(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height))
+                            }
 
                             val pageTranslation = PageTranslation(imgWidth = fullBitmap.width.toFloat(), imgHeight = fullBitmap.height.toFloat())
-                            for (region in regions) {
+                            for ((regionIndex, region) in regions.withIndex()) {
+                                _progressState.value = Progress(
+                                    chapterId = translation.chapter.id,
+                                    chapterName = translation.chapter.name,
+                                    currentPage = index + 1,
+                                    totalPages = streams.size,
+                                    step = "Recognizing text block ${regionIndex + 1}/${regions.size}...",
+                                )
                                 val crop = android.graphics.Bitmap.createBitmap(
                                     fullBitmap,
                                     region.left.coerceAtLeast(0),
@@ -299,11 +366,24 @@ class ChapterTranslator(
                     }
                 }
             } else {
-                // KMK <--
                 withContext(Dispatchers.IO) {
-                    for ((fileName, streamFn) in streams) {
+                    streams.forEachIndexed { index, (fileName, streamFn) ->
                         coroutineContext.ensureActive()
+                        _progressState.value = Progress(
+                            chapterId = translation.chapter.id,
+                            chapterName = translation.chapter.name,
+                            currentPage = index + 1,
+                            totalPages = streams.size,
+                            step = "Loading page...",
+                        )
                         streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
+                        _progressState.value = Progress(
+                            chapterId = translation.chapter.id,
+                            chapterName = translation.chapter.name,
+                            currentPage = index + 1,
+                            totalPages = streams.size,
+                            step = "Running MLKit OCR...",
+                        )
                         val image = InputImage.fromFilePath(context, tmpFile.uri)
                         val result = textRecognizer.recognize(image)
                         val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
@@ -311,10 +391,15 @@ class ChapterTranslator(
                         if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
                     }
                 }
-                // KMK -->
             }
-            // KMK <--
             tmpFile.delete()
+            _progressState.value = Progress(
+                chapterId = translation.chapter.id,
+                chapterName = translation.chapter.name,
+                currentPage = streams.size,
+                totalPages = streams.size,
+                step = "Translating text blocks...",
+            )
             withContext(Dispatchers.IO) {
                 // Translate the text in blocks , this mutates the original blocks
                 textTranslator.translate(pages)

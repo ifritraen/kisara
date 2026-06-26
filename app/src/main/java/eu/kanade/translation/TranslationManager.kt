@@ -38,6 +38,9 @@ class TranslationManager(
     val queueState
         get() = translator.queueState
 
+    val progressState
+        get() = translator.progressState
+
     fun translatorStart() = translator.start()
     fun translatorStop(reason: String? = null) = translator.stop(reason)
 
