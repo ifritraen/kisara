@@ -51,11 +51,16 @@ class BubbleDetector(private val context: Context) : AutoCloseable {
             return@withContext
         }
         onProgress("Downloading comic text detector…")
-        val url = "https://huggingface.co/skepsun/kototoro-models/resolve/main/comic_text_detector.onnx"
-        URL(url).openStream().use { input ->
-            modelFile.outputStream().use { output -> input.copyTo(output) }
+        val url = "https://huggingface.co/ogkalu/comic-text-and-bubble-detector/resolve/main/detector.onnx"
+        try {
+            URL(url).openStream().use { input ->
+                modelFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            onProgress("Done")
+        } catch (e: Exception) {
+            onProgress("Download failed: ${e.localizedMessage}")
+            throw e
         }
-        onProgress("Done")
     }
 
     // ──────────── Inference ────────────

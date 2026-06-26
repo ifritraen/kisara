@@ -48,20 +48,25 @@ class MangaOcrEngine(
 
     suspend fun downloadModels(onProgress: (String) -> Unit = {}) = withContext(Dispatchers.IO) {
         modelDir.mkdirs()
-        val base = "https://huggingface.co/kha-white/manga-ocr-base/resolve/main"
+        val base = "https://huggingface.co/l0wgear/manga-ocr-2025-onnx/resolve/main"
         val files = listOf(
             "encoder_model.onnx" to encoderFile,
             "decoder_model.onnx" to decoderFile,
             "tokenizer.json" to tokenizerFile,
         )
-        for ((name, dest) in files) {
-            if (dest.exists()) continue
-            onProgress("Downloading $name…")
-            URL("$base/$name").openStream().use { input ->
-                dest.outputStream().use { output -> input.copyTo(output) }
+        try {
+            for ((name, dest) in files) {
+                if (dest.exists()) continue
+                onProgress("Downloading $name…")
+                URL("$base/$name").openStream().use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                }
             }
+            onProgress("Done")
+        } catch (e: Exception) {
+            onProgress("Download failed: ${e.localizedMessage}")
+            throw e
         }
-        onProgress("Done")
     }
 
     // ──────────── Session Management ────────────
