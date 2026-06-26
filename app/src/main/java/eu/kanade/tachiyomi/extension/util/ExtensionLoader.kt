@@ -71,7 +71,7 @@ internal object ExtensionLoader {
     private fun getPrivateExtensionDir(context: Context) = File(context.filesDir, "exts")
 
     fun installPrivateExtensionFile(context: Context, file: File): Boolean {
-        val extension = context.packageManager.getPackageArchiveInfo(file.absolutePath, PACKAGE_FLAGS)
+        val extension = context.packageManager.getPackageArchiveInfoCompat(file.absolutePath, PACKAGE_FLAGS)
             ?.takeIf { isPackageAnExtension(it) } ?: return false
         val currentExtension = getExtensionPackageInfoFromPkgName(context, extension.packageName)
 
@@ -147,7 +147,7 @@ internal object ExtensionLoader {
                 }
 
                 val path = it.absolutePath
-                pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)
+                pkgManager.getPackageArchiveInfoCompat(path, PACKAGE_FLAGS)
                     ?.apply { applicationInfo!!.fixBasePaths(path) }
             }
             ?.filter { isPackageAnExtension(it) }
@@ -158,7 +158,7 @@ internal object ExtensionLoader {
             .asSequence()
             .mapNotNull {
                 val path = it.absolutePath
-                pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)
+                pkgManager.getPackageArchiveInfoCompat(path, PACKAGE_FLAGS)
                     ?.apply { applicationInfo!!.fixBasePaths(path) }
             }
             .filter { isPackageAnExtension(it) }
@@ -219,7 +219,7 @@ internal object ExtensionLoader {
     private fun getExtensionInfoFromPkgName(context: Context, pkgName: String): ExtensionInfo? {
         val privateExtensionFile = File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION")
         val privatePkg = if (privateExtensionFile.isFile) {
-            context.packageManager.getPackageArchiveInfo(privateExtensionFile.absolutePath, PACKAGE_FLAGS)
+            context.packageManager.getPackageArchiveInfoCompat(privateExtensionFile.absolutePath, PACKAGE_FLAGS)
                 ?.takeIf { isPackageAnExtension(it) }
                 ?.let {
                     it.applicationInfo!!.fixBasePaths(privateExtensionFile.absolutePath)
@@ -231,7 +231,7 @@ internal object ExtensionLoader {
         } else {
             val sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
             if (sideloadedFile.isFile) {
-                context.packageManager.getPackageArchiveInfo(sideloadedFile.absolutePath, PACKAGE_FLAGS)
+                context.packageManager.getPackageArchiveInfoCompat(sideloadedFile.absolutePath, PACKAGE_FLAGS)
                     ?.takeIf { isPackageAnExtension(it) }
                     ?.let {
                         it.applicationInfo!!.fixBasePaths(sideloadedFile.absolutePath)
@@ -246,15 +246,15 @@ internal object ExtensionLoader {
         }
 
         val sharedPkg = try {
-            context.packageManager.getPackageInfo(pkgName, PACKAGE_FLAGS)
-                .takeIf { isPackageAnExtension(it) }
+            context.packageManager.getPackageInfoCompat(pkgName, PACKAGE_FLAGS)
+                ?.takeIf { isPackageAnExtension(it) }
                 ?.let {
                     ExtensionInfo(
                         packageInfo = it,
                         isShared = true,
                     )
                 }
-        } catch (error: PackageManager.NameNotFoundException) {
+        } catch (error: Exception) {
             null
         }
 
@@ -376,6 +376,9 @@ internal object ExtensionLoader {
             else -> "all"
         }
 
+        val repo = repos.firstOrNull { repo ->
+            signatures.all { it == repo.signingKeyFingerprint }
+        }
         val extension = Extension.Installed(
             name = extName,
             pkgName = pkgName,
@@ -390,11 +393,10 @@ internal object ExtensionLoader {
             isShared = extensionInfo.isShared,
             // KMK -->
             signatureHash = signatures.last(),
-            repoName = repos.firstOrNull { repo ->
-                signatures.all { it == repo.signingKeyFingerprint }
-            }?.let { repo ->
-                repo.shortName.takeIf { !it.isNullOrBlank() } ?: repo.name
+            repoName = repo?.let {
+                it.shortName.takeIf { !it.isNullOrBlank() } ?: it.name
             },
+            repoUrl = repo?.baseUrl,
             // KMK <--
         )
         return LoadResult.Success(extension)
@@ -463,6 +465,30 @@ internal object ExtensionLoader {
         }
         if (publicSourceDir == null) {
             publicSourceDir = apkPath
+        }
+    }
+
+    private fun PackageManager.getPackageArchiveInfoCompat(archiveFilePath: String, flags: Int): PackageInfo? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                getPackageArchiveInfo(archiveFilePath, PackageManager.PackageInfoFlags.of(flags.toLong()))
+            } else {
+                getPackageArchiveInfo(archiveFilePath, flags)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun PackageManager.getPackageInfoCompat(packageName: String, flags: Int): PackageInfo? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(flags.toLong()))
+            } else {
+                getPackageInfo(packageName, flags)
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 

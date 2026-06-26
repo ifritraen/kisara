@@ -123,10 +123,24 @@ object LocalApkExtensionSupport {
 
         var deleted = false
         if (apkFile.exists()) {
-            deleted = apkFile.delete() || deleted
+            apkFile.setWritable(true)
+            val del = apkFile.delete()
+            if (!del && apkFile.exists()) {
+                try {
+                    apkFile.writeBytes(ByteArray(0))
+                } catch (_: Exception) {}
+            }
+            deleted = del || deleted
         }
         if (cacheFile.exists()) {
-            deleted = cacheFile.delete() || deleted
+            cacheFile.setWritable(true)
+            val del = cacheFile.delete()
+            if (!del && cacheFile.exists()) {
+                try {
+                    cacheFile.writeBytes(ByteArray(0))
+                } catch (_: Exception) {}
+            }
+            deleted = del || deleted
         }
         return deleted
     }
