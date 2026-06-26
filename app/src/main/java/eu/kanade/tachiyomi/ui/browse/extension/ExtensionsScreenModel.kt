@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +46,14 @@ class ExtensionsScreenModel(
 ) : StateScreenModel<ExtensionsScreenModel.State>(State()) {
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
+
+    private val _events = Channel<Event>(Channel.UNLIMITED)
+    val events = _events.receiveAsFlow()
+
+    sealed interface Event {
+        data class SideloadSuccess(val extensionName: String) : Event
+        data class SideloadError(val extensionName: String, val error: Throwable) : Event
+    }
 
     init {
         val context = Injekt.get<Application>()
@@ -204,7 +214,33 @@ class ExtensionsScreenModel(
 
     fun sideloadExtension(extension: Extension.Available) {
         screenModelScope.launchIO {
-            extensionManager.sideloadExtension(extension).collectToInstallUpdate(extension)
+            var success = false
+            var isError = false
+            try {
+                extensionManager.sideloadExtension(extension)
+                    .onEach { installStep ->
+                        addDownloadState(extension, installStep)
+                        if (installStep == InstallStep.Installed) {
+                            success = true
+                            extensionManager.registerSideloadedExtension(extension.pkgName)
+                        } else if (installStep == InstallStep.Error) {
+                            isError = true
+                        }
+                    }
+                    .takeWhile { installStep -> installStep != InstallStep.Installed && installStep != InstallStep.Error }
+                    .onCompletion {
+                        removeDownloadState(extension)
+                        if (success) {
+                            _events.trySend(Event.SideloadSuccess(extension.name))
+                        } else if (isError) {
+                            val err = extensionManager.getAndClearSideloadError(extension.pkgName) ?: Exception("Unknown error during sideloading")
+                            _events.trySend(Event.SideloadError(extension.name, err))
+                        }
+                    }
+                    .collect()
+            } catch (e: Exception) {
+                _events.trySend(Event.SideloadError(extension.name, e))
+            }
         }
     }
 

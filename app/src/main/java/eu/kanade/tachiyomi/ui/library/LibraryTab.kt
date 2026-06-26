@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -50,6 +51,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -293,6 +295,16 @@ data object LibraryTab : Tab {
         val alwaysShowSubTabsLibrary by uiPreferences.alwaysShowSubTabsLibrary().collectAsState()
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
         val kisaraShowItemCountInTabs by uiPreferences.kisaraShowItemCountInTabs().collectAsState()
+        val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
+
+        val categoryBarSelectedFontColorType by uiPreferences.categoryBarSelectedFontColorType().collectAsState()
+        val categoryBarSelectedFontCustomColor by uiPreferences.categoryBarSelectedFontCustomColor().collectAsState()
+
+        val categorySelectedLabelColor = when (categoryBarSelectedFontColorType) {
+            0 -> MaterialTheme.colorScheme.onSurface
+            1 -> MaterialTheme.colorScheme.primary
+            else -> Color(categoryBarSelectedFontCustomColor)
+        }
 
         var topBarVisible by remember { mutableStateOf(true) }
         var bottomBarVisible by remember { mutableStateOf(true) }
@@ -331,412 +343,476 @@ data object LibraryTab : Tab {
             }
         }
 
-        val hazeState = LocalHazeState.current
+        val localHazeState = remember { dev.chrisbanes.haze.HazeState() }
 
-        Box(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
-            val showSubcategoryTabs by libraryPreferences.subcategoryTabs().collectAsState()
-
+        CompositionLocalProvider(LocalHazeState provides localHazeState) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
+                modifier = Modifier.fillMaxSize(),
             ) {
-                Scaffold(
-                    modifier = Modifier.nestedScroll(nestedScrollConnection),
-                    topBar = { scrollBehavior ->
-                        if (state.searchQuery != null || state.selectionMode) {
-                            val title = state.getToolbarTitle(
-                                defaultTitle = stringResource(MR.strings.label_library),
-                                defaultCategoryTitle = stringResource(MR.strings.label_default),
-                                page = state.activeCategoryIndex,
-                            )
-                            LibraryToolbar(
-                                hasActiveFilters = state.hasActiveFilters,
-                                selectedCount = state.selection.size,
-                                title = title,
-                                onClickUnselectAll = screenModel::clearSelection,
-                                onClickSelectAll = screenModel::selectAll,
-                                onClickInvertSelection = screenModel::invertSelection,
-                                onClickFilter = screenModel::showSettingsDialog,
-                                onClickRefresh = { onClickRefresh(state.activeCategory) },
-                                onClickGlobalUpdate = { onClickRefresh(null) },
-                                onClickOpenRandomManga = {
-                                    scope.launch {
-                                        val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
-                                        if (randomItem != null) {
-                                            navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
-                                        } else {
-                                            snackbarHostState.showSnackbar(
-                                                context.stringResource(MR.strings.information_no_entries_found),
-                                            )
-                                        }
-                                    }
-                                },
-                                onClickSyncNow = {
-                                    if (!SyncDataJob.isRunning(context)) {
-                                        SyncDataJob.startNow(context, manual = true)
-                                    } else {
-                                        context.toast(SYMR.strings.sync_in_progress)
-                                    }
-                                },
-                                // SY -->
-                                onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
-                                isSyncEnabled = state.isSyncEnabled,
-                                // SY <--
-                                searchQuery = state.searchQuery,
-                                onSearchQueryChange = screenModel::search,
-                                onInvalidateDownloadCache = { context ->
-                                    Injekt.get<DownloadCache>().invalidateCache()
-                                    context.toast(MR.strings.download_cache_invalidated)
-                                },
-                                // For scroll overlay when no tab
-                                scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
-                            )
-                        }
-                    },
-                    bottomBar = {
-                        LibraryBottomActionMenu(
-                            visible = state.selectionMode,
-                            onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
-                            onMarkAsReadClicked = { screenModel.markReadSelection(true) },
-                            onMarkAsUnreadClicked = { screenModel.markReadSelection(false) },
-                            onDownloadClicked = screenModel::performDownloadAction
-                                .takeIf { state.selectedManga.fastAll { !it.isLocal() } },
-                            onDeleteClicked = screenModel::openDeleteMangaDialog,
-                            onMigrateClicked = {
-                                val selection = state
-                                    // KMK -->
-                                    .selectedManga
-                                    .filterNot { it.source == MERGED_SOURCE_ID }
-                                    .map { it.id }
-                                // KMK <--
-                                screenModel.clearSelection()
-                                // KMK -->
-                                if (selection.isEmpty()) {
-                                    context.toast(SYMR.strings.no_valid_entry)
-                                } else {
-                                    // KMK <--
-                                    navigator.push(MigrationConfigScreen(selection))
-                                }
-                            },
-                            // KMK -->
-                            onMergeClicked = {
-                                if (state.selection.size == 1) {
-                                    val manga = state.selectedManga.first()
-                                    // Invoke merging for this manga
-                                    screenModel.clearSelection()
-                                    val smartSearchConfig = SourcesScreen.SmartSearchConfig(manga.title, manga.id)
-                                    navigator.push(SourcesScreen(smartSearchConfig))
-                                } else if (state.selection.isNotEmpty()) {
-                                    // Invoke multiple merge
-                                    val selectedManga = state.selectedManga
-                                    screenModel.clearSelection()
-                                    scope.launchIO {
-                                        val mergingMangas = selectedManga.filterNot { it.source == MERGED_SOURCE_ID }
-                                        val mergedMangaId = screenModel.smartSearchMerge(selectedManga.toPersistentList())
-                                        snackbarHostState.showSnackbar(context.stringResource(SYMR.strings.entry_merged))
-                                        if (mergedMangaId != null) {
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = context.stringResource(KMR.strings.action_remove_merged),
-                                                actionLabel = context.stringResource(MR.strings.action_remove),
-                                                withDismissAction = true,
-                                            )
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                screenModel.removeMangas(
-                                                    mangas = mergingMangas,
-                                                    deleteFromLibrary = true,
-                                                    deleteChapters = false,
+                val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+                val showSubcategoryTabs by libraryPreferences.subcategoryTabs().collectAsState()
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (frostedGlass) Modifier.hazeSource(state = localHazeState) else Modifier),
+                ) {
+                    Scaffold(
+                        modifier = Modifier.nestedScroll(nestedScrollConnection),
+                        topBar = { scrollBehavior ->
+                            if (state.searchQuery != null || state.selectionMode) {
+                                val title = state.getToolbarTitle(
+                                    defaultTitle = stringResource(MR.strings.label_library),
+                                    defaultCategoryTitle = stringResource(MR.strings.label_default),
+                                    page = state.activeCategoryIndex,
+                                )
+                                LibraryToolbar(
+                                    hasActiveFilters = state.hasActiveFilters,
+                                    selectedCount = state.selection.size,
+                                    title = title,
+                                    onClickUnselectAll = screenModel::clearSelection,
+                                    onClickSelectAll = screenModel::selectAll,
+                                    onClickInvertSelection = screenModel::invertSelection,
+                                    onClickFilter = screenModel::showSettingsDialog,
+                                    onClickRefresh = { onClickRefresh(state.activeCategory) },
+                                    onClickGlobalUpdate = { onClickRefresh(null) },
+                                    onClickOpenRandomManga = {
+                                        scope.launch {
+                                            val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
+                                            if (randomItem != null) {
+                                                navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                                            } else {
+                                                snackbarHostState.showSnackbar(
+                                                    context.stringResource(MR.strings.information_no_entries_found),
                                                 )
                                             }
-                                            navigator.push(MangaScreen(mergedMangaId))
-                                        } else {
-                                            snackbarHostState.showSnackbar(context.stringResource(SYMR.strings.merged_references_invalid))
                                         }
-                                    }
-                                } else {
+                                    },
+                                    onClickSyncNow = {
+                                        if (!SyncDataJob.isRunning(context)) {
+                                            SyncDataJob.startNow(context, manual = true)
+                                        } else {
+                                            context.toast(SYMR.strings.sync_in_progress)
+                                        }
+                                    },
+                                    // SY -->
+                                    onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
+                                    isSyncEnabled = state.isSyncEnabled,
+                                    // SY <--
+                                    searchQuery = state.searchQuery,
+                                    onSearchQueryChange = screenModel::search,
+                                    onInvalidateDownloadCache = { context ->
+                                        Injekt.get<DownloadCache>().invalidateCache()
+                                        context.toast(MR.strings.download_cache_invalidated)
+                                    },
+                                    // For scroll overlay when no tab
+                                    scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
+                                )
+                            }
+                        },
+                        bottomBar = {
+                            LibraryBottomActionMenu(
+                                visible = state.selectionMode,
+                                onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
+                                onMarkAsReadClicked = { screenModel.markReadSelection(true) },
+                                onMarkAsUnreadClicked = { screenModel.markReadSelection(false) },
+                                onDownloadClicked = screenModel::performDownloadAction
+                                    .takeIf { state.selectedManga.fastAll { !it.isLocal() } },
+                                onDeleteClicked = screenModel::openDeleteMangaDialog,
+                                onMigrateClicked = {
+                                    val selection = state
+                                        // KMK -->
+                                        .selectedManga
+                                        .filterNot { it.source == MERGED_SOURCE_ID }
+                                        .map { it.id }
+                                    // KMK <--
                                     screenModel.clearSelection()
-                                    context.toast(SYMR.strings.no_valid_entry)
-                                }
-                            },
-                            onSelectionUpdateClicked = {
-                                val started = screenModel.updateSelectedManga()
-                                scope.launch {
-                                    val msgRes = if (started) {
-                                        KMR.strings.updating
+                                    // KMK -->
+                                    if (selection.isEmpty()) {
+                                        context.toast(SYMR.strings.no_valid_entry)
                                     } else {
-                                        MR.strings.update_already_running
+                                        // KMK <--
+                                        navigator.push(MigrationConfigScreen(selection))
                                     }
-                                    if (started) {
+                                },
+                                // KMK -->
+                                onMergeClicked = {
+                                    if (state.selection.size == 1) {
+                                        val manga = state.selectedManga.first()
+                                        // Invoke merging for this manga
                                         screenModel.clearSelection()
+                                        val smartSearchConfig = SourcesScreen.SmartSearchConfig(manga.title, manga.id)
+                                        navigator.push(SourcesScreen(smartSearchConfig))
+                                    } else if (state.selection.isNotEmpty()) {
+                                        // Invoke multiple merge
+                                        val selectedManga = state.selectedManga
+                                        screenModel.clearSelection()
+                                        scope.launchIO {
+                                            val mergingMangas = selectedManga.filterNot { it.source == MERGED_SOURCE_ID }
+                                            val mergedMangaId = screenModel.smartSearchMerge(selectedManga.toPersistentList())
+                                            snackbarHostState.showSnackbar(context.stringResource(SYMR.strings.entry_merged))
+                                            if (mergedMangaId != null) {
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = context.stringResource(KMR.strings.action_remove_merged),
+                                                    actionLabel = context.stringResource(MR.strings.action_remove),
+                                                    withDismissAction = true,
+                                                )
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    screenModel.removeMangas(
+                                                        mangas = mergingMangas,
+                                                        deleteFromLibrary = true,
+                                                        deleteChapters = false,
+                                                    )
+                                                }
+                                                navigator.push(MangaScreen(mergedMangaId))
+                                            } else {
+                                                snackbarHostState.showSnackbar(context.stringResource(SYMR.strings.merged_references_invalid))
+                                            }
+                                        }
+                                    } else {
+                                        screenModel.clearSelection()
+                                        context.toast(SYMR.strings.no_valid_entry)
                                     }
-                                    snackbarHostState.showSnackbar(context.stringResource(msgRes))
-                                }
-                            },
-                            // KMK <--
-                            // SY -->
-                            onClickCleanTitles = screenModel::cleanTitles.takeIf { state.showCleanTitles },
-                            onClickCollectRecommendations = screenModel::showRecommendationSearchDialog.takeIf { state.selection.size > 1 },
-                            onClickAddToMangaDex = screenModel::syncMangaToDex.takeIf { state.showAddToMangadex },
-                            onClickResetInfo = screenModel::resetInfo.takeIf { state.showResetInfo },
-                            // SY <--
+                                },
+                                onSelectionUpdateClicked = {
+                                    val started = screenModel.updateSelectedManga()
+                                    scope.launch {
+                                        val msgRes = if (started) {
+                                            KMR.strings.updating
+                                        } else {
+                                            MR.strings.update_already_running
+                                        }
+                                        if (started) {
+                                            screenModel.clearSelection()
+                                        }
+                                        snackbarHostState.showSnackbar(context.stringResource(msgRes))
+                                    }
+                                },
+                                // KMK <--
+                                // SY -->
+                                onClickCleanTitles = screenModel::cleanTitles.takeIf { state.showCleanTitles },
+                                onClickCollectRecommendations = screenModel::showRecommendationSearchDialog.takeIf { state.selection.size > 1 },
+                                onClickAddToMangaDex = screenModel::syncMangaToDex.takeIf { state.showAddToMangadex },
+                                onClickResetInfo = screenModel::resetInfo.takeIf { state.showResetInfo },
+                                // SY <--
+                            )
+                        },
+                        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                    ) { contentPadding ->
+                        val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 72.dp else 0.dp)
+                        val adjustedContentPadding = PaddingValues(
+                            top = contentPadding.calculateTopPadding(),
+                            bottom = bottomPadding,
+                            start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
+                            end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
                         )
-                    },
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-                ) { contentPadding ->
-                    val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 72.dp else 0.dp)
-                    val adjustedContentPadding = PaddingValues(
-                        top = contentPadding.calculateTopPadding(),
-                        bottom = bottomPadding,
-                        start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
-                        end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
+
+                        when {
+                            state.isLoading -> {
+                                LoadingScreen(Modifier.padding(adjustedContentPadding))
+                            }
+                            state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty -> {
+                                val handler = LocalUriHandler.current
+                                EmptyScreen(
+                                    stringRes = MR.strings.information_empty_library,
+                                    modifier = Modifier.padding(adjustedContentPadding),
+                                    actions = persistentListOf(
+                                        EmptyScreenAction(
+                                            stringRes = MR.strings.getting_started_guide,
+                                            icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                                            onClick = { handler.openUri(GETTING_STARTED_URL) },
+                                        ),
+                                    ),
+                                )
+                            }
+                            else -> {
+                                LibraryContent(
+                                    categories = state.categories,
+                                    activeCategoryIndex = state.activeCategoryIndex,
+                                    searchQuery = state.searchQuery,
+                                    selection = state.selection,
+                                    contentPadding = adjustedContentPadding,
+                                    currentPage = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex.coerceAtLeast(0)),
+                                    hasActiveFilters = state.hasActiveFilters,
+                                    showPageTabs = (showTopTabBar || !state.searchQuery.isNullOrEmpty()) && topBarVisible,
+                                    showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory },
+                                    showSubcategories = showSubcategoryTabs && topBarVisible,
+                                    onChangeCurrentPage = screenModel::updateActiveCategoryIndex,
+                                    onClickManga = { navigator.push(MangaScreen(it)) },
+                                    onContinueReadingClicked = { it: LibraryManga ->
+                                        scope.launchIO {
+                                            val chapter = screenModel.getNextUnreadChapter(it.manga)
+                                            if (chapter != null) {
+                                                context.startActivity(
+                                                    ReaderActivity.newIntent(context, chapter.mangaId, chapter.id),
+                                                )
+                                            } else {
+                                                snackbarHostState.showSnackbar(context.stringResource(MR.strings.no_next_chapter))
+                                            }
+                                        }
+                                        Unit
+                                    }.takeIf { state.showMangaContinueButton },
+                                    onToggleSelection = screenModel::toggleSelection,
+                                    onToggleRangeSelection = { category, manga ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        screenModel.toggleRangeSelection(category, manga)
+                                    },
+                                    onRefresh = { onClickRefresh(state.activeCategory) },
+                                    onGlobalSearchClicked = {
+                                        navigator.push(GlobalSearchScreen(screenModel.state.value.searchQuery ?: ""))
+                                    },
+                                    getItemCountForCategory = { state.getItemCountForCategory(it) },
+                                    getDisplayMode = { screenModel.getDisplayMode() },
+                                    getColumnsForOrientation = { screenModel.getColumnsForOrientation(it) },
+                                    getItemsForCategory = { state.getItemsForCategory(it) },
+                                    // KMK -->
+                                    activeSubcategoryId = activeSubcategoryId,
+                                    onSubcategorySelected = { activeSubcategoryId = it },
+                                    // KMK <--
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Floating Horizontally Scrollable Category Bar (with Scroll-to-Hide and Swapped Rows)
+                val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
+                val categoryRowState = rememberLazyListState()
+
+                LaunchedEffect(state.activeCategoryIndex) {
+                    if (categoryBarCarouselStyle && state.categories.isNotEmpty()) {
+                        val index = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex)
+                        val layoutInfo = categoryRowState.layoutInfo
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                        val targetItem = visibleItems.firstOrNull { it.index == index }
+                        if (targetItem != null) {
+                            val offset = (viewportWidth - targetItem.size) / 2
+                            categoryRowState.animateScrollToItem(index, -offset)
+                        } else {
+                            categoryRowState.scrollToItem(index)
+                            val targetItemNext = categoryRowState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                            if (targetItemNext != null) {
+                                val offset = (viewportWidth - targetItemNext.size) / 2
+                                categoryRowState.animateScrollToItem(index, -offset)
+                            }
+                        }
+                    }
+                }
+
+                val fabBottomPadding = if (bottomBarVisible) {
+                    ((if (floatingBottomBar) (72 - 12) else (80 - 12)) + bottomBarBottomMargin + subTabsBottomMargin).coerceAtLeast(0).dp
+                } else {
+                    16.dp
+                }
+
+                val categoryBarVisible = showCategoryTabs && (
+                    (((alwaysShowSubTabsLibrary || showCategoryBar) && bottomBarVisible) || isCategoryBarPinned) &&
+                        state.searchQuery == null && !state.selectionMode && !state.isLoading && !state.isLibraryEmpty
                     )
 
-                    when {
-                        state.isLoading -> {
-                            LoadingScreen(Modifier.padding(adjustedContentPadding))
-                        }
-                        state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty -> {
-                            val handler = LocalUriHandler.current
-                            EmptyScreen(
-                                stringRes = MR.strings.information_empty_library,
-                                modifier = Modifier.padding(adjustedContentPadding),
-                                actions = persistentListOf(
-                                    EmptyScreenAction(
-                                        stringRes = MR.strings.getting_started_guide,
-                                        icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                                        onClick = { handler.openUri(GETTING_STARTED_URL) },
-                                    ),
-                                ),
-                            )
-                        }
-                        else -> {
-                            LibraryContent(
-                                categories = state.categories,
-                                activeCategoryIndex = state.activeCategoryIndex,
-                                searchQuery = state.searchQuery,
-                                selection = state.selection,
-                                contentPadding = adjustedContentPadding,
-                                currentPage = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex.coerceAtLeast(0)),
-                                hasActiveFilters = state.hasActiveFilters,
-                                showPageTabs = (showTopTabBar || !state.searchQuery.isNullOrEmpty()) && topBarVisible,
-                                showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory },
-                                showSubcategories = showSubcategoryTabs && topBarVisible,
-                                onChangeCurrentPage = screenModel::updateActiveCategoryIndex,
-                                onClickManga = { navigator.push(MangaScreen(it)) },
-                                onContinueReadingClicked = { it: LibraryManga ->
-                                    scope.launchIO {
-                                        val chapter = screenModel.getNextUnreadChapter(it.manga)
-                                        if (chapter != null) {
-                                            context.startActivity(
-                                                ReaderActivity.newIntent(context, chapter.mangaId, chapter.id),
-                                            )
-                                        } else {
-                                            snackbarHostState.showSnackbar(context.stringResource(MR.strings.no_next_chapter))
+                AnimatedVisibility(
+                    visible = categoryBarVisible,
+                    enter = expandVertically(expandFrom = Alignment.Bottom),
+                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, end = 16.dp, bottom = fabBottomPadding)
+                        .fillMaxWidth(),
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        // Small attached Pin button above category bar
+                        GlassSurface(
+                            modifier = Modifier.padding(end = 12.dp),
+                            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                            style = GlassDefaults.subtleStyle(),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clickable {
+                                        scope.launch {
+                                            categoryBarPinnedPref.set(!isCategoryBarPinned)
                                         }
                                     }
-                                    Unit
-                                }.takeIf { state.showMangaContinueButton },
-                                onToggleSelection = screenModel::toggleSelection,
-                                onToggleRangeSelection = { category, manga ->
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    screenModel.toggleRangeSelection(category, manga)
-                                },
-                                onRefresh = { onClickRefresh(state.activeCategory) },
-                                onGlobalSearchClicked = {
-                                    navigator.push(GlobalSearchScreen(screenModel.state.value.searchQuery ?: ""))
-                                },
-                                getItemCountForCategory = { state.getItemCountForCategory(it) },
-                                getDisplayMode = { screenModel.getDisplayMode() },
-                                getColumnsForOrientation = { screenModel.getColumnsForOrientation(it) },
-                                getItemsForCategory = { state.getItemsForCategory(it) },
-                                // KMK -->
-                                activeSubcategoryId = activeSubcategoryId,
-                                onSubcategorySelected = { activeSubcategoryId = it },
-                                // KMK <--
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Floating Horizontally Scrollable Category Bar (with Scroll-to-Hide and Swapped Rows)
-            val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
-            val categoryRowState = rememberLazyListState()
-
-            LaunchedEffect(state.activeCategoryIndex) {
-                if (categoryBarCarouselStyle && state.categories.isNotEmpty()) {
-                    val index = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex)
-                    val layoutInfo = categoryRowState.layoutInfo
-                    val visibleItems = layoutInfo.visibleItemsInfo
-                    val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                    val targetItem = visibleItems.firstOrNull { it.index == index }
-                    if (targetItem != null) {
-                        val offset = (viewportWidth - targetItem.size) / 2
-                        categoryRowState.animateScrollToItem(index, -offset)
-                    } else {
-                        categoryRowState.scrollToItem(index)
-                        val targetItemNext = categoryRowState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-                        if (targetItemNext != null) {
-                            val offset = (viewportWidth - targetItemNext.size) / 2
-                            categoryRowState.animateScrollToItem(index, -offset)
-                        }
-                    }
-                }
-            }
-
-            val fabBottomPadding = if (bottomBarVisible) {
-                ((if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp).coerceAtLeast(0.dp)
-            } else {
-                16.dp
-            }
-
-            val categoryBarVisible = showCategoryTabs && (
-                (((alwaysShowSubTabsLibrary || showCategoryBar) && bottomBarVisible) || isCategoryBarPinned) &&
-                    state.searchQuery == null && !state.selectionMode && !state.isLoading && !state.isLibraryEmpty
-                )
-
-            AnimatedVisibility(
-                visible = categoryBarVisible,
-                enter = expandVertically(expandFrom = Alignment.Bottom),
-                exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, end = 16.dp, bottom = fabBottomPadding)
-                    .fillMaxWidth(),
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    // Small attached Pin button above category bar
-                    GlassSurface(
-                        modifier = Modifier.padding(end = 12.dp),
-                        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
-                        style = GlassDefaults.subtleStyle(),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clickable {
-                                    scope.launch {
-                                        categoryBarPinnedPref.set(!isCategoryBarPinned)
-                                    }
-                                }
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                contentDescription = "Pin category bar",
-                                modifier = Modifier.size(12.dp),
-                                tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-
-                    // Main Category Bar Surface
-                    GlassSurface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        style = GlassDefaults.prominentStyle(),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                // Subcategories (On top)
-                                val parentCategories = remember(state.categories) {
-                                    state.categories.filter { it.parentId == null }.sortedBy { it.order }
-                                }
-                                val childrenByParent = remember(state.categories) {
-                                    state.categories.filter { it.parentId != null }
-                                        .groupBy { it.parentId }
-                                        .mapValues { entry -> entry.value.sortedBy { it.order } }
-                                }
-                                val showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory }
-                                val tabCategories = if (showParentFilters && parentCategories.isNotEmpty()) {
-                                    parentCategories
-                                } else {
-                                    state.categories
-                                }
-                                val activeCategory = tabCategories.getOrNull(state.activeCategoryIndex)
-                                val activeParent = remember(activeCategory, parentCategories) {
-                                    if (activeCategory == null) {
-                                        null
-                                    } else if (activeCategory.parentId == null) {
-                                        activeCategory
-                                    } else {
-                                        parentCategories.find { it.id == activeCategory.parentId }
+                                androidx.compose.material3.Icon(
+                                    imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                    contentDescription = "Pin category bar",
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        // Main Category Bar Surface
+                        GlassSurface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            style = GlassDefaults.prominentStyle(),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    // Subcategories (On top)
+                                    val parentCategories = remember(state.categories) {
+                                        state.categories.filter { it.parentId == null }.sortedBy { it.order }
                                     }
-                                }
-                                val subcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
+                                    val childrenByParent = remember(state.categories) {
+                                        state.categories.filter { it.parentId != null }
+                                            .groupBy { it.parentId }
+                                            .mapValues { entry -> entry.value.sortedBy { it.order } }
+                                    }
+                                    val showParentFilters = state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory }
+                                    val tabCategories = if (showParentFilters && parentCategories.isNotEmpty()) {
+                                        parentCategories
+                                    } else {
+                                        state.categories
+                                    }
+                                    val activeCategory = tabCategories.getOrNull(state.activeCategoryIndex)
+                                    val activeParent = remember(activeCategory, parentCategories) {
+                                        if (activeCategory == null) {
+                                            null
+                                        } else if (activeCategory.parentId == null) {
+                                            activeCategory
+                                        } else {
+                                            parentCategories.find { it.id == activeCategory.parentId }
+                                        }
+                                    }
+                                    val subcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
 
-                                val activeSubcategoryIdOfActivePage = if (showParentFilters) {
-                                    activeSubcategoryId
-                                } else {
-                                    if (activeCategory?.parentId != null) activeCategory.id else null
-                                }
+                                    val activeSubcategoryIdOfActivePage = if (showParentFilters) {
+                                        activeSubcategoryId
+                                    } else {
+                                        if (activeCategory?.parentId != null) activeCategory.id else null
+                                    }
 
-                                if (subcategories.isNotEmpty()) {
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        item {
-                                            FilterChip(
-                                                selected = activeSubcategoryIdOfActivePage == null,
-                                                onClick = {
-                                                    if (showParentFilters) {
-                                                        activeSubcategoryId = null
-                                                    } else {
-                                                        activeParent?.let { parent ->
-                                                            val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
-                                                            if (actualIndex != -1) {
-                                                                screenModel.updateActiveCategoryIndex(actualIndex)
+                                    if (subcategories.isNotEmpty()) {
+                                        LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            item {
+                                                FilterChip(
+                                                    selected = activeSubcategoryIdOfActivePage == null,
+                                                    onClick = {
+                                                        if (showParentFilters) {
+                                                            activeSubcategoryId = null
+                                                        } else {
+                                                            activeParent?.let { parent ->
+                                                                val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
+                                                                if (actualIndex != -1) {
+                                                                    screenModel.updateActiveCategoryIndex(actualIndex)
+                                                                }
                                                             }
                                                         }
-                                                    }
-                                                },
-                                                label = {
-                                                    val contentColor = LocalContentColor.current
-                                                    val allText = remember(activeParent, kisaraShowItemCountInTabs, state, contentColor) {
-                                                        if (kisaraShowItemCountInTabs && activeParent != null) {
-                                                            val count = state.getItemCountForCategory(activeParent, force = true)
-                                                            if (count != null) {
-                                                                buildAnnotatedString {
-                                                                    append("All")
-                                                                    withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
-                                                                        append(" ($count)")
+                                                    },
+                                                    label = {
+                                                        val contentColor = LocalContentColor.current
+                                                        val allText = remember(activeParent, kisaraShowItemCountInTabs, state, contentColor) {
+                                                            if (kisaraShowItemCountInTabs && activeParent != null) {
+                                                                val count = state.getItemCountForCategory(activeParent, force = true)
+                                                                if (count != null) {
+                                                                    buildAnnotatedString {
+                                                                        append("All")
+                                                                        withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
+                                                                            append(" ($count)")
+                                                                        }
                                                                     }
+                                                                } else {
+                                                                    AnnotatedString("All")
                                                                 }
                                                             } else {
                                                                 AnnotatedString("All")
                                                             }
-                                                        } else {
-                                                            AnnotatedString("All")
                                                         }
+                                                        Text(text = allText, fontSize = 10.sp)
+                                                    },
+                                                    modifier = Modifier.height(24.dp),
+                                                    colors = FilterChipDefaults.filterChipColors(
+                                                        containerColor = Color.Transparent,
+                                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                                                        labelColor = MaterialTheme.colorScheme.onSurface,
+                                                        selectedLabelColor = categorySelectedLabelColor,
+                                                    ),
+                                                    border = null,
+                                                )
+                                            }
+                                            items(subcategories) { sub ->
+                                                val isSelected = activeSubcategoryIdOfActivePage == sub.id
+                                                val contentColor = LocalContentColor.current
+                                                val visualName = sub.visualName
+                                                val subTitleText = remember(sub, visualName, kisaraShowItemCountInTabs, state, contentColor) {
+                                                    if (kisaraShowItemCountInTabs) {
+                                                        val count = state.getItemCountForCategory(sub, force = true)
+                                                        if (count != null) {
+                                                            buildAnnotatedString {
+                                                                append(visualName)
+                                                                withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
+                                                                    append(" ($count)")
+                                                                }
+                                                            }
+                                                        } else {
+                                                            AnnotatedString(visualName)
+                                                        }
+                                                    } else {
+                                                        AnnotatedString(visualName)
                                                     }
-                                                    Text(text = allText, fontSize = 10.sp)
-                                                },
-                                                modifier = Modifier.height(24.dp),
-                                            )
+                                                }
+                                                FilterChip(
+                                                    selected = isSelected,
+                                                    onClick = {
+                                                        if (showParentFilters) {
+                                                            activeSubcategoryId = if (isSelected) null else sub.id
+                                                        } else {
+                                                            val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
+                                                            if (actualIndex != -1) {
+                                                                screenModel.updateActiveCategoryIndex(actualIndex)
+                                                            }
+                                                        }
+                                                    },
+                                                    label = { Text(text = subTitleText, fontSize = 10.sp) },
+                                                    modifier = Modifier.height(24.dp),
+                                                    colors = FilterChipDefaults.filterChipColors(
+                                                        containerColor = Color.Transparent,
+                                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                                                        labelColor = MaterialTheme.colorScheme.onSurface,
+                                                        selectedLabelColor = categorySelectedLabelColor,
+                                                    ),
+                                                    border = null,
+                                                )
+                                            }
                                         }
-                                        items(subcategories) { sub ->
-                                            val isSelected = activeSubcategoryIdOfActivePage == sub.id
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                    }
+
+                                    // Category Row (On bottom)
+                                    LazyRow(
+                                        state = categoryRowState,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        itemsIndexed(tabCategories) { idx, cat ->
+                                            val isSelected = state.activeCategoryIndex == idx
+                                            val scale = if (categoryBarCarouselStyle && isSelected) 1.15f else 1f
                                             val contentColor = LocalContentColor.current
-                                            val visualName = sub.visualName
-                                            val subTitleText = remember(sub, visualName, kisaraShowItemCountInTabs, state, contentColor) {
+                                            val visualName = cat.visualName
+                                            val catTitleText = remember(cat, visualName, kisaraShowItemCountInTabs, state, contentColor) {
                                                 if (kisaraShowItemCountInTabs) {
-                                                    val count = state.getItemCountForCategory(sub, force = true)
+                                                    val count = state.getItemCountForCategory(cat, force = true)
                                                     if (count != null) {
                                                         buildAnnotatedString {
                                                             append(visualName)
@@ -754,77 +830,36 @@ data object LibraryTab : Tab {
                                             FilterChip(
                                                 selected = isSelected,
                                                 onClick = {
+                                                    screenModel.updateActiveCategoryIndex(idx)
                                                     if (showParentFilters) {
-                                                        activeSubcategoryId = if (isSelected) null else sub.id
-                                                    } else {
-                                                        val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
-                                                        if (actualIndex != -1) {
-                                                            screenModel.updateActiveCategoryIndex(actualIndex)
-                                                        }
+                                                        activeSubcategoryId = null
                                                     }
                                                 },
-                                                label = { Text(text = subTitleText, fontSize = 10.sp) },
-                                                modifier = Modifier.height(24.dp),
+                                                label = {
+                                                    Text(
+                                                        text = catTitleText,
+                                                        fontSize = 10.sp,
+                                                        modifier = if (categoryBarCarouselStyle) Modifier.graphicsLayer(scaleX = scale, scaleY = scale) else Modifier,
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .height(24.dp)
+                                                    .then(
+                                                        if (categoryBarCarouselStyle && isSelected) {
+                                                            Modifier.padding(horizontal = 6.dp)
+                                                        } else {
+                                                            Modifier
+                                                        },
+                                                    ),
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    containerColor = Color.Transparent,
+                                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                                                    labelColor = MaterialTheme.colorScheme.onSurface,
+                                                    selectedLabelColor = categorySelectedLabelColor,
+                                                ),
+                                                border = null,
                                             )
                                         }
-                                    }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                }
-
-                                // Category Row (On bottom)
-                                LazyRow(
-                                    state = categoryRowState,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    itemsIndexed(tabCategories) { idx, cat ->
-                                        val isSelected = state.activeCategoryIndex == idx
-                                        val scale = if (categoryBarCarouselStyle && isSelected) 1.15f else 1f
-                                        val contentColor = LocalContentColor.current
-                                        val visualName = cat.visualName
-                                        val catTitleText = remember(cat, visualName, kisaraShowItemCountInTabs, state, contentColor) {
-                                            if (kisaraShowItemCountInTabs) {
-                                                val count = state.getItemCountForCategory(cat, force = true)
-                                                if (count != null) {
-                                                    buildAnnotatedString {
-                                                        append(visualName)
-                                                        withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
-                                                            append(" ($count)")
-                                                        }
-                                                    }
-                                                } else {
-                                                    AnnotatedString(visualName)
-                                                }
-                                            } else {
-                                                AnnotatedString(visualName)
-                                            }
-                                        }
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = {
-                                                screenModel.updateActiveCategoryIndex(idx)
-                                                if (showParentFilters) {
-                                                    activeSubcategoryId = null
-                                                }
-                                            },
-                                            label = {
-                                                Text(
-                                                    text = catTitleText,
-                                                    fontSize = 10.sp,
-                                                    modifier = if (categoryBarCarouselStyle) Modifier.graphicsLayer(scaleX = scale, scaleY = scale) else Modifier,
-                                                )
-                                            },
-                                            modifier = Modifier
-                                                .height(24.dp)
-                                                .then(
-                                                    if (categoryBarCarouselStyle && isSelected) {
-                                                        Modifier.padding(horizontal = 6.dp)
-                                                    } else {
-                                                        Modifier
-                                                    },
-                                                ),
-                                        )
                                     }
                                 }
                             }
@@ -832,146 +867,146 @@ data object LibraryTab : Tab {
                     }
                 }
             }
-        }
 
-        val onDismissRequest = screenModel::closeDialog
-        when (val dialog = state.dialog) {
-            is LibraryScreenModel.Dialog.SettingsSheet -> run {
-                LibrarySettingsDialog(
-                    onDismissRequest = onDismissRequest,
-                    screenModel = settingsScreenModel,
-                    category = state.activeCategory,
-                    // SY -->
-                    hasCategories = state.libraryData.categories.fastAny { !it.isSystemCategory },
-                    // SY <--
-                    // KMK -->
-                    categories = state.libraryData.categories.filterNot(Category::isSystemCategory),
-                    // KMK <--
-                )
-            }
-            is LibraryScreenModel.Dialog.ChangeCategory -> {
-                ChangeCategoryDialog(
-                    initialSelection = dialog.initialSelection,
-                    onDismissRequest = onDismissRequest,
-                    onEditCategories = {
+            val onDismissRequest = screenModel::closeDialog
+            when (val dialog = state.dialog) {
+                is LibraryScreenModel.Dialog.SettingsSheet -> run {
+                    LibrarySettingsDialog(
+                        onDismissRequest = onDismissRequest,
+                        screenModel = settingsScreenModel,
+                        category = state.activeCategory,
+                        // SY -->
+                        hasCategories = state.libraryData.categories.fastAny { !it.isSystemCategory },
+                        // SY <--
                         // KMK -->
-                        // screenModel.clearSelection()
+                        categories = state.libraryData.categories.filterNot(Category::isSystemCategory),
                         // KMK <--
-                        navigator.push(CategoryScreen())
-                    },
-                    onConfirm = { include, exclude ->
-                        screenModel.clearSelection()
-                        screenModel.setMangaCategories(dialog.manga, include, exclude)
-                    },
-                )
+                    )
+                }
+                is LibraryScreenModel.Dialog.ChangeCategory -> {
+                    ChangeCategoryDialog(
+                        initialSelection = dialog.initialSelection,
+                        onDismissRequest = onDismissRequest,
+                        onEditCategories = {
+                            // KMK -->
+                            // screenModel.clearSelection()
+                            // KMK <--
+                            navigator.push(CategoryScreen())
+                        },
+                        onConfirm = { include, exclude ->
+                            screenModel.clearSelection()
+                            screenModel.setMangaCategories(dialog.manga, include, exclude)
+                        },
+                    )
+                }
+                is LibraryScreenModel.Dialog.DeleteManga -> {
+                    DeleteLibraryMangaDialog(
+                        containsLocalManga = dialog.manga.any(Manga::isLocal),
+                        onDismissRequest = onDismissRequest,
+                        onConfirm = { deleteManga, deleteChapter ->
+                            screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
+                            screenModel.clearSelection()
+                        },
+                    )
+                }
+                // SY -->
+                LibraryScreenModel.Dialog.SyncFavoritesWarning -> {
+                    SyncFavoritesWarningDialog(
+                        onDismissRequest = onDismissRequest,
+                        onAccept = {
+                            onDismissRequest()
+                            screenModel.onAcceptSyncWarning()
+                        },
+                    )
+                }
+                LibraryScreenModel.Dialog.SyncFavoritesConfirm -> {
+                    SyncFavoritesConfirmDialog(
+                        onDismissRequest = onDismissRequest,
+                        onAccept = {
+                            onDismissRequest()
+                            screenModel.runSync()
+                        },
+                    )
+                }
+                is LibraryScreenModel.Dialog.RecommendationSearchSheet -> {
+                    RecommendationSearchBottomSheetDialog(
+                        onDismissRequest = onDismissRequest,
+                        onSearchRequest = {
+                            onDismissRequest()
+                            screenModel.clearSelection()
+                            screenModel.runRecommendationSearch(dialog.manga)
+                        },
+                    )
+                }
+                // SY <--
+                null -> {}
             }
-            is LibraryScreenModel.Dialog.DeleteManga -> {
-                DeleteLibraryMangaDialog(
-                    containsLocalManga = dialog.manga.any(Manga::isLocal),
-                    onDismissRequest = onDismissRequest,
-                    onConfirm = { deleteManga, deleteChapter ->
-                        screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
-                        screenModel.clearSelection()
-                    },
-                )
-            }
+
             // SY -->
-            LibraryScreenModel.Dialog.SyncFavoritesWarning -> {
-                SyncFavoritesWarningDialog(
-                    onDismissRequest = onDismissRequest,
-                    onAccept = {
-                        onDismissRequest()
-                        screenModel.onAcceptSyncWarning()
-                    },
-                )
+            SyncFavoritesProgressDialog(
+                status = screenModel.favoritesSync.status.collectAsState().value,
+                setStatusIdle = { screenModel.favoritesSync.status.value = FavoritesSyncStatus.Idle },
+                openManga = { navigator.push(MangaScreen(it)) },
+            )
+
+            RecommendationSearchProgressDialog(
+                status = screenModel.recommendationSearch.status.collectAsState().value,
+                setStatusIdle = { screenModel.recommendationSearch.status.value = SearchStatus.Idle },
+                setStatusCancelling = { screenModel.recommendationSearch.status.value = SearchStatus.Cancelling },
+            )
+            // SY <--
+
+            BackHandler(enabled = state.selectionMode || state.searchQuery != null) {
+                when {
+                    state.selectionMode -> screenModel.clearSelection()
+                    state.searchQuery != null -> screenModel.search(null)
+                }
             }
-            LibraryScreenModel.Dialog.SyncFavoritesConfirm -> {
-                SyncFavoritesConfirmDialog(
-                    onDismissRequest = onDismissRequest,
-                    onAccept = {
-                        onDismissRequest()
-                        screenModel.runSync()
-                    },
-                )
+
+            LaunchedEffect(state.selectionMode, state.dialog) {
+                HomeScreen.showBottomNav(!state.selectionMode)
             }
-            is LibraryScreenModel.Dialog.RecommendationSearchSheet -> {
-                RecommendationSearchBottomSheetDialog(
-                    onDismissRequest = onDismissRequest,
-                    onSearchRequest = {
-                        onDismissRequest()
-                        screenModel.clearSelection()
-                        screenModel.runRecommendationSearch(dialog.manga)
-                    },
-                )
+
+            LaunchedEffect(state.isLoading) {
+                if (!state.isLoading) {
+                    (context as? MainActivity)?.ready = true
+
+                    // AM (DISCORD) -->
+                    with(DiscordRPCService) {
+                        discordScope.launchIO { setScreen(context, DiscordScreen.LIBRARY) }
+                    }
+                    // <-- AM (DISCORD)
+                }
+            }
+
+            // SY -->
+            val recSearchState by screenModel.recommendationSearch.status.collectAsState()
+            LaunchedEffect(recSearchState) {
+                when (val current = recSearchState) {
+                    is SearchStatus.Finished.WithResults -> {
+                        RecommendsScreen.Args.MergedSourceMangas(current.results)
+                            .let(::RecommendsScreen)
+                            .let(navigator::push)
+
+                        screenModel.recommendationSearch.status.value = SearchStatus.Idle
+                    }
+                    is SearchStatus.Finished.WithoutResults -> {
+                        context.toast(SYMR.strings.rec_no_results)
+                        screenModel.recommendationSearch.status.value = SearchStatus.Idle
+                    }
+                    is SearchStatus.Cancelling -> {
+                        screenModel.cancelRecommendationSearch()
+                        screenModel.recommendationSearch.status.value = SearchStatus.Idle
+                    }
+                    else -> {}
+                }
             }
             // SY <--
-            null -> {}
-        }
 
-        // SY -->
-        SyncFavoritesProgressDialog(
-            status = screenModel.favoritesSync.status.collectAsState().value,
-            setStatusIdle = { screenModel.favoritesSync.status.value = FavoritesSyncStatus.Idle },
-            openManga = { navigator.push(MangaScreen(it)) },
-        )
-
-        RecommendationSearchProgressDialog(
-            status = screenModel.recommendationSearch.status.collectAsState().value,
-            setStatusIdle = { screenModel.recommendationSearch.status.value = SearchStatus.Idle },
-            setStatusCancelling = { screenModel.recommendationSearch.status.value = SearchStatus.Cancelling },
-        )
-        // SY <--
-
-        BackHandler(enabled = state.selectionMode || state.searchQuery != null) {
-            when {
-                state.selectionMode -> screenModel.clearSelection()
-                state.searchQuery != null -> screenModel.search(null)
+            LaunchedEffect(Unit) {
+                launch { queryEvent.receiveAsFlow().collect(screenModel::search) }
+                launch { requestSettingsSheetEvent.receiveAsFlow().collectLatest { screenModel.showSettingsDialog() } }
             }
-        }
-
-        LaunchedEffect(state.selectionMode, state.dialog) {
-            HomeScreen.showBottomNav(!state.selectionMode)
-        }
-
-        LaunchedEffect(state.isLoading) {
-            if (!state.isLoading) {
-                (context as? MainActivity)?.ready = true
-
-                // AM (DISCORD) -->
-                with(DiscordRPCService) {
-                    discordScope.launchIO { setScreen(context, DiscordScreen.LIBRARY) }
-                }
-                // <-- AM (DISCORD)
-            }
-        }
-
-        // SY -->
-        val recSearchState by screenModel.recommendationSearch.status.collectAsState()
-        LaunchedEffect(recSearchState) {
-            when (val current = recSearchState) {
-                is SearchStatus.Finished.WithResults -> {
-                    RecommendsScreen.Args.MergedSourceMangas(current.results)
-                        .let(::RecommendsScreen)
-                        .let(navigator::push)
-
-                    screenModel.recommendationSearch.status.value = SearchStatus.Idle
-                }
-                is SearchStatus.Finished.WithoutResults -> {
-                    context.toast(SYMR.strings.rec_no_results)
-                    screenModel.recommendationSearch.status.value = SearchStatus.Idle
-                }
-                is SearchStatus.Cancelling -> {
-                    screenModel.cancelRecommendationSearch()
-                    screenModel.recommendationSearch.status.value = SearchStatus.Idle
-                }
-                else -> {}
-            }
-        }
-        // SY <--
-
-        LaunchedEffect(Unit) {
-            launch { queryEvent.receiveAsFlow().collect(screenModel::search) }
-            launch { requestSettingsSheetEvent.receiveAsFlow().collectLatest { screenModel.showSettingsDialog() } }
         }
     }
 

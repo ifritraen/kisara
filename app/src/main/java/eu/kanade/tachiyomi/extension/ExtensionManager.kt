@@ -317,6 +317,22 @@ class ExtensionManager(
         return installer.downloadAndInstall(api.getApkUrl(extension), extension, isSideload = true)
     }
 
+    fun getAndClearSideloadError(pkgName: String): Throwable? {
+        return installer.getAndClearSideloadError(pkgName)
+    }
+
+    suspend fun registerSideloadedExtension(pkgName: String) {
+        val result = ExtensionLoader.loadExtensionFromPkgName(context, pkgName)
+        if (result is LoadResult.Success) {
+            registerNewExtension(result.extension)
+            updatePendingUpdatesCount()
+        } else if (result is LoadResult.Untrusted) {
+            installedExtensionMapFlow.value -= pkgName
+            untrustedExtensionMapFlow.value += result.extension
+            updatePendingUpdatesCount()
+        }
+    }
+
     /**
      * Returns a flow of the installation process for the given extension. It will complete
      * once the extension is updated or throws an error. The process will be canceled if

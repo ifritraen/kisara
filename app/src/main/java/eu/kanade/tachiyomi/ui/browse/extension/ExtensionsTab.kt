@@ -1,6 +1,11 @@
 package eu.kanade.tachiyomi.ui.browse.extension
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined._18UpRating
 import androidx.compose.material3.AlertDialog
@@ -15,7 +20,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.ExtensionScreen
@@ -26,7 +33,9 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
+import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -34,6 +43,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 @Composable
 fun extensionsTab(
@@ -44,6 +54,8 @@ fun extensionsTab(
 
     val state by extensionsScreenModel.state.collectAsState()
     var privateExtensionToUninstall by remember { mutableStateOf<Extension?>(null) }
+    var sideloadError by remember { mutableStateOf<Throwable?>(null) }
+    var sideloadErrorExtName by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         launch {
@@ -69,6 +81,19 @@ fun extensionsTab(
         launch {
             BrowseTab.extensionsReposEvent.receiveAsFlow().collectLatest {
                 navigator.push(ExtensionReposScreen())
+            }
+        }
+        launch {
+            extensionsScreenModel.events.collectLatest { event ->
+                when (event) {
+                    is ExtensionsScreenModel.Event.SideloadSuccess -> {
+                        context.toast(context.contextStringResource(KMR.strings.ext_sideload_success, event.extensionName))
+                    }
+                    is ExtensionsScreenModel.Event.SideloadError -> {
+                        sideloadError = event.error
+                        sideloadErrorExtName = event.extensionName
+                    }
+                }
             }
         }
     }
@@ -152,6 +177,54 @@ fun extensionsTab(
                     },
                     onDismissRequest = {
                         privateExtensionToUninstall = null
+                    },
+                )
+            }
+
+            sideloadError?.let { error ->
+                val extName = sideloadErrorExtName.orEmpty()
+                AlertDialog(
+                    onDismissRequest = {
+                        sideloadError = null
+                        sideloadErrorExtName = null
+                    },
+                    title = {
+                        Text(text = context.contextStringResource(KMR.strings.ext_sideload_failed, extName))
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = 300.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            SelectionContainer {
+                                Text(
+                                    text = error.stackTraceToString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                context.copyToClipboard("Sideload Error", error.stackTraceToString())
+                                sideloadError = null
+                                sideloadErrorExtName = null
+                            },
+                        ) {
+                            Text(text = context.contextStringResource(KMR.strings.ext_sideload_copy_error))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                sideloadError = null
+                                sideloadErrorExtName = null
+                            },
+                        ) {
+                            Text(text = stringResource(MR.strings.action_cancel))
+                        }
                     },
                 )
             }

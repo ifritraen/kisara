@@ -314,4 +314,15 @@
     <string name="pref_engine_max_output">LLM Max Output Token Count</string>
     <string name="ext_sideload">Sideload</string>
     <string name="ext_sideloaded">Sideloaded</string>
+    <string name="ext_sideload_success">Successfully sideloaded %1$s</string>
+    <string name="ext_sideload_failed">Failed to sideload %1$s</string>
+    <string name="ext_sideload_copy_error">Copy Error</string>
+    <string name="pref_bottom_bar_bottom_margin">Bottom Nav Bar Margin</string>
+    <string name="pref_bottom_bar_bottom_margin_summary">Margin distance of the main bottom navigation bar from the bottom of the screen</string>
+    <string name="pref_category_bar_selected_font_color">Category bar selected font color</string>
+    <string name="pref_category_bar_selected_font_color_summary">Choose the font color for the selected category or subcategory chip in the library category bar</string>
+    <string name="category_bar_selected_font_color_default">Default (same as others)</string>
+    <string name="category_bar_selected_font_color_accent">Accent (theme color)</string>
+    <string name="category_bar_selected_font_color_custom">Custom Color</string>
+    <string name="pref_category_bar_selected_font_custom_color">Custom selected font color</string>
 </resources>

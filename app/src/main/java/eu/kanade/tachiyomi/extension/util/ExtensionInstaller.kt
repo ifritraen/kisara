@@ -42,6 +42,11 @@ internal class ExtensionInstaller(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val activeSteps = ConcurrentHashMap<Long, MutableStateFlow<InstallStep>>()
+    private val sideloadErrors = ConcurrentHashMap<String, Throwable>()
+
+    fun getAndClearSideloadError(pkgName: String): Throwable? {
+        return sideloadErrors.remove(pkgName)
+    }
     // KMK <--
     private val extensionInstaller = Injekt.get<BasePreferences>().extensionInstaller()
 
@@ -76,7 +81,7 @@ internal class ExtensionInstaller(
                         // KMK <--
 
                         if (!response.isSuccessful) {
-                            throw Exception("Failed to download extension")
+                            throw Exception("Failed to download extension: HTTP ${response.code}")
                         }
                         // KMK -->
                         tmpFile.outputStream().use { output ->
@@ -94,6 +99,7 @@ internal class ExtensionInstaller(
                         step.value = InstallStep.Installed
                     } catch (e: Exception) {
                         logcat(LogPriority.ERROR, e) { "Failed to store sideloaded extension" }
+                        sideloadErrors[extension.pkgName] = e
                         step.value = InstallStep.Error
                     }
                     tmpFile.delete()
@@ -105,6 +111,9 @@ internal class ExtensionInstaller(
                     // Canceled
                 } else {
                     logcat(LogPriority.ERROR, e)
+                    if (isSideload) {
+                        sideloadErrors[extension.pkgName] = e
+                    }
                     step.value = InstallStep.Error
                 }
                 // KMK -->
@@ -178,13 +187,13 @@ internal class ExtensionInstaller(
      * @param pkgName The package name of the extension to uninstall
      */
     fun uninstallApk(pkgName: String) {
+        ExtensionLoader.uninstallPrivateExtension(context, pkgName)
         if (context.isPackageInstalled(pkgName)) {
             @Suppress("DEPRECATION")
             val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, "package:$pkgName".toUri())
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } else {
-            ExtensionLoader.uninstallPrivateExtension(context, pkgName)
             ExtensionInstallReceiver.notifyRemoved(context, pkgName)
         }
     }

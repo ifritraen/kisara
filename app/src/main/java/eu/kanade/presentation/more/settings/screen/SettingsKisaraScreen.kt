@@ -68,6 +68,9 @@ object SettingsKisaraScreen : SearchableSettings {
         val subTabsBottomMarginPref = uiPreferences.subTabsBottomMargin()
         val subTabsBottomMargin by subTabsBottomMarginPref.collectAsState()
 
+        val bottomBarBottomMarginPref = uiPreferences.bottomBarBottomMargin()
+        val bottomBarBottomMargin by bottomBarBottomMarginPref.collectAsState()
+
         val kisaraGlassColorTypePref = uiPreferences.kisaraGlassColorType()
         val kisaraGlassColorType by kisaraGlassColorTypePref.collectAsState()
 
@@ -87,6 +90,14 @@ object SettingsKisaraScreen : SearchableSettings {
 
         val kisaraShowItemCountInTabsPref = uiPreferences.kisaraShowItemCountInTabs()
         val kisaraShowItemCountInTabs by kisaraShowItemCountInTabsPref.collectAsState()
+
+        val categoryBarSelectedFontColorTypePref = uiPreferences.categoryBarSelectedFontColorType()
+        val categoryBarSelectedFontColorType by categoryBarSelectedFontColorTypePref.collectAsState()
+
+        val categoryBarSelectedFontCustomColorPref = uiPreferences.categoryBarSelectedFontCustomColor()
+        val categoryBarSelectedFontCustomColor by categoryBarSelectedFontCustomColorPref.collectAsState()
+
+        var showFontColorPicker by remember { mutableStateOf(false) }
 
         if (showColorPicker) {
             val controller = rememberColorPickerController()
@@ -127,6 +138,51 @@ object SettingsKisaraScreen : SearchableSettings {
                 },
                 dismissButton = {
                     TextButton(onClick = { showColorPicker = false }) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
+
+        if (showFontColorPicker) {
+            val controller = rememberColorPickerController()
+            AlertDialog(
+                onDismissRequest = { showFontColorPicker = false },
+                title = { Text(text = stringResource(KMR.strings.pref_category_bar_selected_font_custom_color)) },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        HsvColorPicker(
+                            modifier = Modifier.size(240.dp),
+                            controller = controller,
+                            initialColor = Color(categoryBarSelectedFontCustomColor),
+                            onColorChanged = { },
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        BrightnessSlider(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp),
+                            controller = controller,
+                            initialColor = Color(categoryBarSelectedFontCustomColor),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val selectedColor = controller.selectedColor.value
+                            categoryBarSelectedFontCustomColorPref.set(selectedColor.toArgb())
+                            showFontColorPicker = false
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFontColorPicker = false }) {
                         Text(text = stringResource(MR.strings.action_cancel))
                     }
                 },
@@ -236,6 +292,14 @@ object SettingsKisaraScreen : SearchableSettings {
                         valueString = if (subTabsBottomMargin != 0) "$subTabsBottomMargin dp" else stringResource(MR.strings.disabled),
                         onValueChanged = { subTabsBottomMarginPref.set(it) },
                     ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = bottomBarBottomMargin,
+                        valueRange = -40..80,
+                        title = stringResource(KMR.strings.pref_bottom_bar_bottom_margin),
+                        subtitle = stringResource(KMR.strings.pref_bottom_bar_bottom_margin_summary),
+                        valueString = "$bottomBarBottomMargin dp",
+                        onValueChanged = { bottomBarBottomMarginPref.set(it) },
+                    ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = kisaraShowItemCountInTabsPref,
                         title = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs),
@@ -262,6 +326,23 @@ object SettingsKisaraScreen : SearchableSettings {
                         title = stringResource(KMR.strings.pref_kisara_carousel_category_style),
                         subtitle = stringResource(KMR.strings.pref_kisara_carousel_category_style_summary),
                         enabled = showCategoryTabs,
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = categoryBarSelectedFontColorTypePref,
+                        entries = mapOf(
+                            0 to stringResource(KMR.strings.category_bar_selected_font_color_default),
+                            1 to stringResource(KMR.strings.category_bar_selected_font_color_accent),
+                            2 to stringResource(KMR.strings.category_bar_selected_font_color_custom),
+                        ).toImmutableMap(),
+                        title = stringResource(KMR.strings.pref_category_bar_selected_font_color),
+                        subtitle = "%s",
+                        enabled = showCategoryTabs,
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_category_bar_selected_font_custom_color),
+                        subtitle = if (categoryBarSelectedFontColorType == 2) "#%08X".format(categoryBarSelectedFontCustomColor) else "Tap to choose a custom color",
+                        enabled = showCategoryTabs && categoryBarSelectedFontColorType == 2,
+                        onClick = { showFontColorPicker = true },
                     ),
                     Preference.PreferenceItem.SliderPreference(
                         value = uiPreferences.chapterSheetMinHeightDp().get(),

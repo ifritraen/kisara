@@ -155,6 +155,7 @@ object HomeScreen : Screen() {
         val alwaysShowSubTabsHome by uiPreferences.alwaysShowSubTabsHome().collectAsState()
         val alwaysShowSubTabsBrowse by uiPreferences.alwaysShowSubTabsBrowse().collectAsState()
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
+        val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
         var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
@@ -281,7 +282,7 @@ object HomeScreen : Screen() {
                                     enter = expandVertically(expandFrom = Alignment.Bottom),
                                     exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                     modifier = Modifier
-                                        .padding(bottom = ((if (floatingBottomBar) 72.dp else 80.dp) + subTabsBottomMargin.dp).coerceAtLeast(0.dp))
+                                        .padding(bottom = ((if (floatingBottomBar) (72 - 12) else (80 - 12)) + bottomBarBottomMargin + subTabsBottomMargin).coerceAtLeast(0).dp)
                                         .align(Alignment.BottomCenter),
                                 ) {
                                     GlassSurface(
@@ -345,7 +346,7 @@ object HomeScreen : Screen() {
                                     enter = expandVertically(),
                                     exit = shrinkVertically(),
                                     modifier = Modifier
-                                        .padding(bottom = 12.dp)
+                                        .padding(bottom = bottomBarBottomMargin.dp)
                                         .align(Alignment.BottomCenter),
                                 ) {
                                     GlassSurface(
