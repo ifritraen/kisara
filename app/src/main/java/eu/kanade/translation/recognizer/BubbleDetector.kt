@@ -91,10 +91,41 @@ class BubbleDetector(private val context: Context) : AutoCloseable {
         val (scaled, scaleX, scaleY, padX, padY) = letterbox(bitmap, inputSize)
         val tensor = bitmapToTensor(scaled, inputSize)
 
-        val outputs = sess.run(mapOf("images" to tensor))
-        val rawOutput = (outputs["output0"].get() as OnnxTensor).floatBuffer.array()
+        val inputsInfo = sess.inputInfo
+        val origTargetSizesTensor = if (inputsInfo.containsKey("orig_target_sizes")) {
+            val type = (inputsInfo["orig_target_sizes"]?.info as? ai.onnxruntime.TensorInfo)?.type
+            if (type == ai.onnxruntime.OnnxJavaType.INT32) {
+                OnnxTensor.createTensor(env, arrayOf(intArrayOf(bitmap.height, bitmap.width)))
+            } else {
+                OnnxTensor.createTensor(env, arrayOf(longArrayOf(bitmap.height.toLong(), bitmap.width.toLong())))
+            }
+        } else {
+            null
+        }
+
+        val runInputs = mutableMapOf<String, OnnxTensor>("images" to tensor)
+        if (origTargetSizesTensor != null) {
+            runInputs["orig_target_sizes"] = origTargetSizesTensor
+        }
+
+        val outputs = sess.run(runInputs)
+        var outputTensor: OnnxTensor? = null
+        for (entry in outputs) {
+            val v = entry.value
+            if (v is OnnxTensor && v.info.type == ai.onnxruntime.OnnxJavaType.FLOAT) {
+                outputTensor = v
+                break
+            }
+        }
+        if (outputTensor == null) {
+            throw NoSuchElementException("No float output tensor found in model outputs")
+        }
+        val buffer = outputTensor.floatBuffer
+        val rawOutput = FloatArray(buffer.remaining())
+        buffer.get(rawOutput)
 
         tensor.close()
+        origTargetSizesTensor?.close()
 
         decodeYoloOutput(rawOutput, scaleX, scaleY, padX, padY, bitmap.width, bitmap.height)
     }

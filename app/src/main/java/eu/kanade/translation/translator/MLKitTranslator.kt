@@ -21,13 +21,21 @@ class MLKitTranslator(
 
     private var conditions = DownloadConditions.Builder().build()
 
-    override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
+    override suspend fun translate(
+        pages: MutableMap<String, PageTranslation>,
+        onProgress: suspend (translatedBlocks: Int, totalBlocks: Int) -> Unit,
+    ) {
         Tasks.await(translator.downloadModelIfNeeded(conditions))
+        val totalBlocks = pages.values.sumOf { it.blocks.size }
+        if (totalBlocks == 0) return
+        var completed = 0
         pages.mapValues { (_, v) ->
             v.blocks.map { b ->
                 b.translation = b.text.split("\n").mapNotNull {
                     Tasks.await(translator.translate(it)).takeIf { it.isNotEmpty() }
                 }.joinToString("\n")
+                completed++
+                onProgress(completed, totalBlocks)
             }
         }
     }

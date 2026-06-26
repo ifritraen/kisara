@@ -121,10 +121,14 @@ class MangaOcrEngine(
                 ),
             )
             val logits = decOut["logits"].get() as OnnxTensor
-            val logitsArr = logits.floatBuffer.array()
+            val shape = logits.info.shape
+            val seqLen = shape[1].toInt()
+            val vocabSize = shape[2].toInt()
+            val logitsBuffer = logits.floatBuffer
+            val logitsArr = FloatArray(logitsBuffer.remaining())
+            logitsBuffer.get(logitsArr)
             // Pick last token position argmax
-            val vocabSize = logitsArr.size / decodedIds.size
-            val lastPos = (decodedIds.size - 1) * vocabSize
+            val lastPos = (seqLen - 1) * vocabSize
             var maxVal = Float.NEGATIVE_INFINITY
             var maxIdx = 0
             for (i in 0 until vocabSize) {

@@ -59,6 +59,7 @@ import eu.kanade.presentation.manga.components.MangaCoverDialog
 import eu.kanade.presentation.manga.components.ScanlatorFilterDialog
 import eu.kanade.presentation.manga.components.SetIntervalDialog
 import eu.kanade.presentation.more.settings.screen.SettingsEhScreen
+import eu.kanade.presentation.more.settings.screen.SettingsTranslationScreen
 import eu.kanade.presentation.theme.TachiyomiTheme
 import eu.kanade.presentation.util.AssistContentScreen
 import eu.kanade.presentation.util.Screen
@@ -426,6 +427,9 @@ class MangaScreen(
                     else -> {}
                 }
             }.takeIf { isConfigurableSource },
+            onClickTranslationSettingsClicked = {
+                navigator.push(SettingsTranslationScreen)
+            },
             onClearManga = { screenModel.showClearMangaDialog() },
             onOpenMangaFolder = {
                 if (successState.mergedData == null) {

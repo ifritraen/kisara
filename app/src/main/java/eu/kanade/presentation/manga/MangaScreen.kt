@@ -229,6 +229,7 @@ fun MangaScreen(
     // KMK -->
     getMangaState: @Composable (Manga) -> State<Manga>,
     onClickSourceSettingsClicked: (() -> Unit)?,
+    onClickTranslationSettingsClicked: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
     onRelatedMangasScreenClick: () -> Unit,
@@ -303,6 +304,7 @@ fun MangaScreen(
                 // KMK -->
                 getMangaState = getMangaState,
                 onClickSourceSettingsClicked = onClickSourceSettingsClicked,
+                onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
                 onClearManga = onClearManga,
                 onOpenMangaFolder = onOpenMangaFolder,
                 onRelatedMangasScreenClick = onRelatedMangasScreenClick,
@@ -369,6 +371,7 @@ fun MangaScreen(
                 // KMK -->
                 getMangaState = getMangaState,
                 onClickSourceSettingsClicked = onClickSourceSettingsClicked,
+                onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
                 onClearManga = onClearManga,
                 onOpenMangaFolder = onOpenMangaFolder,
                 onRelatedMangasScreenClick = onRelatedMangasScreenClick,
@@ -453,6 +456,7 @@ private fun MangaScreenSmallImpl(
     // KMK -->
     getMangaState: @Composable ((Manga) -> State<Manga>),
     onClickSourceSettingsClicked: (() -> Unit)?,
+    onClickTranslationSettingsClicked: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
     onRelatedMangasScreenClick: () -> Unit,
@@ -841,7 +845,13 @@ private fun MangaScreenSmallImpl(
 
                                     // Translation Settings Button
                                     IconButton(
-                                        onClick = { showTranslationSettings = true },
+                                        onClick = {
+                                            if (onClickTranslationSettingsClicked != null) {
+                                                onClickTranslationSettingsClicked()
+                                            } else {
+                                                showTranslationSettings = true
+                                            }
+                                        },
                                         modifier = Modifier.size(36.dp),
                                     ) {
                                         Icon(
@@ -987,6 +997,7 @@ private fun MangaScreenLargeImpl(
     // KMK -->
     getMangaState: @Composable ((Manga) -> State<Manga>),
     onClickSourceSettingsClicked: (() -> Unit)?,
+    onClickTranslationSettingsClicked: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
     onRelatedMangasScreenClick: () -> Unit,

@@ -82,8 +82,13 @@ class GeminiTranslator(
         },
     )
 
-    override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
+    override suspend fun translate(
+        pages: MutableMap<String, PageTranslation>,
+        onProgress: suspend (translatedBlocks: Int, totalBlocks: Int) -> Unit,
+    ) {
         try {
+            val totalBlocks = pages.values.sumOf { it.blocks.size }
+            onProgress(0, totalBlocks)
             val data = pages.mapValues { (k, v) -> v.blocks.map { b -> b.text } }
             val json = JSONObject(data)
             val response = model.generateContent(json.toString())
@@ -98,6 +103,7 @@ class GeminiTranslator(
                 v.blocks =
                     v.blocks.filterNot { it.translation.contains("RTMTH") }.toMutableList()
             }
+            onProgress(totalBlocks, totalBlocks)
         } catch (e: Exception) {
             logcat { "Image Translation Error : ${e.stackTraceToString()}" }
             throw e

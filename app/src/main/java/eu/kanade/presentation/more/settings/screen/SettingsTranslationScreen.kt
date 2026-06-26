@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,7 @@ import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.model.TranslationReport
 import eu.kanade.translation.recognizer.BubbleDetector
 import eu.kanade.translation.recognizer.MangaOcrTextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
@@ -73,6 +76,7 @@ object SettingsTranslationScreen : SearchableSettings {
             getTranslatioEngineGroup(translationPreferences),
             getOcrGroup(translationPreferences),
             getTranslatioAdvancedGroup(translationPreferences),
+            getDiagnosticGroup(),
         )
     }
 
@@ -192,6 +196,21 @@ object SettingsTranslationScreen : SearchableSettings {
                                 BubbleDetector(context).downloadModel(onProgress)
                             },
                         )
+                    },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getDiagnosticGroup(): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = "Diagnostics",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.CustomPreference(
+                    title = "Translation Logs & Reports",
+                    content = {
+                        TranslationReportPreference()
                     },
                 ),
             ),
@@ -342,6 +361,100 @@ private fun ModelDownloadPreference(
             },
             dismissButton = {
                 TextButton(onClick = { errorDialogText = null }) {
+                    Text("Close")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun TranslationReportPreference() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val logs by TranslationReport.logs.collectAsState()
+    var showDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "View Translation Logs",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = if (logs.isEmpty()) "No logs recorded yet" else "${logs.size} log entries recorded",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { showDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "View Logs",
+                )
+            }
+        }
+    }
+
+    if (showDialog) {
+        val logText = remember(logs) {
+            if (logs.isEmpty()) {
+                "No logs available. Run a translation first."
+            } else {
+                logs.joinToString("\n") { entry ->
+                    val time = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
+                    val ex = if (entry.exceptionTrace != null) "\n${entry.exceptionTrace}" else ""
+                    "[$time] [${entry.level}] [${entry.component}] ${entry.message}$ex"
+                }
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Translation Process Report") },
+            text = {
+                Column {
+                    Text(
+                        text = "Logs from the latest translation execution. Copy these to report issues or check pipeline health.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val scrollState = rememberScrollState()
+                    Box(
+                        modifier = Modifier
+                            .height(300.dp)
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .verticalScroll(scrollState)
+                            .padding(8.dp),
+                    ) {
+                        Text(
+                            text = logText,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    context.copyToClipboard("Translation Logs", logText)
+                    context.toast("Logs copied to clipboard")
+                }) {
+                    Text("Copy Logs")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
                     Text("Close")
                 }
             },

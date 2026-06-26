@@ -14,7 +14,11 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,13 +27,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,7 +55,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.animation.doOnEnd
 import androidx.core.net.toUri
@@ -57,6 +71,11 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.NavigatorDisposeBehavior
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.connections.service.ConnectionsPreferences
 import eu.kanade.domain.source.interactor.GetIncognitoState
@@ -140,6 +159,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.util.LinkedList
+import kotlin.math.roundToInt
 
 class MainActivity : BaseActivity() {
 
@@ -226,6 +246,20 @@ class MainActivity : BaseActivity() {
             val context = LocalContext.current
             val translationManager = remember { Injekt.get<eu.kanade.translation.TranslationManager>() }
             val translationProgress by translationManager.progressState.collectAsState()
+
+            val hazeState = remember { HazeState() }
+            var forceShowDetails by remember { mutableStateOf(false) }
+            val isOnMangaPage = navigator?.lastItem is eu.kanade.tachiyomi.ui.manga.MangaScreen
+            var dragOffsetX by remember { mutableStateOf(0f) }
+            var dragOffsetY by remember { mutableStateOf(0f) }
+
+            LaunchedEffect(translationProgress) {
+                if (translationProgress == null) {
+                    forceShowDetails = false
+                    dragOffsetX = 0f
+                    dragOffsetY = 0f
+                }
+            }
 
             var incognito by remember { mutableStateOf(getIncognitoState.await(null)) }
             val downloadOnly by preferences.downloadedOnly().collectAsState()
@@ -334,49 +368,132 @@ class MainActivity : BaseActivity() {
                             navigator = navigator,
                             modifier = Modifier
                                 .padding(contentPadding)
-                                .consumeWindowInsets(contentPadding),
+                                .consumeWindowInsets(contentPadding)
+                                .hazeSource(hazeState),
                         )
 
-                        // Translation Progress Overlay Banner (floating bottom card)
+                        // Translation Progress Overlay Banner (floating card / ball)
                         translationProgress?.let { progress ->
-                            androidx.compose.material3.Card(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(horizontal = 16.dp, vertical = 16.dp)
-                                    .padding(bottom = contentPadding.calculateBottomPadding())
-                                    .fillMaxWidth(),
-                                colors = androidx.compose.material3.CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                                elevation = androidx.compose.material3.CardDefaults.cardElevation(
-                                    defaultElevation = 6.dp,
-                                ),
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "Translating: ${progress.chapterName}",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.weight(1f),
-                                            maxLines = 1,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        )
-                                        Text(
-                                            text = "${progress.currentPage}/${progress.totalPages}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            modifier = Modifier.padding(start = 8.dp),
+                            if (isOnMangaPage || forceShowDetails) {
+                                androidx.compose.material3.Card(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                                        .padding(bottom = contentPadding.calculateBottomPadding())
+                                        .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                dragOffsetX += dragAmount.x
+                                                dragOffsetY += dragAmount.y
+                                            }
+                                        }
+                                        .widthIn(max = 400.dp)
+                                        .fillMaxWidth()
+                                        .hazeEffect(
+                                            state = hazeState,
+                                            style = HazeStyle(
+                                                backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+                                                tint = HazeDefaults.tint(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)),
+                                                blurRadius = 15.dp,
+                                            ),
+                                        ),
+                                    shape = MaterialTheme.shapes.medium,
+                                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                    ),
+                                    border = BorderStroke(
+                                        width = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                    ),
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = progress.step,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier.weight(1f),
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = "${progress.currentPage}/${progress.totalPages}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier.padding(horizontal = 8.dp),
+                                            )
+                                            val activeTranslation = remember(progress.chapterId) {
+                                                translationManager.getQueuedTranslationOrNull(progress.chapterId)
+                                            }
+                                            if (activeTranslation != null) {
+                                                androidx.compose.material3.IconButton(
+                                                    onClick = {
+                                                        translationManager.cancelQueuedTranslation(activeTranslation)
+                                                        forceShowDetails = false
+                                                    },
+                                                    modifier = Modifier.size(24.dp),
+                                                ) {
+                                                    androidx.compose.material3.Icon(
+                                                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                                                        contentDescription = "Cancel Translation",
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                    )
+                                                }
+                                            }
+                                            if (forceShowDetails && !isOnMangaPage) {
+                                                androidx.compose.material3.IconButton(
+                                                    onClick = { forceShowDetails = false },
+                                                    modifier = Modifier.size(24.dp),
+                                                ) {
+                                                    androidx.compose.material3.Icon(
+                                                        imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
+                                                        contentDescription = "Minimize Progress",
+                                                        modifier = Modifier.size(20.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        androidx.compose.material3.LinearProgressIndicator(
+                                            progress = { progress.currentPage.toFloat() / progress.totalPages.toFloat() },
+                                            modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    androidx.compose.material3.LinearProgressIndicator(
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 16.dp + contentPadding.calculateTopPadding(), end = 16.dp)
+                                        .size(40.dp)
+                                        .clickable { forceShowDetails = true }
+                                        .border(
+                                            width = 0.5.dp,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                            shape = CircleShape,
+                                        )
+                                        .hazeEffect(
+                                            state = hazeState,
+                                            style = HazeStyle(
+                                                backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                                tint = HazeDefaults.tint(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
+                                                blurRadius = 15.dp,
+                                            ),
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    androidx.compose.material3.CircularProgressIndicator(
                                         progress = { progress.currentPage.toFloat() / progress.totalPages.toFloat() },
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier.fillMaxSize().padding(4.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        strokeWidth = 2.dp,
+                                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = progress.step,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    androidx.compose.material3.Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Default.Translate,
+                                        contentDescription = "Show Translation Progress",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                     )
                                 }
                             }

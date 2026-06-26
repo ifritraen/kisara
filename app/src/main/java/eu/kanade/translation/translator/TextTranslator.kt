@@ -11,7 +11,10 @@ import java.io.Closeable
 interface TextTranslator : Closeable {
     val fromLang: TextRecognizerLanguage
     val toLang: TextTranslatorLanguage
-    suspend fun translate(pages: MutableMap<String, PageTranslation>)
+    suspend fun translate(
+        pages: MutableMap<String, PageTranslation>,
+        onProgress: suspend (translatedBlocks: Int, totalBlocks: Int) -> Unit = { _, _ -> },
+    )
 }
 
 enum class TextTranslators(val label: String) {

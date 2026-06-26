@@ -3,6 +3,9 @@ package eu.kanade.translation.translator
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -18,12 +21,29 @@ class GoogleTranslator(
     private val client2 = "webapp"
     val okHttpClient = OkHttpClient()
 
-    override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
-        pages.mapValues { (_, v) ->
-            v.blocks.map { b ->
-                b.translation = translateText(toLang.code, b.text)
+    override suspend fun translate(
+        pages: MutableMap<String, PageTranslation>,
+        onProgress: suspend (translatedBlocks: Int, totalBlocks: Int) -> Unit,
+    ) = coroutineScope {
+        val totalBlocks = pages.values.sumOf { it.blocks.size }
+        if (totalBlocks == 0) return@coroutineScope
+        val completed = java.util.concurrent.atomic.AtomicInteger(0)
+        val jobs = pages.values.flatMap { page ->
+            page.blocks.map { block ->
+                async {
+                    try {
+                        block.translation = translateText(toLang.code, block.text)
+                    } catch (e: Exception) {
+                        logcat { "Failed to translate block: ${e.message}" }
+                    } finally {
+                        val done = completed.incrementAndGet()
+                        onProgress(done, totalBlocks)
+                    }
+                }
             }
         }
+        jobs.awaitAll()
+        Unit
     }
 
     private suspend fun translateText(lang: String, text: String): String {
