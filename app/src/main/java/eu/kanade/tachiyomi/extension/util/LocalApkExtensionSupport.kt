@@ -18,7 +18,8 @@ object LocalApkExtensionSupport {
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else 0)
 
     fun getSideloadDir(context: Context): File {
-        return File(context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
+        val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
+        return File(baseDir, SIDELOAD_DIR).apply { mkdirs() }
     }
 
     fun getLocalApkFiles(context: Context): List<File> {

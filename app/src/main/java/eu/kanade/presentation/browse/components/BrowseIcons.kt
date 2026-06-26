@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import coil3.compose.AsyncImage
 import eu.kanade.domain.source.model.icon
+import eu.kanade.domain.source.model.installedExtension
 import eu.kanade.presentation.util.rememberResourceBitmapPainter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -72,11 +73,23 @@ fun SourceIcon(
             )
         }
         else -> {
-            Image(
-                painter = painterResource(R.mipmap.ic_default_source),
-                contentDescription = null,
-                modifier = modifier.then(defaultModifier),
-            )
+            val installedExt = source.installedExtension
+            if (installedExt?.repoUrl != null) {
+                AsyncImage(
+                    model = "${installedExt.repoUrl}/icon/${installedExt.pkgName}.png",
+                    contentDescription = null,
+                    placeholder = ColorPainter(Color(0x1F888888)),
+                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    modifier = modifier.then(defaultModifier)
+                        .clip(MaterialTheme.shapes.extraSmall),
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.mipmap.ic_default_source),
+                    contentDescription = null,
+                    modifier = modifier.then(defaultModifier),
+                )
+            }
         }
     }
 }
