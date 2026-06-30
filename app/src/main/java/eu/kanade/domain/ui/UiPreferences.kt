@@ -111,6 +111,10 @@ class UiPreferences(
     fun kisaraShowItemCountInTabs() = preferenceStore.getBoolean("kisara_show_item_count_in_tabs", false)
     fun categoryBarSelectedFontColorType() = preferenceStore.getInt("kisara_category_bar_selected_font_color_type", 0)
     fun categoryBarSelectedFontCustomColor() = preferenceStore.getInt("kisara_category_bar_selected_font_custom_color", 0xFFFFFFFF.toInt())
+    fun bottomBarHeight() = preferenceStore.getInt("kisara_bottom_bar_height", 64)
+    fun subBarHeight() = preferenceStore.getInt("kisara_sub_bar_height", 32)
+    fun kisaraShowSubcategoriesInMainBar() = preferenceStore.getBoolean("kisara_show_subcategories_in_main_bar", false)
+    fun bottomBarWidth() = preferenceStore.getInt("kisara_bottom_bar_width", 100)
     // KMK <--
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)

@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
@@ -39,6 +43,8 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.core.preference.asToggleableState
 import eu.kanade.presentation.category.buildCategoryHierarchy
 import eu.kanade.presentation.category.visualName
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -336,161 +342,206 @@ fun ChangeCategoryDialog(
         )
         return
     }
+
     var selection by remember { mutableStateOf(initialSelection) }
-    var expandedParents by remember { mutableStateOf(setOf<Long>()) }
 
-    // Check which parents have children
-    val parentChildMap by remember(selection) {
-        mutableStateOf(
-            selection.groupBy { it.value.parentId }
-                .filterKeys { it != null }
-                .mapKeys { it.key!! },
-        )
+    val parents = remember(selection) {
+        selection.filter { it.value.parentId == null }
+    }
+    val childrenByParent = remember(selection) {
+        selection.filter { it.value.parentId != null }
+            .groupBy { it.value.parentId }
     }
 
-    val orderedSelection by remember(selection, expandedParents) {
-        val selectionMap = selection.associateBy { it.value.id }
-        mutableStateOf(
-            buildCategoryHierarchy(selection.map { it.value })
-                .mapNotNull { entry ->
-                    selectionMap[entry.category.id]?.let { CheckboxEntry(it, entry.depth) }
-                }
-                .filter { entry ->
-                    // Show all parents
-                    if (entry.checkbox.value.parentId == null) {
-                        true
-                    } // Show children only if their parent is expanded
-                    else {
-                        expandedParents.contains(entry.checkbox.value.parentId)
-                    }
-                }
-                .toImmutableList(),
-        )
+    val onChange: (CheckboxState<Category>) -> Unit = {
+        val index = selection.indexOf(it)
+        if (index != -1) {
+            val mutableList = selection.toMutableList()
+            mutableList[index] = it.next()
+            selection = mutableList.toList().toImmutableList()
+        }
     }
-    AlertDialog(
+
+    val onDirectAdd: (Long) -> Unit = { targetId ->
+        onConfirm(
+            selection.filter { (it.value.id == targetId) || it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include }.map { it.value.id },
+            selection.filter { (it.value.id != targetId) && (it is CheckboxState.State.None || it is CheckboxState.TriState.None) }.map { it.value.id },
+        )
+        onDismissRequest()
+    }
+
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismissRequest,
-        confirmButton = {
-            Row {
-                tachiyomi.presentation.core.components.material.TextButton(onClick = {
-                    onDismissRequest()
-                    onEditCategories()
-                }) {
-                    Text(text = stringResource(MR.strings.action_edit))
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                tachiyomi.presentation.core.components.material.TextButton(onClick = onDismissRequest) {
-                    Text(text = stringResource(MR.strings.action_cancel))
-                }
-                tachiyomi.presentation.core.components.material.TextButton(
-                    onClick = {
-                        onDismissRequest()
-                        onConfirm(
-                            selection
-                                .filter { it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include }
-                                .map { it.value.id },
-                            selection
-                                .filter { it is CheckboxState.State.None || it is CheckboxState.TriState.None }
-                                .map { it.value.id },
-                        )
-                    },
-                ) {
-                    Text(text = stringResource(MR.strings.action_ok))
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        androidx.compose.runtime.SideEffect {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                window?.let {
+                    it.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    it.attributes.blurBehindRadius = 60
+                    it.setDimAmount(0.15f)
                 }
             }
-        },
-        title = {
-            Text(text = stringResource(MR.strings.action_move_category))
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+        }
+        Box(
+            modifier = Modifier
+                .padding(28.dp)
+                .wrapContentHeight(),
+        ) {
+            GlassSurface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                style = GlassDefaults.prominentStyle(),
             ) {
-                orderedSelection.forEach { entry ->
-                    val checkbox = entry.checkbox
-                    val isParent = checkbox.value.parentId == null
-                    val isExpanded = expandedParents.contains(checkbox.value.id)
-                    val hasChildren = parentChildMap.containsKey(checkbox.value.id)
-                    val onChange: (CheckboxState<Category>) -> Unit = {
-                        val index = selection.indexOf(it)
-                        if (index != -1) {
-                            val mutableList = selection.toMutableList()
-                            mutableList[index] = it.next()
-                            selection = mutableList.toList().toImmutableList()
-                        }
-                    }
-                    Row(
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        text = stringResource(MR.strings.action_move_category),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (isParent && hasChildren) {
-                                    // Toggle expand/collapse only for parents with children
-                                    expandedParents = if (isExpanded) {
-                                        expandedParents - checkbox.value.id
-                                    } else {
-                                        expandedParents + checkbox.value.id
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        parents.forEach { parentEntry ->
+                            val parent = parentEntry.value
+                            val subcategories = childrenByParent[parent.id].orEmpty()
+
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onChange(parentEntry) },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    when (parentEntry) {
+                                        is CheckboxState.TriState -> {
+                                            TriStateCheckbox(
+                                                state = parentEntry.asToggleableState(),
+                                                onClick = { onChange(parentEntry) },
+                                            )
+                                        }
+                                        is CheckboxState.State -> {
+                                            Checkbox(
+                                                checked = parentEntry.isChecked,
+                                                onCheckedChange = { onChange(parentEntry) },
+                                            )
+                                        }
                                     }
-                                } else {
-                                    // Toggle checkbox for all items (parents without children and all children)
-                                    onChange(checkbox)
+
+                                    Text(
+                                        text = parent.visualName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f),
+                                    )
+
+                                    androidx.compose.material3.IconButton(
+                                        onClick = { onDirectAdd(parent.id) },
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        androidx.compose.material3.Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Direct Add",
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+
+                                if (subcategories.isNotEmpty()) {
+                                    androidx.compose.foundation.layout.FlowRow(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 32.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        subcategories.forEach { subEntry ->
+                                            val sub = subEntry.value
+                                            val isChecked = when (subEntry) {
+                                                is CheckboxState.TriState -> subEntry is CheckboxState.TriState.Include
+                                                is CheckboxState.State -> subEntry.isChecked
+                                            }
+
+                                            androidx.compose.material3.Surface(
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                                color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                                contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.clickable { onChange(subEntry) },
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                ) {
+                                                    Text(
+                                                        text = sub.visualName,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                    )
+                                                    androidx.compose.material3.IconButton(
+                                                        onClick = { onDirectAdd(sub.id) },
+                                                        modifier = Modifier.size(20.dp),
+                                                    ) {
+                                                        androidx.compose.material3.Icon(
+                                                            imageVector = Icons.Default.Add,
+                                                            contentDescription = "Direct Add",
+                                                            modifier = Modifier.size(12.dp),
+                                                            tint = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            .padding(start = MaterialTheme.padding.medium * entry.depth.coerceAtLeast(0).toFloat()),
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Show checkbox on the left for all items
-                        when (checkbox) {
-                            is CheckboxState.TriState -> {
-                                TriStateCheckbox(
-                                    state = checkbox.asToggleableState(),
-                                    onClick = { onChange(checkbox) },
-                                )
-                            }
-                            is CheckboxState.State -> {
-                                Checkbox(
-                                    checked = checkbox.isChecked,
-                                    onCheckedChange = { onChange(checkbox) },
-                                )
-                            }
+                        tachiyomi.presentation.core.components.material.TextButton(onClick = {
+                            onDismissRequest()
+                            onEditCategories()
+                        }) {
+                            Text(text = stringResource(MR.strings.action_edit))
                         }
-
-                        Text(
-                            text = checkbox.value.visualName,
-                            modifier = Modifier
-                                .padding(horizontal = MaterialTheme.padding.medium)
-                                .weight(1f),
-                        )
-
-                        // Show expand/collapse indicator on the right for parents with children
-                        if (isParent && hasChildren) {
-                            Icon(
-                                imageVector = if (isExpanded) {
-                                    Icons.Filled.KeyboardArrowDown
-                                } else {
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight
-                                },
-                                contentDescription = if (isExpanded) "Collapse" else "Expand",
-                                modifier = Modifier
-                                    .padding(end = MaterialTheme.padding.medium)
-                                    .clickable(
-                                        enabled = true,
-                                        onClick = {
-                                            expandedParents = if (isExpanded) {
-                                                expandedParents - checkbox.value.id
-                                            } else {
-                                                expandedParents + checkbox.value.id
-                                            }
-                                        },
-                                    ),
-                            )
+                        Spacer(modifier = Modifier.weight(1f))
+                        tachiyomi.presentation.core.components.material.TextButton(onClick = onDismissRequest) {
+                            Text(text = stringResource(MR.strings.action_cancel))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        tachiyomi.presentation.core.components.material.TextButton(
+                            onClick = {
+                                onDismissRequest()
+                                onConfirm(
+                                    selection
+                                        .filter { it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include }
+                                        .map { it.value.id },
+                                    selection
+                                        .filter { it is CheckboxState.State.None || it is CheckboxState.TriState.None }
+                                        .map { it.value.id },
+                                )
+                            },
+                        ) {
+                            Text(text = stringResource(MR.strings.action_ok))
                         }
                     }
                 }
             }
-        },
-    )
+        }
+    }
 }
-
-private data class CheckboxEntry(
-    val checkbox: CheckboxState<Category>,
-    val depth: Int,
-)

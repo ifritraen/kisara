@@ -97,6 +97,16 @@ object SettingsKisaraScreen : SearchableSettings {
         val categoryBarSelectedFontCustomColorPref = uiPreferences.categoryBarSelectedFontCustomColor()
         val categoryBarSelectedFontCustomColor by categoryBarSelectedFontCustomColorPref.collectAsState()
 
+        val bottomBarHeightPref = uiPreferences.bottomBarHeight()
+        val bottomBarHeight by bottomBarHeightPref.collectAsState()
+
+        val subBarHeightPref = uiPreferences.subBarHeight()
+        val subBarHeight by subBarHeightPref.collectAsState()
+
+        val kisaraShowSubcategoriesInMainBarPref = uiPreferences.kisaraShowSubcategoriesInMainBar()
+        val bottomBarWidthPref = uiPreferences.bottomBarWidth()
+        val bottomBarWidth by bottomBarWidthPref.collectAsState()
+
         var showFontColorPicker by remember { mutableStateOf(false) }
 
         if (showColorPicker) {
@@ -304,6 +314,33 @@ object SettingsKisaraScreen : SearchableSettings {
                         preference = kisaraShowItemCountInTabsPref,
                         title = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs),
                         subtitle = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs_summary),
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = bottomBarHeight,
+                        valueRange = 10..100,
+                        title = "Bottom Bar Height",
+                        valueString = "$bottomBarHeight dp",
+                        onValueChanged = { bottomBarHeightPref.set(it) },
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = subBarHeight,
+                        valueRange = 10..60,
+                        title = "Sub-Bar Height",
+                        valueString = "$subBarHeight dp",
+                        onValueChanged = { subBarHeightPref.set(it) },
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = kisaraShowSubcategoriesInMainBarPref,
+                        title = "Show subcategories in category bar",
+                        subtitle = "Include subcategories inside the main category bar alongside parent categories",
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = bottomBarWidth,
+                        valueRange = 30..100,
+                        title = "Bottom Bar Width",
+                        subtitle = "Width fraction of the bottom navigation bar (capsule style)",
+                        valueString = "$bottomBarWidth%",
+                        onValueChanged = { bottomBarWidthPref.set(it) },
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = showTopTabBarPref,

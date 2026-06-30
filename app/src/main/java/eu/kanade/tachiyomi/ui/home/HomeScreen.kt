@@ -9,26 +9,34 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -37,6 +45,7 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.SwapVert
@@ -44,6 +53,8 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined._18UpRating
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -53,26 +64,39 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,6 +105,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -90,6 +116,7 @@ import dev.chrisbanes.haze.hazeSource
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
@@ -104,21 +131,31 @@ import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.more.MoreTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import soup.compose.material.motion.animation.materialFadeThroughIn
 import soup.compose.material.motion.animation.materialFadeThroughOut
+import tachiyomi.domain.category.interactor.DeleteCategory
+import tachiyomi.domain.category.interactor.GetCategories
+import tachiyomi.domain.category.interactor.HideCategory
+import tachiyomi.domain.category.interactor.RenameCategory
+import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.NavigationBar
 import tachiyomi.presentation.core.components.material.NavigationRail
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+val LocalActiveSubTabPopup = compositionLocalOf<cafe.adriel.voyager.navigator.tab.Tab?> { null }
+val LocalEditCategory = staticCompositionLocalOf<(Category) -> Unit> { {} }
 
 object HomeScreen : Screen() {
     private fun readResolve(): Any = HomeScreen
@@ -156,9 +193,15 @@ object HomeScreen : Screen() {
         val alwaysShowSubTabsBrowse by uiPreferences.alwaysShowSubTabsBrowse().collectAsState()
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
         val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
+        val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
         var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
+        val subTabButtonBounds = remember { mutableStateMapOf<String, ButtonActionBounds>() }
+        var hoveredButtonKey by remember { mutableStateOf<String?>(null) }
+        var popupSelectedCategoryId by remember { mutableStateOf<Long?>(null) }
+        var categoryToEdit by remember { mutableStateOf<Category?>(null) }
+        val categoriesState by remember { Injekt.get<GetCategories>().subscribe() }.collectAsState(initial = emptyList())
 
         CompositionLocalProvider(LocalHazeState provides hazeState) {
             TabNavigator(
@@ -203,6 +246,8 @@ object HomeScreen : Screen() {
                         },
                         bottomBar = {
                             if (!isTabletUi() && !floatingBottomBar) {
+                                val bottomBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.bottomBarHeight().collectAsState().value
+                                val bottomBarWidth = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.bottomBarWidth().collectAsState().value
                                 val bottomNavVisible by produceState(initialValue = true) {
                                     showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
                                 }
@@ -211,14 +256,47 @@ object HomeScreen : Screen() {
                                     enter = expandVertically(),
                                     exit = shrinkVertically(),
                                 ) {
-                                    NavigationBar {
-                                        TABS
-                                            // SY -->
-                                            .fastFilter { it.isEnabled() }
-                                            // SY <--
-                                            .fastForEach {
-                                                NavigationBarItem(it/* SY --> */, alwaysShowLabel/* SY <-- */)
-                                            }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Transparent),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        val scaledWidth = (bottomBarWidth / 100f) * (0.92f + (bottomBarHeight - 64f) / 200f)
+                                        val isFloating = scaledWidth < 1f
+                                        val barShape = if (isFloating) RoundedCornerShape(16.dp) else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                                        val barPadding = if (isFloating) Modifier.padding(horizontal = 16.dp, vertical = 4.dp) else Modifier
+                                        NavigationBar(
+                                            modifier = Modifier
+                                                .then(barPadding)
+                                                .fillMaxWidth(scaledWidth.coerceIn(0.3f, 1.0f))
+                                                .clip(barShape),
+                                            height = bottomBarHeight.dp,
+                                        ) {
+                                            TABS
+                                                // SY -->
+                                                .fastFilter { it.isEnabled() }
+                                                // SY <--
+                                                .fastForEach {
+                                                    NavigationBarItem(
+                                                        tab = it,
+                                                        alwaysShowLabel = alwaysShowLabel && bottomBarHeight >= 56,
+                                                        subTabButtonBounds = subTabButtonBounds,
+                                                        onHover = { key ->
+                                                            hoveredButtonKey = key
+                                                            if (key != null && key.startsWith("Library_") && !key.startsWith("Library_sub_")) {
+                                                                val catId = key.removePrefix("Library_").toLongOrNull()
+                                                                if (catId != null) {
+                                                                    popupSelectedCategoryId = catId
+                                                                }
+                                                            }
+                                                        },
+                                                        onHold = { hold ->
+                                                            activeSubTabPopup = if (hold) it else null
+                                                        },
+                                                    )
+                                                }
+                                        }
                                     }
                                 }
                             }
@@ -236,21 +314,33 @@ object HomeScreen : Screen() {
                                     .fillMaxSize()
                                     .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
                             ) {
-                                AnimatedContent(
-                                    targetState = tabNavigator.current,
-                                    transitionSpec = {
-                                        materialFadeThroughIn(
-                                            initialScale = 1f,
-                                            durationMillis = TAB_FADE_DURATION,
-                                        ) togetherWith
-                                            materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
-                                    },
-                                    label = "tabContent",
-                                    contentKey = { it.key },
+                                CompositionLocalProvider(
+                                    LocalActiveSubTabPopup provides activeSubTabPopup,
+                                    LocalEditCategory provides { categoryToEdit = it },
                                 ) {
-                                    tabNavigator.saveableState(key = "currentTab", it) {
-                                        it.Content()
+                                    AnimatedContent(
+                                        targetState = tabNavigator.current,
+                                        transitionSpec = {
+                                            materialFadeThroughIn(
+                                                initialScale = 1f,
+                                                durationMillis = TAB_FADE_DURATION,
+                                            ) togetherWith
+                                                materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
+                                        },
+                                        label = "tabContent",
+                                        contentKey = { it.key },
+                                    ) {
+                                        tabNavigator.saveableState(key = "currentTab", it) {
+                                            it.Content()
+                                        }
                                     }
+                                }
+                                categoryToEdit?.let { category ->
+                                    EditCategoryPopup(
+                                        category = category,
+                                        categories = categoriesState,
+                                        onDismissRequest = { categoryToEdit = null },
+                                    )
                                 }
                             }
 
@@ -271,9 +361,10 @@ object HomeScreen : Screen() {
 
                                 // 2. Determine which sub-tab popup is active
                                 val activePopup = when {
+                                    activeSubTabPopup != null -> activeSubTabPopup
                                     currentTab is HomeTab && alwaysShowSubTabsHome -> currentTab
                                     currentTab is BrowseTab && alwaysShowSubTabsBrowse -> currentTab
-                                    else -> activeSubTabPopup
+                                    else -> null
                                 }
 
                                 // 3. Sub-tab popup above bottom bar
@@ -285,56 +376,248 @@ object HomeScreen : Screen() {
                                         .padding(bottom = ((if (floatingBottomBar) (72 - 12) else (80 - 12)) + bottomBarBottomMargin + subTabsBottomMargin).coerceAtLeast(0).dp)
                                         .align(Alignment.BottomCenter),
                                 ) {
+                                    val getCategories = remember { uy.kohesive.injekt.Injekt.get<tachiyomi.domain.category.interactor.GetCategories>() }
+                                    val categoriesState by produceState<List<tachiyomi.domain.category.model.Category>>(emptyList()) {
+                                        getCategories.subscribe().collect { value = it }
+                                    }
+                                    val parentCategories = remember(categoriesState) {
+                                        categoriesState.filter { it.parentId == null }.sortedBy { it.order }
+                                    }
+                                    val childrenByParent = remember(categoriesState) {
+                                        categoriesState.filter { it.parentId != null }
+                                            .groupBy { it.parentId }
+                                            .mapValues { entry -> entry.value.sortedBy { it.order } }
+                                    }
+                                    val subcategories = popupSelectedCategoryId?.let { childrenByParent[it] }.orEmpty()
+
                                     GlassSurface(
                                         shape = RoundedCornerShape(16.dp),
                                         style = GlassDefaults.regularStyle(),
                                     ) {
-                                        Row(
+                                        Box(
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            when (activePopup) {
-                                                is HomeTab -> {
-                                                    SubTabButton(text = "Feed", selected = HomeTab.currentPageIndex == 0) {
-                                                        tabNavigator.current = HomeTab
-                                                        HomeTab.showSubTab(0)
-                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                            if (activePopup is LibraryTab) {
+                                                val editCategory = LocalEditCategory.current
+                                                Column(
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                ) {
+                                                    if (subcategories.isNotEmpty()) {
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                        ) {
+                                                            subcategories.forEach { sub ->
+                                                                val key = "Library_sub_${sub.id}"
+                                                                SubTabButton(
+                                                                    text = sub.visualName,
+                                                                    selected = false,
+                                                                    hovered = hoveredButtonKey == key,
+                                                                    onLongClick = {
+                                                                        editCategory(sub)
+                                                                        activeSubTabPopup = null
+                                                                    },
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = LibraryTab
+                                                                            val actualIndex = categoriesState.indexOfFirst { it.id == sub.id }
+                                                                            if (actualIndex != -1) {
+                                                                                LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                                            }
+                                                                            activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = LibraryTab
+                                                                    val actualIndex = categoriesState.indexOfFirst { it.id == sub.id }
+                                                                    if (actualIndex != -1) {
+                                                                        LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                                    }
+                                                                    activeSubTabPopup = null
+                                                                }
+                                                            }
+                                                        }
                                                     }
-                                                    SubTabButton(text = "Updates", selected = HomeTab.currentPageIndex == 1) {
-                                                        tabNavigator.current = HomeTab
-                                                        HomeTab.showSubTab(1)
-                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                    }
-                                                    SubTabButton(text = "History", selected = HomeTab.currentPageIndex == 2) {
-                                                        tabNavigator.current = HomeTab
-                                                        HomeTab.showSubTab(2)
-                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        parentCategories.forEach { category ->
+                                                            val key = "Library_${category.id}"
+                                                            SubTabButton(
+                                                                text = category.visualName,
+                                                                selected = false,
+                                                                hovered = hoveredButtonKey == key,
+                                                                onLongClick = {
+                                                                    editCategory(category)
+                                                                    activeSubTabPopup = null
+                                                                },
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = LibraryTab
+                                                                        val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
+                                                                        if (actualIndex != -1) {
+                                                                            LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                                        }
+                                                                        activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                popupSelectedCategoryId = category.id
+                                                                tabNavigator.current = LibraryTab
+                                                                val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
+                                                                if (actualIndex != -1) {
+                                                                    LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                                }
+                                                            }
+                                                        }
+
+                                                        val categoryBarPinnedPref = remember { Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>().categoryBarPinned() }
+                                                        val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
+                                                        val scope = rememberCoroutineScope()
+                                                        androidx.compose.material3.IconButton(
+                                                            onClick = {
+                                                                scope.launch {
+                                                                    categoryBarPinnedPref.set(!isCategoryBarPinned)
+                                                                }
+                                                            },
+                                                            modifier = Modifier.size(32.dp),
+                                                        ) {
+                                                            androidx.compose.material3.Icon(
+                                                                imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                                                contentDescription = "Pin category bar",
+                                                                modifier = Modifier.size(16.dp),
+                                                                tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            )
+                                                        }
                                                     }
                                                 }
-                                                is BrowseTab -> {
-                                                    SubTabButton(text = "Sources", selected = BrowseTab.currentPageIndex == 0) {
-                                                        tabNavigator.current = BrowseTab
-                                                        BrowseTab.showSource()
-                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                    }
-                                                    SubTabButton(text = "Extensions", selected = BrowseTab.currentPageIndex == 1) {
-                                                        tabNavigator.current = BrowseTab
-                                                        BrowseTab.showExtension()
-                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                    }
-                                                    SubTabButton(text = "Migration", selected = BrowseTab.currentPageIndex == 2) {
-                                                        tabNavigator.current = BrowseTab
-                                                        BrowseTab.showMigration()
-                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                    }
-                                                    SubTabButton(text = "Duplicate", selected = BrowseTab.currentPageIndex == 3) {
-                                                        tabNavigator.current = BrowseTab
-                                                        BrowseTab.showDuplicate()
-                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                            } else {
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
+                                                    when (activePopup) {
+                                                        is HomeTab -> {
+                                                            SubTabButton(
+                                                                text = "Feed",
+                                                                selected = HomeTab.currentPageIndex == 0,
+                                                                hovered = hoveredButtonKey == "Home_Feed",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Home_Feed"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = HomeTab
+                                                                        HomeTab.showSubTab(0)
+                                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = HomeTab
+                                                                HomeTab.showSubTab(0)
+                                                                if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                            }
+                                                            SubTabButton(
+                                                                text = "Updates",
+                                                                selected = HomeTab.currentPageIndex == 1,
+                                                                hovered = hoveredButtonKey == "Home_Updates",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Home_Updates"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = HomeTab
+                                                                        HomeTab.showSubTab(1)
+                                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = HomeTab
+                                                                HomeTab.showSubTab(1)
+                                                                if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                            }
+                                                            SubTabButton(
+                                                                text = "History",
+                                                                selected = HomeTab.currentPageIndex == 2,
+                                                                hovered = hoveredButtonKey == "Home_History",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Home_History"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = HomeTab
+                                                                        HomeTab.showSubTab(2)
+                                                                        if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = HomeTab
+                                                                HomeTab.showSubTab(2)
+                                                                if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                            }
+                                                        }
+                                                        is BrowseTab -> {
+                                                            SubTabButton(
+                                                                text = "Sources",
+                                                                selected = BrowseTab.currentPageIndex == 0,
+                                                                hovered = hoveredButtonKey == "Browse_Sources",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Browse_Sources"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = BrowseTab
+                                                                        BrowseTab.showSource()
+                                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = BrowseTab
+                                                                BrowseTab.showSource()
+                                                                if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                            }
+                                                            SubTabButton(
+                                                                text = "Extensions",
+                                                                selected = BrowseTab.currentPageIndex == 1,
+                                                                hovered = hoveredButtonKey == "Browse_Extensions",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Browse_Extensions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = BrowseTab
+                                                                        BrowseTab.showExtension()
+                                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = BrowseTab
+                                                                BrowseTab.showExtension()
+                                                                if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                            }
+                                                            SubTabButton(
+                                                                text = "Migration",
+                                                                selected = BrowseTab.currentPageIndex == 2,
+                                                                hovered = hoveredButtonKey == "Browse_Migration",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Browse_Migration"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = BrowseTab
+                                                                        BrowseTab.showMigration()
+                                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = BrowseTab
+                                                                BrowseTab.showMigration()
+                                                                if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                            }
+                                                            SubTabButton(
+                                                                text = "Duplicate",
+                                                                selected = BrowseTab.currentPageIndex == 3,
+                                                                hovered = hoveredButtonKey == "Browse_Duplicate",
+                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                    subTabButtonBounds["Browse_Duplicate"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        tabNavigator.current = BrowseTab
+                                                                        BrowseTab.showDuplicate()
+                                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                    }
+                                                                },
+                                                            ) {
+                                                                tabNavigator.current = BrowseTab
+                                                                BrowseTab.showDuplicate()
+                                                                if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                            }
+                                                        }
+                                                        else -> {}
                                                     }
                                                 }
-                                                else -> {}
                                             }
                                         }
                                     }
@@ -346,15 +629,18 @@ object HomeScreen : Screen() {
                                     enter = expandVertically(),
                                     exit = shrinkVertically(),
                                     modifier = Modifier
-                                        .padding(bottom = bottomBarBottomMargin.dp)
+                                        .padding(bottom = bottomBarBottomMargin.coerceAtLeast(0).dp)
                                         .align(Alignment.BottomCenter),
                                 ) {
+                                    val bottomBarButtonSize = (bottomBarHeight * 0.45f).coerceAtLeast(8f).dp
+                                    val bottomBarIconSize = (bottomBarHeight * 0.25f).coerceAtLeast(6f).dp
                                     GlassSurface(
                                         shape = RoundedCornerShape(24.dp),
                                         style = GlassDefaults.prominentStyle(),
+                                        modifier = Modifier.height(bottomBarHeight.dp),
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            modifier = Modifier.fillMaxHeight().padding(horizontal = 8.dp, vertical = 2.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
@@ -370,12 +656,33 @@ object HomeScreen : Screen() {
                                                     } else {
                                                         MaterialTheme.colorScheme.onSurfaceVariant
                                                     }
+                                                    var itemGlobalOffset by remember { mutableStateOf(Offset.Zero) }
                                                     Box(
                                                         modifier = Modifier
-                                                            .size(36.dp)
+                                                            .size(bottomBarButtonSize)
                                                             .clip(CircleShape)
-                                                            .combinedClickable(
-                                                                onClick = {
+                                                            .onGloballyPositioned { coordinates ->
+                                                                itemGlobalOffset = coordinates.positionInRoot()
+                                                            }
+                                                            .subTabBarGestureDetector(
+                                                                tab = tab,
+                                                                selected = selected,
+                                                                itemGlobalOffset = itemGlobalOffset,
+                                                                subTabButtonBounds = subTabButtonBounds,
+                                                                scope = scope,
+                                                                onHover = { key ->
+                                                                    hoveredButtonKey = key
+                                                                    if (key != null && key.startsWith("Library_") && !key.startsWith("Library_sub_")) {
+                                                                        val catId = key.removePrefix("Library_").toLongOrNull()
+                                                                        if (catId != null) {
+                                                                            popupSelectedCategoryId = catId
+                                                                        }
+                                                                    }
+                                                                },
+                                                                onHold = { hold ->
+                                                                    activeSubTabPopup = if (hold) tab else null
+                                                                },
+                                                                onTap = {
                                                                     if (!selected) {
                                                                         tabNavigator.current = tab
                                                                     } else {
@@ -389,15 +696,18 @@ object HomeScreen : Screen() {
                                                                         activeSubTabPopup = null
                                                                     }
                                                                 },
-                                                                onLongClick = {
+                                                                onLongPress = {
+                                                                    if (selected) {
+                                                                        if (tab is HomeTab && !alwaysShowSubTabsHome) {
+                                                                            activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                                                                        } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
+                                                                            activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                                                                        }
+                                                                    }
                                                                     if (tab is LibraryTab) {
                                                                         LibraryTab.toggleCategoryBarEvent.trySend(Unit)
                                                                     } else if (tab is MoreTab) {
                                                                         showActionPopup = !showActionPopup
-                                                                    } else if (tab is HomeTab && !alwaysShowSubTabsHome) {
-                                                                        activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
-                                                                    } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
-                                                                        activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
                                                                     }
                                                                 },
                                                             ),
@@ -440,25 +750,25 @@ object HomeScreen : Screen() {
                                                                         LibraryTab.searchEvent.trySend(Unit)
                                                                         showActionPopup = false
                                                                     },
-                                                                    modifier = Modifier.size(36.dp),
+                                                                    modifier = Modifier.size(bottomBarButtonSize),
                                                                 ) {
-                                                                    Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(20.dp))
+                                                                    Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(bottomBarIconSize))
                                                                 }
                                                                 IconButton(
                                                                     onClick = {
                                                                         LibraryTab.filterSettingsEvent.trySend(Unit)
                                                                         showActionPopup = false
                                                                     },
-                                                                    modifier = Modifier.size(36.dp),
+                                                                    modifier = Modifier.size(bottomBarButtonSize),
                                                                 ) {
-                                                                    Icon(Icons.Outlined.FilterList, contentDescription = "Filter", modifier = Modifier.size(20.dp))
+                                                                    Icon(Icons.Outlined.FilterList, contentDescription = "Filter", modifier = Modifier.size(bottomBarIconSize))
                                                                 }
                                                                 Box {
                                                                     IconButton(
                                                                         onClick = { showLibraryMoreMenu = true },
-                                                                        modifier = Modifier.size(36.dp),
+                                                                        modifier = Modifier.size(bottomBarButtonSize),
                                                                     ) {
-                                                                        Icon(Icons.Outlined.MoreVert, contentDescription = "More Options", modifier = Modifier.size(20.dp))
+                                                                        Icon(Icons.Outlined.MoreVert, contentDescription = "More Options", modifier = Modifier.size(bottomBarIconSize))
                                                                     }
                                                                     DropdownMenu(
                                                                         expanded = showLibraryMoreMenu,
@@ -782,22 +1092,62 @@ object HomeScreen : Screen() {
         alwaysShowLabel: Boolean,
         // SY <--
         showLabel: Boolean = true,
+        subTabButtonBounds: Map<String, ButtonActionBounds>,
+        onHover: (String?) -> Unit,
+        onHold: (Boolean) -> Unit = {},
     ) {
         val tabNavigator = LocalTabNavigator.current
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val alwaysShowSubTabsHome by uiPreferences.alwaysShowSubTabsHome().collectAsState()
+        val alwaysShowSubTabsBrowse by uiPreferences.alwaysShowSubTabsBrowse().collectAsState()
+        var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
+        var showActionPopup by remember { mutableStateOf(false) }
+
+        var itemGlobalOffset by remember { mutableStateOf(Offset.Zero) }
+        val bottomBarHeight = remember { uiPreferences.bottomBarHeight() }.collectAsState().value
         NavigationBarItem(
-            selected = selected,
-            onClick = {
-                if (!selected) {
-                    tabNavigator.current = tab
-                } else {
-                    scope.launch { tab.onReselect(navigator) }
+            modifier = Modifier
+                .height(bottomBarHeight.dp)
+                .onGloballyPositioned { coordinates ->
+                    itemGlobalOffset = coordinates.positionInRoot()
                 }
-            },
+                .subTabBarGestureDetector(
+                    tab = tab,
+                    selected = selected,
+                    itemGlobalOffset = itemGlobalOffset,
+                    subTabButtonBounds = subTabButtonBounds,
+                    scope = scope,
+                    onHover = onHover,
+                    onHold = onHold,
+                    onTap = {
+                        if (!selected) {
+                            tabNavigator.current = tab
+                        } else {
+                            scope.launch { tab.onReselect(navigator) }
+                        }
+                    },
+                    onLongPress = {
+                        if (selected) {
+                            if (tab is HomeTab && !alwaysShowSubTabsHome) {
+                                activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                            } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
+                                activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                            }
+                        }
+                        if (tab is LibraryTab) {
+                            LibraryTab.toggleCategoryBarEvent.trySend(Unit)
+                        } else if (tab is MoreTab) {
+                            showActionPopup = !showActionPopup
+                        }
+                    },
+                ),
+            selected = selected,
+            onClick = {},
             icon = { NavigationIconItem(tab) },
-            label = if (showLabel) {
+            label = if (showLabel && bottomBarHeight >= 56) {
                 {
                     Text(
                         text = tab.options.title,
@@ -809,7 +1159,10 @@ object HomeScreen : Screen() {
             } else {
                 null
             },
-            alwaysShowLabel = alwaysShowLabel,
+            alwaysShowLabel = alwaysShowLabel && bottomBarHeight >= 56,
+            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                indicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+            ),
         )
     }
 
@@ -896,11 +1249,14 @@ object HomeScreen : Screen() {
                 }
             },
         ) {
+            val bottomBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.bottomBarHeight().collectAsState().value
+            val bottomBarIconSize = (bottomBarHeight * 0.38f).coerceAtLeast(22f).dp
             Icon(
                 painter = tab.options.icon!!,
                 contentDescription = tab.options.title,
                 // TODO: https://issuetracker.google.com/u/0/issues/316327367
                 tint = LocalContentColor.current,
+                modifier = Modifier.size(bottomBarIconSize),
             )
         }
     }
@@ -935,14 +1291,29 @@ object HomeScreen : Screen() {
 private fun SubTabButton(
     text: String,
     selected: Boolean,
+    modifier: Modifier = Modifier,
+    hovered: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
+    val subBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.subBarHeight().collectAsState().value
+    val fontSize = (subBarHeight * 0.35f).coerceIn(6f, 14f).sp
     Surface(
-        onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else if (hovered) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        } else {
+            Color.Transparent
+        },
         contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.height(32.dp),
+        modifier = modifier
+            .height(subBarHeight.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 12.dp),
@@ -950,8 +1321,242 @@ private fun SubTabButton(
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = fontSize),
             )
+        }
+    }
+}
+
+class ButtonActionBounds(
+    val bounds: Rect,
+    val action: () -> Unit,
+)
+
+fun Modifier.subTabBarGestureDetector(
+    tab: cafe.adriel.voyager.navigator.tab.Tab,
+    selected: Boolean,
+    itemGlobalOffset: Offset,
+    subTabButtonBounds: Map<String, ButtonActionBounds>,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onHover: (String?) -> Unit,
+    onHold: (Boolean) -> Unit,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+): Modifier = this.pointerInput(tab, selected, itemGlobalOffset) {
+    awaitPointerEventScope {
+        while (true) {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val isSubBarTab = tab is HomeTab || tab is BrowseTab || tab is LibraryTab
+
+            var isLongPressed = false
+            val longPressJob = scope.launch {
+                delay(400)
+                isLongPressed = true
+                if (!selected && isSubBarTab) {
+                    onHold(true)
+                } else {
+                    onLongPress()
+                }
+            }
+
+            var pointer = down
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val dragChange = event.changes.firstOrNull { it.id == pointer.id }
+                if (dragChange == null || dragChange.pressed.not()) {
+                    longPressJob.cancel()
+                    if (isLongPressed) {
+                        if (!selected && isSubBarTab) {
+                            val releasePos = (dragChange?.position ?: pointer.position) + itemGlobalOffset
+                            val hoveredButton = subTabButtonBounds.entries.find { it.value.bounds.contains(releasePos) }
+                            if (hoveredButton != null) {
+                                hoveredButton.value.action()
+                            }
+                            onHold(false)
+                        }
+                    } else {
+                        onTap()
+                    }
+                    onHover(null)
+                    break
+                }
+                pointer = dragChange
+                if (isLongPressed && !selected && isSubBarTab) {
+                    val currentPos = dragChange.position + itemGlobalOffset
+                    val hoveredButton = subTabButtonBounds.entries.find { it.value.bounds.contains(currentPos) }
+                    onHover(hoveredButton?.key)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditCategoryPopup(
+    category: Category,
+    categories: List<Category>,
+    onDismissRequest: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val renameCategory = remember { Injekt.get<RenameCategory>() }
+    val deleteCategory = remember { Injekt.get<DeleteCategory>() }
+    val hideCategory = remember { Injekt.get<HideCategory>() }
+
+    var name by remember { mutableStateOf(category.name) }
+    var parentId by remember { mutableStateOf(category.parentId) }
+    val isHidden = category.hidden
+
+    val parentOptions = remember(categories, category) {
+        categories
+            .filter { it.parentId == null }
+            .filterNot { it.isSystemCategory || it.id == category.id }
+    }
+
+    var showParentDropdown by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        androidx.compose.runtime.SideEffect {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                window?.let {
+                    it.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    it.attributes.blurBehindRadius = 60
+                    it.setDimAmount(0.15f)
+                }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .padding(28.dp)
+                .wrapContentHeight(),
+        ) {
+            GlassSurface(
+                shape = RoundedCornerShape(28.dp),
+                style = GlassDefaults.prominentStyle(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        text = "Edit Category",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text(text = stringResource(MR.strings.name)) },
+                        singleLine = true,
+                    )
+
+                    // Parent selector
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { showParentDropdown = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            val parentName = parentOptions.find { it.id == parentId }?.name ?: "None (Parent Category)"
+                            Text(text = "Parent: $parentName")
+                        }
+                        DropdownMenu(
+                            expanded = showParentDropdown,
+                            onDismissRequest = { showParentDropdown = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("None (Parent Category)") },
+                                onClick = {
+                                    parentId = null
+                                    showParentDropdown = false
+                                },
+                            )
+                            parentOptions.forEach { parent ->
+                                DropdownMenuItem(
+                                    text = { Text(parent.name) },
+                                    onClick = {
+                                        parentId = parent.id
+                                        showParentDropdown = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    // Hide / Show and Delete Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        hideCategory.await(category)
+                                    } catch (e: Exception) {
+                                        // ignore
+                                    }
+                                    onDismissRequest()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(text = if (isHidden) "Show" else "Hide")
+                        }
+
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        deleteCategory.await(category.id)
+                                    } catch (e: Exception) {
+                                        // ignore
+                                    }
+                                    onDismissRequest()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(text = stringResource(MR.strings.action_delete))
+                        }
+                    }
+
+                    // Save / Cancel Actions
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = onDismissRequest) {
+                            Text(text = stringResource(MR.strings.action_cancel))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        renameCategory.await(category, name, parentId)
+                                    } catch (e: Exception) {
+                                        // ignore
+                                    }
+                                    onDismissRequest()
+                                }
+                            },
+                        ) {
+                            Text(text = stringResource(MR.strings.action_ok))
+                        }
+                    }
+                }
+            }
         }
     }
 }
