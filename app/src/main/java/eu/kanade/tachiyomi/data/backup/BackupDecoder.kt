@@ -22,6 +22,14 @@ class BackupDecoder(
      * Decode a potentially-gzipped backup.
      */
     fun decode(uri: Uri): Backup {
+        try {
+            val external = ExternalBackupDecoder(context).decodeExternal(uri)
+            if (external != null) {
+                return external
+            }
+        } catch (_: Exception) {
+            // Fall back to native decoder
+        }
         return context.contentResolver.openInputStream(uri)!!.use { inputStream ->
             val source = inputStream.source().buffer()
 
