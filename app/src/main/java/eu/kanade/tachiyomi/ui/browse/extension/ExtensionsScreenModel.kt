@@ -244,6 +244,18 @@ class ExtensionsScreenModel(
         }
     }
 
+    fun installJarExtension(uri: android.net.Uri) {
+        screenModelScope.launchIO {
+            val context = uy.kohesive.injekt.Injekt.get<android.app.Application>()
+            val success = eu.kanade.tachiyomi.extension.JarExtensionManager.installJar(context, uri)
+            if (success) {
+                _events.trySend(Event.SideloadSuccess("JAR Extension"))
+            } else {
+                _events.trySend(Event.SideloadError("JAR Extension", Exception("Failed to install JAR file")))
+            }
+        }
+    }
+
     fun updateExtension(extension: Extension.Installed) {
         screenModelScope.launchIO {
             extensionManager.updateExtension(extension).collectToInstallUpdate(extension)

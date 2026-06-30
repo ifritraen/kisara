@@ -178,6 +178,8 @@ kotlin {
             "-opt-in=kotlinx.coroutines.FlowPreview",
             "-opt-in=kotlinx.coroutines.InternalCoroutinesApi",
             "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
+            "-opt-in=kotlin.contracts.ExperimentalContracts",
+            "-opt-in=org.koitharu.kotatsu.parsers.InternalParsersApi",
             "-Xannotation-default-target=param-property",
         )
     }

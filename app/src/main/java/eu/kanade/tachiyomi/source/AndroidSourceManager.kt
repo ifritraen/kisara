@@ -90,7 +90,15 @@ class AndroidSourceManager(
                 ) { (a, b), c -> Triple(a, b, c) }
                 // KMK <--
                 // SY <--
-                .collectLatest { (extensions, enableExhentai/* KMK --> */, isHentaiEnabled/* KMK <-- */) ->
+                .combine(extensionManager.isInitialized) { triple, isExtInitialized ->
+                    triple to isExtInitialized
+                }
+                .combine(eu.kanade.tachiyomi.extension.JarExtensionManager.sources) { tripleAndInit, jarSources ->
+                    val (triple, isExtInitialized) = tripleAndInit
+                    Triple(triple, isExtInitialized, jarSources)
+                }
+                .collectLatest { (triple, isExtInitialized, jarSources) ->
+                    val (extensions, enableExhentai, isHentaiEnabled) = triple
                     val mutableMap = ConcurrentHashMap<Long, Source>(
                         mapOf(
                             LocalSource.ID to LocalSource(
@@ -125,8 +133,14 @@ class AndroidSourceManager(
                             registerStubSource(StubSource.from(it))
                         }
                     }
+                    jarSources.forEach { jarSource ->
+                        mutableMap[jarSource.id] = jarSource
+                        registerStubSource(StubSource.from(jarSource))
+                    }
                     sourcesMapFlow.value = mutableMap
-                    _isInitialized.value = true
+                    if (isExtInitialized) {
+                        _isInitialized.value = true
+                    }
                 }
         }
 

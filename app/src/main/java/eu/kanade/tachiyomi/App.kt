@@ -235,6 +235,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         initializeMigrator()
+        eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this)
     }
 
     private fun initializeMigrator() {

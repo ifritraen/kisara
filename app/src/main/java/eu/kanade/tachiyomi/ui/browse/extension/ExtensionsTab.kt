@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.browse.extension
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -53,6 +54,18 @@ fun extensionsTab(
     val context = LocalContext.current
 
     val state by extensionsScreenModel.state.collectAsState()
+    val chooseJar = rememberLauncherForActivityResult(
+        object : androidx.activity.result.contract.ActivityResultContracts.GetContent() {
+            override fun createIntent(context: android.content.Context, input: String): android.content.Intent {
+                val intent = super.createIntent(context, input)
+                return android.content.Intent.createChooser(intent, "Select Kotatsu JAR Extension")
+            }
+        },
+    ) { uri ->
+        if (uri != null) {
+            extensionsScreenModel.installJarExtension(uri)
+        }
+    }
     var privateExtensionToUninstall by remember { mutableStateOf<Extension?>(null) }
     var sideloadError by remember { mutableStateOf<Throwable?>(null) }
     var sideloadErrorExtName by remember { mutableStateOf<String?>(null) }
@@ -125,6 +138,10 @@ fun extensionsTab(
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.label_extension_repos),
                 onClick = { navigator.push(ExtensionReposScreen()) },
+            ),
+            AppBar.OverflowAction(
+                title = "Install Kotatsu JAR Extension",
+                onClick = { chooseJar.launch("*/*") },
             ),
         ),
         content = { contentPadding, _ ->
