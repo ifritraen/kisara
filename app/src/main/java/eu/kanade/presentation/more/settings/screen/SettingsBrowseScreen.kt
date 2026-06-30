@@ -54,6 +54,7 @@ object SettingsBrowseScreen : SearchableSettings {
         // SY <--
         // KMK -->
         val relatedMangasInOverflow by uiPreferences.expandRelatedMangas().collectAsState()
+        val suggestionsPreferences = remember { Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>() }
         // KMK <--
         return listOf(
             // SY -->
@@ -150,6 +151,22 @@ object SettingsBrowseScreen : SearchableSettings {
                     ),
                 ),
             ),
+            // KMK -->
+            Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.pref_suggestions_title),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = suggestionsPreferences.isSuggestionsEnabled(),
+                        title = stringResource(KMR.strings.pref_suggestions_title),
+                        subtitle = stringResource(KMR.strings.pref_suggestions_summary),
+                        onValueChanged = { isEnabled ->
+                            eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.scheduleBackground(context, isEnabled)
+                            true
+                        },
+                    ),
+                ),
+            ),
+            // KMK <--
             Preference.PreferenceGroup(
                 title = stringResource(MR.strings.pref_category_nsfw_content),
                 preferenceItems = persistentListOf(

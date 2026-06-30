@@ -1,0 +1,36 @@
+CREATE TABLE suggestions(
+    manga_id INTEGER NOT NULL PRIMARY KEY REFERENCES mangas(_id) ON DELETE CASCADE,
+    relevance REAL NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_suggestions_relevance ON suggestions(relevance);
+
+getSuggestions:
+SELECT
+    mangas.*,
+    suggestions.relevance,
+    suggestions.created_at
+FROM suggestions
+JOIN mangas ON suggestions.manga_id = mangas._id
+ORDER BY suggestions.relevance DESC;
+
+countSuggestions:
+SELECT COUNT(*)
+FROM suggestions;
+
+deleteAllSuggestions:
+DELETE FROM suggestions;
+
+insertSuggestion:
+INSERT INTO suggestions(manga_id, relevance, created_at)
+VALUES (:mangaId, :relevance, :createdAt);
+
+updateSuggestion:
+UPDATE suggestions
+SET relevance = :relevance, created_at = :createdAt
+WHERE manga_id = :mangaId;
+
+deleteSuggestion:
+DELETE FROM suggestions
+WHERE manga_id = :mangaId;

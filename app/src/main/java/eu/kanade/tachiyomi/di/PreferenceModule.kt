@@ -61,6 +61,9 @@ class PreferenceModule(val app: Application) : InjektModule {
         addSingletonFactory {
             TranslationPreferences(get())
         }
+        addSingletonFactory {
+            tachiyomi.domain.suggestions.service.SuggestionsPreferences(get())
+        }
         // KMK <--
         addSingletonFactory {
             ReaderPreferences(get())

@@ -316,9 +316,12 @@
     <string name="pref_ocr_engine">OCR Engine</string>
     <string name="pref_ocr_engine_mlkit">ML Kit (Built-in, No Download)</string>
     <string name="pref_ocr_engine_mangaocr">MangaOCR ONNX (Better for Manga, ~100MB)</string>
+    <string name="pref_ocr_engine_paddleocr">PaddleOCR PP-OCRv5 (Lightweight Multilingual, ~15MB)</string>
     <string name="pref_bubble_detection">Bubble Detection (ONNX)</string>
     <string name="pref_bubble_detection_summary">Detects speech bubble regions before OCR for more accurate text extraction. Requires ~10MB download.</string>
     <string name="pref_download_ocr_model">Download MangaOCR Models</string>
+    <string name="pref_download_paddleocr_model">Download PaddleOCR Models</string>
+    <string name="pref_download_paddleocr_model_summary">Downloads detection &amp; recognition models and dictionary (~15MB)</string>
     <string name="pref_download_bubble_model">Download Bubble Detector Model</string>
     <string name="translation_model_download_started">Downloading model… check back in a moment</string>
     <string name="translation_model_ready">Model ready ✓</string>
@@ -336,4 +339,7 @@
     <string name="category_bar_selected_font_color_accent">Accent (theme color)</string>
     <string name="category_bar_selected_font_color_custom">Custom Color</string>
     <string name="pref_category_bar_selected_font_custom_color">Custom selected font color</string>
+    <string name="pref_suggestions_title">Enable Suggestions</string>
+    <string name="pref_suggestions_summary">Show recommended manga based on your reading history and favorites</string>
+    <string name="action_suggestions">Suggestions</string>
 </resources>

@@ -1,0 +1,8 @@
+-- Migration to create suggestions table
+CREATE TABLE suggestions(
+    manga_id INTEGER NOT NULL PRIMARY KEY REFERENCES mangas(_id) ON DELETE CASCADE,
+    relevance REAL NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_suggestions_relevance ON suggestions(relevance);

@@ -209,5 +209,14 @@ class DomainModule : InjektModule {
         addFactory { UpdateExtensionRepo(get(), get()) }
         addFactory { ToggleIncognito(get()) }
         addFactory { GetIncognitoState(get(), get(), get()) }
+
+        // KMK -->
+        addSingletonFactory<tachiyomi.domain.suggestions.repository.SuggestionRepository> {
+            tachiyomi.data.suggestions.SuggestionRepositoryImpl(get())
+        }
+        addFactory { tachiyomi.domain.suggestions.interactor.GetSuggestions(get()) }
+        addFactory { tachiyomi.domain.suggestions.interactor.ClearSuggestions(get()) }
+        addFactory { tachiyomi.domain.suggestions.interactor.ReplaceSuggestions(get()) }
+        // KMK <--
     }
 }

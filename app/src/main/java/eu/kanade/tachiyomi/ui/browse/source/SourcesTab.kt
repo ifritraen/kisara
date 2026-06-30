@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.browse.source
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.TipsAndUpdates
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined._18UpRating
 import androidx.compose.material3.LocalContentColor
@@ -79,6 +80,11 @@ fun Screen.sourcesTab(
                 onClick = { navigator.push(GlobalSearchScreen(smartSearchConfig?.origTitle ?: "")) },
             ),
             // KMK -->
+            AppBar.Action(
+                title = stringResource(KMR.strings.action_suggestions),
+                icon = Icons.Outlined.TipsAndUpdates,
+                onClick = { navigator.push(eu.kanade.tachiyomi.ui.suggestions.SuggestionsScreen()) },
+            ),
             AppBar.Action(
                 title = stringResource(KMR.strings.action_toggle_nsfw_only),
                 icon = Icons.Outlined._18UpRating,
