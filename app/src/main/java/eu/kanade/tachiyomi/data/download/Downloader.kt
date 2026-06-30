@@ -349,123 +349,130 @@ class Downloader(
         if (download.source.id == MERGED_SOURCE_ID) return
         // KMK <--
 
-        val mangaDir = provider.getMangaDir(/* SY --> */ download.manga.ogTitle /* SY <-- */, download.source).getOrElse { e ->
-            download.status = Download.State.ERROR
-            notifier.onError(e.message, download.chapter.name, download.manga.title, download.manga.id)
-            return
-        }
-
-        val availSpace = DiskUtil.getAvailableStorageSpace(mangaDir)
-        if (availSpace != -1L && availSpace < MIN_DISK_SPACE) {
-            download.status = Download.State.ERROR
-            notifier.onError(
-                context.stringResource(MR.strings.download_insufficient_space),
-                download.chapter.name,
-                download.manga.title,
-                download.manga.id,
-            )
-            return
-        }
-
-        val chapterDirname = provider.getChapterDirName(
-            download.chapter.name,
-            download.chapter.scanlator,
-            download.chapter.url,
-        )
-        val tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)!!
+        val wireguardManager = uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.vpn.WireguardManager>()
+        wireguardManager.startTunnelForSource(download.source.id)
 
         try {
-            // If the page list already exists, start from the file
-            val pageList = download.pages ?: run {
-                // Otherwise, pull page list from network and add them to download object
-                val pages = download.source.getPageList(download.chapter.toSChapter())
-
-                if (pages.isEmpty()) {
-                    throw Exception(context.stringResource(MR.strings.page_list_empty_error))
-                }
-                // Don't trust index from source
-                val reIndexedPages = pages.mapIndexed { index, page -> Page(index, page.url, page.imageUrl, page.uri) }
-                download.pages = reIndexedPages
-                reIndexedPages
-            }
-
-            val dataSaver = if (sourcePreferences.dataSaverDownloader().get()) {
-                DataSaver(download.source, sourcePreferences)
-            } else {
-                DataSaver.NoOp
-            }
-
-            // Delete all temporary (unfinished) files
-            tmpDir.listFiles()
-                ?.filter { it.extension == "tmp" }
-                ?.forEach { it.delete() }
-
-            download.status = Download.State.DOWNLOADING
-
-            // Start downloading images, consider we can have downloaded images already
-            pageList.asFlow().flatMapMerge(concurrency = downloadPreferences.parallelPageLimit().get()) { page ->
-                flow {
-                    // Fetch image URL if necessary
-                    if (page.imageUrl.isNullOrEmpty()) {
-                        page.status = Page.State.LoadPage
-                        try {
-                            page.imageUrl = download.source.getImageUrl(page)
-                        } catch (e: Throwable) {
-                            page.status = Page.State.Error(e)
-                        }
-                    }
-
-                    withIOContext { getOrDownloadImage(page, download, tmpDir, dataSaver) }
-                    emit(page)
-                }
-                    .flowOn(Dispatchers.IO)
-            }
-                .collect {
-                    // Do when page is downloaded.
-                    notifier.onProgressChange(download)
-                }
-
-            // Do after download completes
-
-            if (!isDownloadSuccessful(download, tmpDir)) {
+            val mangaDir = provider.getMangaDir(/* SY --> */ download.manga.ogTitle /* SY <-- */, download.source).getOrElse { e ->
                 download.status = Download.State.ERROR
+                notifier.onError(e.message, download.chapter.name, download.manga.title, download.manga.id)
                 return
             }
 
-            createComicInfoFile(
-                tmpDir,
-                download.manga,
-                download.chapter,
-                download.source,
+            val availSpace = DiskUtil.getAvailableStorageSpace(mangaDir)
+            if (availSpace != -1L && availSpace < MIN_DISK_SPACE) {
+                download.status = Download.State.ERROR
+                notifier.onError(
+                    context.stringResource(MR.strings.download_insufficient_space),
+                    download.chapter.name,
+                    download.manga.title,
+                    download.manga.id,
+                )
+                return
+            }
+
+            val chapterDirname = provider.getChapterDirName(
+                download.chapter.name,
+                download.chapter.scanlator,
+                download.chapter.url,
             )
+            val tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)!!
 
-            // Only rename the directory if it's downloaded
-            if (downloadPreferences.saveChaptersAsCBZ().get()) {
-                archiveChapter(mangaDir, chapterDirname, tmpDir)
-            } else {
-                tmpDir.renameTo(chapterDirname)
-            }
-            cache.addChapter(chapterDirname, mangaDir, download.manga)
+            try {
+                // If the page list already exists, start from the file
+                val pageList = download.pages ?: run {
+                    // Otherwise, pull page list from network and add them to download object
+                    val pages = download.source.getPageList(download.chapter.toSChapter())
 
-            DiskUtil.createNoMediaFile(tmpDir, context)
-
-            download.status = Download.State.DOWNLOADED
-
-            val translationPreferences = Injekt.get<tachiyomi.domain.translation.TranslationPreferences>()
-            if (translationPreferences.autoTranslateAfterDownload().get()) {
-                try {
-                    val translationManager = Injekt.get<eu.kanade.translation.TranslationManager>()
-                    translationManager.translateChapter(download.manga, download.chapter)
-                } catch (e: Throwable) {
-                    logcat(LogPriority.ERROR, e) { "Auto-translation trigger failed" }
+                    if (pages.isEmpty()) {
+                        throw Exception(context.stringResource(MR.strings.page_list_empty_error))
+                    }
+                    // Don't trust index from source
+                    val reIndexedPages = pages.mapIndexed { index, page -> Page(index, page.url, page.imageUrl, page.uri) }
+                    download.pages = reIndexedPages
+                    reIndexedPages
                 }
+
+                val dataSaver = if (sourcePreferences.dataSaverDownloader().get()) {
+                    DataSaver(download.source, sourcePreferences)
+                } else {
+                    DataSaver.NoOp
+                }
+
+                // Delete all temporary (unfinished) files
+                tmpDir.listFiles()
+                    ?.filter { it.extension == "tmp" }
+                    ?.forEach { it.delete() }
+
+                download.status = Download.State.DOWNLOADING
+
+                // Start downloading images, consider we can have downloaded images already
+                pageList.asFlow().flatMapMerge(concurrency = downloadPreferences.parallelPageLimit().get()) { page ->
+                    flow {
+                        // Fetch image URL if necessary
+                        if (page.imageUrl.isNullOrEmpty()) {
+                            page.status = Page.State.LoadPage
+                            try {
+                                page.imageUrl = download.source.getImageUrl(page)
+                            } catch (e: Throwable) {
+                                page.status = Page.State.Error(e)
+                            }
+                        }
+
+                        withIOContext { getOrDownloadImage(page, download, tmpDir, dataSaver) }
+                        emit(page)
+                    }
+                        .flowOn(Dispatchers.IO)
+                }
+                    .collect {
+                        // Do when page is downloaded.
+                        notifier.onProgressChange(download)
+                    }
+
+                // Do after download completes
+
+                if (!isDownloadSuccessful(download, tmpDir)) {
+                    download.status = Download.State.ERROR
+                    return
+                }
+
+                createComicInfoFile(
+                    tmpDir,
+                    download.manga,
+                    download.chapter,
+                    download.source,
+                )
+
+                // Only rename the directory if it's downloaded
+                if (downloadPreferences.saveChaptersAsCBZ().get()) {
+                    archiveChapter(mangaDir, chapterDirname, tmpDir)
+                } else {
+                    tmpDir.renameTo(chapterDirname)
+                }
+                cache.addChapter(chapterDirname, mangaDir, download.manga)
+
+                DiskUtil.createNoMediaFile(tmpDir, context)
+
+                download.status = Download.State.DOWNLOADED
+
+                val translationPreferences = Injekt.get<tachiyomi.domain.translation.TranslationPreferences>()
+                if (translationPreferences.autoTranslateAfterDownload().get()) {
+                    try {
+                        val translationManager = Injekt.get<eu.kanade.translation.TranslationManager>()
+                        translationManager.translateChapter(download.manga, download.chapter)
+                    } catch (e: Throwable) {
+                        logcat(LogPriority.ERROR, e) { "Auto-translation trigger failed" }
+                    }
+                }
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                // If the page list threw, it will resume here
+                logcat(LogPriority.ERROR, error)
+                download.status = Download.State.ERROR
+                notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
             }
-        } catch (error: Throwable) {
-            if (error is CancellationException) throw error
-            // If the page list threw, it will resume here
-            logcat(LogPriority.ERROR, error)
-            download.status = Download.State.ERROR
-            notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
+        } finally {
+            wireguardManager.stopTunnelForSource(download.source.id)
         }
     }
 

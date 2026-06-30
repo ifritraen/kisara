@@ -71,6 +71,7 @@ class AppModule(val app: Application) : InjektModule {
 
     override fun InjektRegistrar.registerInjectables() {
         addSingleton(app)
+        addSingletonFactory { eu.kanade.tachiyomi.vpn.WireguardManager(app) }
 
         addSingletonFactory<SqlDriver> {
             // SY -->

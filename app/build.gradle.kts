@@ -204,6 +204,9 @@ dependencies {
     implementation(projects.presentationWidget)
     implementation(projects.telemetry)
 
+    // WireGuard VPN
+    implementation("com.wireguard.android:tunnel:1.0.20230706")
+
     // Compose
     implementation(compose.activity)
     implementation(compose.foundation)

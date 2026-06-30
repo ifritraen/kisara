@@ -148,6 +148,10 @@ open class BrowseSourceScreenModel(
     // KMK <--
 
     init {
+        val wireguardManager = Injekt.get<eu.kanade.tachiyomi.vpn.WireguardManager>()
+        screenModelScope.launchIO {
+            wireguardManager.startTunnelForSource(sourceId)
+        }
         // KMK -->
         screenModelScope.launch {
             var retry = 10
@@ -697,4 +701,12 @@ open class BrowseSourceScreenModel(
         }
     }
     // EXH <--
+
+    override fun onDispose() {
+        super.onDispose()
+        val wireguardManager = Injekt.get<eu.kanade.tachiyomi.vpn.WireguardManager>()
+        screenModelScope.launchIO {
+            wireguardManager.stopTunnelForSource(sourceId)
+        }
+    }
 }

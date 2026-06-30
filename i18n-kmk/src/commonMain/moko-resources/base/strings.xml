@@ -344,4 +344,11 @@
     <string name="action_suggestions">Suggestions</string>
     <string name="pref_download_concurrent_chapters">Concurrent chapter downloads</string>
     <string name="pref_download_concurrent_chapters_summary">Number of chapters to download at the same time from each source</string>
+    <string name="pref_category_vpn">VPN Settings</string>
+    <string name="pref_vpn_summary">Manage WireGuard VPN profiles and auto-routing</string>
+    <string name="pref_vpn_import">Import WireGuard profile (.conf)</string>
+    <string name="pref_vpn_import_summary">Select a WireGuard configuration file to import</string>
+    <string name="pref_vpn_profiles">VPN Profiles</string>
+    <string name="pref_vpn_sources">Source-Specific VPN</string>
+    <string name="pref_vpn_default_profile">Default VPN Profile</string>
 </resources>

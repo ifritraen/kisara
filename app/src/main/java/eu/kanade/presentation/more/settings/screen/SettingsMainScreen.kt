@@ -241,6 +241,12 @@ object SettingsMainScreen : Screen() {
             icon = Icons.Outlined.Security,
             screen = SettingsSecurityScreen,
         ),
+        Item(
+            titleRes = KMR.strings.pref_category_vpn,
+            subtitleRes = KMR.strings.pref_vpn_summary,
+            icon = Icons.Outlined.Security,
+            screen = SettingsVpnScreen,
+        ),
         // SY -->
         Item(
             titleRes = SYMR.strings.pref_category_eh,
