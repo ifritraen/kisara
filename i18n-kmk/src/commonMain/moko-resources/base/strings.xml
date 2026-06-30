@@ -342,4 +342,6 @@
     <string name="pref_suggestions_title">Enable Suggestions</string>
     <string name="pref_suggestions_summary">Show recommended manga based on your reading history and favorites</string>
     <string name="action_suggestions">Suggestions</string>
+    <string name="pref_download_concurrent_chapters">Concurrent chapter downloads</string>
+    <string name="pref_download_concurrent_chapters_summary">Number of chapters to download at the same time from each source</string>
 </resources>

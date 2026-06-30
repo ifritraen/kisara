@@ -209,26 +209,28 @@ class Downloader(
             val activeDownloadsFlow = combine(
                 queueState,
                 downloadPreferences.parallelSourceLimit().changes(),
-            ) { a, b -> a to b }.transformLatest { (queue, parallelCount) ->
-                while (true) {
-                    val activeDownloads = queue.asSequence()
-                        // Ignore completed downloads, leave them in the queue
-                        .filter { it.status.value <= Download.State.DOWNLOADING.value }
-                        .groupBy { it.source }
-                        .toList()
-                        .take(parallelCount)
-                        .map { (_, downloads) -> downloads.first() }
-                    emit(activeDownloads)
+                downloadPreferences.parallelChapterLimit().changes(),
+            ) { q, sourceLimit, chapterLimit -> Triple(q, sourceLimit, chapterLimit) }
+                .transformLatest { (queue, parallelCount, parallelChapterLimit) ->
+                    while (true) {
+                        val activeDownloads = queue.asSequence()
+                            // Ignore completed downloads, leave them in the queue
+                            .filter { it.status.value <= Download.State.DOWNLOADING.value }
+                            .groupBy { it.source }
+                            .toList()
+                            .take(parallelCount)
+                            .flatMap { (_, downloads) -> downloads.take(parallelChapterLimit) }
+                        emit(activeDownloads)
 
-                    if (activeDownloads.isEmpty()) break
-                    // Suspend until a download enters the ERROR state
-                    val activeDownloadsErroredFlow =
-                        combine(activeDownloads.map(Download::statusFlow)) { states ->
-                            states.contains(Download.State.ERROR)
-                        }.filter { it }
-                    activeDownloadsErroredFlow.first()
+                        if (activeDownloads.isEmpty()) break
+                        // Suspend until a download enters the ERROR state
+                        val activeDownloadsErroredFlow =
+                            combine(activeDownloads.map(Download::statusFlow)) { states ->
+                                states.contains(Download.State.ERROR)
+                            }.filter { it }
+                        activeDownloadsErroredFlow.first()
+                    }
                 }
-            }
                 .distinctUntilChanged()
 
             // Use supervisorScope to cancel child jobs when the downloader job is cancelled
@@ -448,6 +450,16 @@ class Downloader(
             DiskUtil.createNoMediaFile(tmpDir, context)
 
             download.status = Download.State.DOWNLOADED
+
+            val translationPreferences = Injekt.get<tachiyomi.domain.translation.TranslationPreferences>()
+            if (translationPreferences.autoTranslateAfterDownload().get()) {
+                try {
+                    val translationManager = Injekt.get<eu.kanade.translation.TranslationManager>()
+                    translationManager.translateChapter(download.manga, download.chapter)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) { "Auto-translation trigger failed" }
+                }
+            }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             // If the page list threw, it will resume here

@@ -41,6 +41,7 @@ object SettingsDownloadScreen : SearchableSettings {
         val downloadPreferences = remember { Injekt.get<DownloadPreferences>() }
         val parallelSourceLimit by downloadPreferences.parallelSourceLimit().collectAsState()
         val parallelPageLimit by downloadPreferences.parallelPageLimit().collectAsState()
+        val parallelChapterLimit by downloadPreferences.parallelChapterLimit().collectAsState()
         return listOf(
             Preference.PreferenceItem.SwitchPreference(
                 preference = downloadPreferences.downloadOnlyOverWifi(),
@@ -67,6 +68,13 @@ object SettingsDownloadScreen : SearchableSettings {
                 title = stringResource(MR.strings.pref_download_concurrent_pages),
                 subtitle = stringResource(MR.strings.pref_download_concurrent_pages_summary),
                 onValueChanged = { downloadPreferences.parallelPageLimit().set(it) },
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                value = parallelChapterLimit,
+                valueRange = 1..5,
+                title = stringResource(KMR.strings.pref_download_concurrent_chapters),
+                subtitle = stringResource(KMR.strings.pref_download_concurrent_chapters_summary),
+                onValueChanged = { downloadPreferences.parallelChapterLimit().set(it) },
             ),
             getDeleteChaptersGroup(
                 downloadPreferences = downloadPreferences,

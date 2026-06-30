@@ -15,7 +15,6 @@ import okhttp3.Response
 import okhttp3.ResponseBody
 import org.koitharu.kotatsu.parsers.MangaLoaderContext
 import org.koitharu.kotatsu.parsers.MangaParser
-import org.koitharu.kotatsu.parsers.bitmap.Bitmap as KotatsuBitmap
 import org.koitharu.kotatsu.parsers.config.ConfigKey
 import org.koitharu.kotatsu.parsers.config.MangaSourceConfig
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -26,17 +25,19 @@ import java.io.File
 import java.lang.reflect.Method
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import org.koitharu.kotatsu.parsers.bitmap.Bitmap as KotatsuBitmap
 
 class PluginClassLoader(
     dexPath: String,
     optimizedDirectory: String?,
     librarySearchPath: String?,
-    parent: ClassLoader
+    parent: ClassLoader,
 ) : DexClassLoader(dexPath, optimizedDirectory, librarySearchPath, parent) {
 
     override fun loadClass(name: String, resolve: Boolean): Class<*> {
         if (name == "org.koitharu.kotatsu.parsers.MangaParserFactoryKt" ||
-            name == "org.koitharu.kotatsu.parsers.model.MangaParserSource") {
+            name == "org.koitharu.kotatsu.parsers.model.MangaParserSource"
+        ) {
             return findLoadedClass(name) ?: findClass(name)
         }
 
@@ -72,7 +73,7 @@ data class LoadedJarPlugin(
     val jarName: String,
     val classLoader: PluginClassLoader,
     val factoryMethod: Method,
-    val sources: List<MangaSource>
+    val sources: List<MangaSource>,
 )
 
 object JarExtensionManager {
@@ -99,7 +100,7 @@ object JarExtensionManager {
                 wrappedSources.add(
                     JarCatalogueSource(source) {
                         instantiateMangaParser(plugin, source, loaderContext)
-                    }
+                    },
                 )
             }
         }
@@ -145,7 +146,7 @@ object JarExtensionManager {
                     jarFile.absolutePath,
                     cacheDir,
                     null,
-                    parentClassLoader
+                    parentClassLoader,
                 )
 
                 val factoryClass = classLoader.loadClass("org.koitharu.kotatsu.parsers.MangaParserFactoryKt")
@@ -172,7 +173,7 @@ object JarExtensionManager {
     private fun instantiateMangaParser(
         plugin: LoadedJarPlugin,
         source: MangaSource,
-        context: MangaLoaderContext
+        context: MangaLoaderContext,
     ): MangaParser {
         val enumClass = plugin.factoryMethod.parameterTypes[0]
         val matchingEnum = enumClass.enumConstants?.find { (it as? MangaSource)?.name == source.name }

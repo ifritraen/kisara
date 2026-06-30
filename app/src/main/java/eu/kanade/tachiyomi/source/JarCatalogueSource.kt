@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.source
 
 import android.graphics.Canvas
-import android.graphics.Rect as AndroidRect
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
@@ -12,8 +11,6 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
 import org.koitharu.kotatsu.parsers.MangaParser
-import org.koitharu.kotatsu.parsers.bitmap.Bitmap as KotatsuBitmap
-import org.koitharu.kotatsu.parsers.bitmap.Rect as KotatsuRect
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
 import org.koitharu.kotatsu.parsers.model.MangaListFilter
@@ -22,6 +19,9 @@ import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.model.MangaState
 import org.koitharu.kotatsu.parsers.model.SortOrder
 import java.io.ByteArrayOutputStream
+import android.graphics.Rect as AndroidRect
+import org.koitharu.kotatsu.parsers.bitmap.Bitmap as KotatsuBitmap
+import org.koitharu.kotatsu.parsers.bitmap.Rect as KotatsuRect
 
 class AndroidBitmapWrapper(val bitmap: android.graphics.Bitmap) : KotatsuBitmap {
     override val width: Int = bitmap.width
@@ -38,7 +38,7 @@ class AndroidBitmapWrapper(val bitmap: android.graphics.Bitmap) : KotatsuBitmap 
 
 class JarCatalogueSource(
     val originalSource: MangaSource,
-    private val parserFactory: () -> MangaParser
+    private val parserFactory: () -> MangaParser,
 ) : HttpSource() {
 
     override val name: String = originalSource.name.lowercase().replaceFirstChar { it.uppercase() }
@@ -59,7 +59,7 @@ class JarCatalogueSource(
         val list = parser.getList(offset, SortOrder.POPULARITY, MangaListFilter.EMPTY)
         return MangasPage(
             mangas = list.map { it.toSManga() },
-            hasNextPage = list.isNotEmpty()
+            hasNextPage = list.isNotEmpty(),
         )
     }
 
@@ -73,7 +73,7 @@ class JarCatalogueSource(
         val list = parser.getList(offset, order, MangaListFilter.EMPTY)
         return MangasPage(
             mangas = list.map { it.toSManga() },
-            hasNextPage = list.isNotEmpty()
+            hasNextPage = list.isNotEmpty(),
         )
     }
 
@@ -83,7 +83,7 @@ class JarCatalogueSource(
         val list = parser.getList(offset, SortOrder.RELEVANCE, searchFilter)
         return MangasPage(
             mangas = list.map { it.toSManga() },
-            hasNextPage = list.isNotEmpty()
+            hasNextPage = list.isNotEmpty(),
         )
     }
 
@@ -112,7 +112,7 @@ class JarCatalogueSource(
             id = page.index.toLong(),
             url = page.url,
             preview = null,
-            source = originalSource
+            source = originalSource,
         )
         return parser.getPageUrl(kPage)
     }
@@ -163,7 +163,7 @@ class JarCatalogueSource(
         },
         authors = this.author?.split(",")?.map { it.trim() }?.toSet().orEmpty(),
         chapters = null,
-        source = originalSource
+        source = originalSource,
     )
 
     private fun SChapter.toKotatsuChapter(): MangaChapter = MangaChapter(
@@ -175,7 +175,7 @@ class JarCatalogueSource(
         scanlator = this.scanlator,
         uploadDate = this.date_upload,
         branch = null,
-        source = originalSource
+        source = originalSource,
     )
 
     private fun MangaChapter.toSChapter(): SChapter = SChapter.create().apply {
@@ -192,6 +192,6 @@ class JarCatalogueSource(
     private fun MangaPage.toPage(index: Int): Page = Page(
         index = index,
         url = this.url,
-        imageUrl = null
+        imageUrl = null,
     )
 }
