@@ -182,7 +182,7 @@ internal object ExtensionLoader {
         if (extPkgs.isEmpty()) return emptyList()
 
         // Load each extension with throttled concurrency (Semaphore) to prevent ART ClassLinker lock contention & GC blocks
-        val semaphore = Semaphore(3)
+        val semaphore = Semaphore(8)
         return runBlocking {
             // KMK -->
             val extRepos = getExtensionRepo.getAll()
