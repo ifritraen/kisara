@@ -6,6 +6,7 @@ import dalvik.system.DexClassLoader
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.source.AndroidBitmapWrapper
 import eu.kanade.tachiyomi.source.JarCatalogueSource
+import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -250,8 +251,8 @@ object JarExtensionManager {
                 return withContext(Dispatchers.Main) {
                     suspendCancellableCoroutine { continuation ->
                         val webView = android.webkit.WebView(context)
-                        webView.settings.javaScriptEnabled = true
-                        webView.settings.domStorageEnabled = true
+                        webView.setDefaultSettings()
+                        webView.settings.userAgentString = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().defaultUserAgentProvider()
 
                         var isFinished = false
                         val cleanUp = {
@@ -321,8 +322,8 @@ object JarExtensionManager {
                 return withContext(Dispatchers.Main) {
                     suspendCancellableCoroutine { continuation ->
                         val webView = android.webkit.WebView(context)
-                        webView.settings.javaScriptEnabled = true
-                        webView.settings.domStorageEnabled = true
+                        webView.setDefaultSettings()
+                        webView.settings.userAgentString = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().defaultUserAgentProvider()
 
                         val captured = Collections.synchronizedList(mutableListOf<InterceptedRequest>())
 
@@ -397,8 +398,8 @@ object JarExtensionManager {
                 return withContext(Dispatchers.Main) {
                     suspendCancellableCoroutine { continuation ->
                         val webView = android.webkit.WebView(context)
-                        webView.settings.javaScriptEnabled = true
-                        webView.settings.domStorageEnabled = true
+                        webView.setDefaultSettings()
+                        webView.settings.userAgentString = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().defaultUserAgentProvider()
 
                         val captured = Collections.synchronizedList(mutableListOf<String>())
 

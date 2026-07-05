@@ -78,6 +78,7 @@ import exh.log.EnhancedFilePrinter
 import exh.log.XLogLogcatLogger
 import exh.log.xLogD
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import logcat.AndroidLogcatLogger
@@ -259,6 +260,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         initializeMigrator()
         scope.launchIO {
+            delay(10000)
             eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this@App)
         }
     }

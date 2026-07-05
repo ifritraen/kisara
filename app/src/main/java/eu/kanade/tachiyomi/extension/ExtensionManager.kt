@@ -24,6 +24,7 @@ import exh.source.MERGED_SOURCE_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,6 +88,7 @@ class ExtensionManager(
 
     init {
         scope.launch(Dispatchers.IO) {
+            delay(5000)
             initExtensions()
         }
         ExtensionInstallReceiver(InstallationListener()).register(context)

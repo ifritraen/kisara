@@ -11,9 +11,11 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notify
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -84,9 +86,9 @@ class WireguardManager(private val context: Context) {
         return if (file.exists()) file.readText() else null
     }
 
-    suspend fun startTunnel(name: String): Boolean {
-        val configText = getProfileConfig(name) ?: return false
-        return try {
+    suspend fun startTunnel(name: String): Boolean = withContext(Dispatchers.IO) {
+        val configText = getProfileConfig(name) ?: return@withContext false
+        try {
             val config = Config.parse(ByteArrayInputStream(configText.toByteArray()))
             backend.setState(KmkTunnel(name), State.UP, config)
             _activeTunnel.value = name
@@ -98,7 +100,7 @@ class WireguardManager(private val context: Context) {
         }
     }
 
-    suspend fun stopTunnel() {
+    suspend fun stopTunnel() = withContext(Dispatchers.IO) {
         try {
             val running = backend.runningTunnelNames
             for (tunnel in running) {
