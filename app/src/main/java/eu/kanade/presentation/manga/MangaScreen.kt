@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,12 +35,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.GTranslate
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.Button
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +58,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.animateFloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -67,6 +72,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -91,8 +99,10 @@ import eu.kanade.presentation.components.DownloadDropdownMenu
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
+import eu.kanade.presentation.components.TranslationDropdownMenu
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.manga.DownloadAction
+import eu.kanade.presentation.manga.TranslationAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.manga.components.ChapterHeader
 import eu.kanade.presentation.manga.components.ChapterTranslationAction
@@ -116,6 +126,7 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.getNameForMangaInfo
 import eu.kanade.tachiyomi.source.isIncognitoModeEnabled
+import eu.kanade.tachiyomi.source.isLocalOrStub
 import eu.kanade.tachiyomi.source.online.MetadataSource
 import eu.kanade.tachiyomi.source.online.all.EHentai
 import eu.kanade.tachiyomi.source.online.all.Lanraragi
@@ -127,6 +138,7 @@ import eu.kanade.tachiyomi.ui.manga.ChapterList
 import eu.kanade.tachiyomi.ui.manga.MangaScreenModel
 import eu.kanade.tachiyomi.ui.manga.MergedMangaData
 import eu.kanade.tachiyomi.ui.manga.PagePreviewState
+import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import exh.metadata.MetadataUtil
 import exh.source.MERGED_SOURCE_ID
@@ -196,6 +208,7 @@ fun MangaScreen(
     // For top action menu
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
+    onTranslateActionClicked: ((TranslationAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditFetchIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -217,6 +230,7 @@ fun MangaScreen(
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
+    onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)? = null,
 
     // For chapter swipe
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -230,6 +244,7 @@ fun MangaScreen(
     getMangaState: @Composable (Manga) -> State<Manga>,
     onClickSourceSettingsClicked: (() -> Unit)?,
     onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onToggleAutoTranslate: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
     onRelatedMangasScreenClick: () -> Unit,
@@ -278,6 +293,7 @@ fun MangaScreen(
                 onCoverClicked = onCoverClicked,
                 onShareClicked = onShareClicked,
                 onDownloadActionClicked = onDownloadActionClicked,
+                onTranslateActionClicked = onTranslateActionClicked,
                 onEditCategoryClicked = onEditCategoryClicked,
                 onEditIntervalClicked = onEditFetchIntervalClicked,
                 onMigrateClicked = onMigrateClicked,
@@ -297,6 +313,7 @@ fun MangaScreen(
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                 onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                 onMultiDeleteClicked = onMultiDeleteClicked,
+                onMultiTranslateClicked = onMultiTranslateClicked,
                 onChapterSwipe = onChapterSwipe,
                 onChapterSelected = onChapterSelected,
                 onAllChapterSelected = onAllChapterSelected,
@@ -305,6 +322,7 @@ fun MangaScreen(
                 getMangaState = getMangaState,
                 onClickSourceSettingsClicked = onClickSourceSettingsClicked,
                 onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
+                onToggleAutoTranslate = onToggleAutoTranslate,
                 onClearManga = onClearManga,
                 onOpenMangaFolder = onOpenMangaFolder,
                 onRelatedMangasScreenClick = onRelatedMangasScreenClick,
@@ -345,6 +363,7 @@ fun MangaScreen(
                 onCoverClicked = onCoverClicked,
                 onShareClicked = onShareClicked,
                 onDownloadActionClicked = onDownloadActionClicked,
+                onTranslateActionClicked = onTranslateActionClicked,
                 onEditCategoryClicked = onEditCategoryClicked,
                 onEditIntervalClicked = onEditFetchIntervalClicked,
                 onMigrateClicked = onMigrateClicked,
@@ -364,6 +383,7 @@ fun MangaScreen(
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                 onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                 onMultiDeleteClicked = onMultiDeleteClicked,
+                onMultiTranslateClicked = onMultiTranslateClicked,
                 onChapterSwipe = onChapterSwipe,
                 onChapterSelected = onChapterSelected,
                 onAllChapterSelected = onAllChapterSelected,
@@ -372,6 +392,7 @@ fun MangaScreen(
                 getMangaState = getMangaState,
                 onClickSourceSettingsClicked = onClickSourceSettingsClicked,
                 onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
+                onToggleAutoTranslate = onToggleAutoTranslate,
                 onClearManga = onClearManga,
                 onOpenMangaFolder = onOpenMangaFolder,
                 onRelatedMangasScreenClick = onRelatedMangasScreenClick,
@@ -423,6 +444,7 @@ private fun MangaScreenSmallImpl(
     // For top action menu
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
+    onTranslateActionClicked: ((TranslationAction) -> Unit)?,
     onEditCategoryClicked: (() -> Unit)?,
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -444,6 +466,7 @@ private fun MangaScreenSmallImpl(
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
+    onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)?,
 
     // For chapter swipe
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -457,6 +480,7 @@ private fun MangaScreenSmallImpl(
     getMangaState: @Composable ((Manga) -> State<Manga>),
     onClickSourceSettingsClicked: (() -> Unit)?,
     onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onToggleAutoTranslate: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
     onRelatedMangasScreenClick: () -> Unit,
@@ -478,6 +502,26 @@ private fun MangaScreenSmallImpl(
             second = state.chapterListItems,
             third = state.isAnySelected,
         )
+    }
+
+    val nextUnreadChapter = remember(chapters, state.manga) {
+        chapters.getNextUnread(state.manga)
+    }
+    val nextUnreadIndex = remember(listItem, nextUnreadChapter) {
+        if (nextUnreadChapter != null) {
+            listItem.indexOfFirst {
+                it is ChapterList.Item && it.chapter.id == nextUnreadChapter.id
+            }
+        } else {
+            -1
+        }
+    }
+    var hasScrolledToUnread by remember(state.manga.id) { mutableStateOf(false) }
+    LaunchedEffect(state.manga.id, nextUnreadIndex) {
+        if (!hasScrolledToUnread && nextUnreadIndex >= 0) {
+            chapterListState.scrollToItem(nextUnreadIndex)
+            hasScrolledToUnread = true
+        }
     }
     // SY -->
     val metadataDescription = metadataDescription(state.source)
@@ -548,6 +592,7 @@ private fun MangaScreenSmallImpl(
                     onClickFilter = onFilterClicked,
                     onClickShare = onShareClicked,
                     onClickDownload = onDownloadActionClicked,
+                    onClickTranslate = onTranslateActionClicked,
                     onClickEditCategory = onEditCategoryClicked,
                     onClickRefresh = onRefresh,
                     onClickMigrate = onMigrateClicked,
@@ -584,6 +629,7 @@ private fun MangaScreenSmallImpl(
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onDownloadChapter = onDownloadChapter,
                     onMultiDeleteClicked = onMultiDeleteClicked,
+                    onMultiTranslateClicked = onMultiTranslateClicked,
                     fillFraction = 1f,
                 )
             },
@@ -767,12 +813,36 @@ private fun MangaScreenSmallImpl(
                         label = "Chapters Sheet Height",
                     )
 
+                    val nestedScrollConnection = remember(isSheetExpanded) {
+                        object : NestedScrollConnection {
+                            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                                if (isSheetExpanded && available.y > 0f) { // Scrolling down
+                                    if (chapterListState.firstVisibleItemIndex == 0 && chapterListState.firstVisibleItemScrollOffset == 0) {
+                                        isSheetExpanded = false
+                                        return available // Consume the scroll
+                                    }
+                                }
+                                return Offset.Zero
+                            }
+                        }
+                    }
+
                     GlassSurface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(start = 16.dp, end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 8.dp)
                             .fillMaxWidth()
-                            .height(sheetHeight),
+                            .height(sheetHeight)
+                            .nestedScroll(nestedScrollConnection)
+                            .pointerInput(isSheetExpanded) {
+                                if (!isSheetExpanded) {
+                                    detectVerticalDragGestures { _, dragAmount ->
+                                        if (dragAmount < -10f) {
+                                            isSheetExpanded = true
+                                        }
+                                    }
+                                }
+                            },
                         shape = RoundedCornerShape(20.dp),
                         style = GlassDefaults.regularStyle(),
                     ) {
@@ -782,6 +852,15 @@ private fun MangaScreenSmallImpl(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { isSheetExpanded = !isSheetExpanded }
+                                    .pointerInput(Unit) {
+                                        detectVerticalDragGestures { _, dragAmount ->
+                                            if (dragAmount > 10f) {
+                                                isSheetExpanded = false
+                                            } else if (dragAmount < -10f) {
+                                                isSheetExpanded = true
+                                            }
+                                        }
+                                    }
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -831,6 +910,31 @@ private fun MangaScreenSmallImpl(
                                         }
                                     }
 
+                                    // Translate Button
+                                    if (onTranslateActionClicked != null) {
+                                        var translateMenuExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(
+                                                onClick = { translateMenuExpanded = true },
+                                                modifier = Modifier.size(36.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Translate,
+                                                    contentDescription = "Translate Options",
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                            TranslationDropdownMenu(
+                                                expanded = translateMenuExpanded,
+                                                onDismissRequest = { translateMenuExpanded = false },
+                                                onTranslateClicked = { action ->
+                                                    translateMenuExpanded = false
+                                                    onTranslateActionClicked(action)
+                                                },
+                                            )
+                                        }
+                                    }
+
                                     // Filter Button
                                     IconButton(
                                         onClick = onFilterClicked,
@@ -855,23 +959,37 @@ private fun MangaScreenSmallImpl(
                                         modifier = Modifier.size(36.dp),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Translate,
+                                            imageVector = Icons.Default.GTranslate,
                                             contentDescription = "Translation Settings",
                                             modifier = Modifier.size(20.dp),
                                         )
                                     }
 
-                                    // Start/Resume Button
-                                    val isReading = remember(state.chapters) {
-                                        state.chapters.fastAny { it.chapter.read }
+                                    // Autotranslate after download Button
+                                    if (onToggleAutoTranslate != null && !state.source.isLocalOrStub()) {
+                                        val autoTranslate = state.manga.autoTranslateAfterDownload
+                                        IconButton(
+                                            onClick = onToggleAutoTranslate,
+                                            modifier = Modifier.size(36.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = "Auto Translate after Download",
+                                                modifier = Modifier.size(20.dp),
+                                                tint = if (autoTranslate) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                            )
+                                        }
                                     }
-                                    TextButton(
+
+                                    // Resume Button
+                                    IconButton(
                                         onClick = onContinueReading,
-                                        modifier = Modifier.height(36.dp),
+                                        modifier = Modifier.size(36.dp),
                                     ) {
-                                        Text(
-                                            text = stringResource(if (isReading) MR.strings.action_resume else MR.strings.action_start),
-                                            style = MaterialTheme.typography.labelLarge,
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Resume",
+                                            modifier = Modifier.size(20.dp),
                                         )
                                     }
                                 }
@@ -964,6 +1082,7 @@ private fun MangaScreenLargeImpl(
     // For top action menu
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
+    onTranslateActionClicked: ((TranslationAction) -> Unit)?,
     onEditCategoryClicked: (() -> Unit)?,
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -985,6 +1104,7 @@ private fun MangaScreenLargeImpl(
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
+    onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)?,
 
     // For swipe actions
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -998,6 +1118,7 @@ private fun MangaScreenLargeImpl(
     getMangaState: @Composable ((Manga) -> State<Manga>),
     onClickSourceSettingsClicked: (() -> Unit)?,
     onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onToggleAutoTranslate: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
     onRelatedMangasScreenClick: () -> Unit,
@@ -1013,6 +1134,7 @@ private fun MangaScreenLargeImpl(
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current
+    val chapterListState = rememberLazyListState()
 
     val (chapters, listItem, isAnySelected) = remember(state) {
         Triple(
@@ -1020,6 +1142,26 @@ private fun MangaScreenLargeImpl(
             second = state.chapterListItems,
             third = state.isAnySelected,
         )
+    }
+
+    val nextUnreadChapter = remember(chapters, state.manga) {
+        chapters.getNextUnread(state.manga)
+    }
+    val nextUnreadIndex = remember(listItem, nextUnreadChapter) {
+        if (nextUnreadChapter != null) {
+            listItem.indexOfFirst {
+                it is ChapterList.Item && it.chapter.id == nextUnreadChapter.id
+            }
+        } else {
+            -1
+        }
+    }
+    var hasScrolledToUnread by remember(state.manga.id) { mutableStateOf(false) }
+    LaunchedEffect(state.manga.id, nextUnreadIndex) {
+        if (!hasScrolledToUnread && nextUnreadIndex >= 0) {
+            chapterListState.scrollToItem(nextUnreadIndex)
+            hasScrolledToUnread = true
+        }
     }
 
     // SY -->
@@ -1037,12 +1179,8 @@ private fun MangaScreenLargeImpl(
     var offsetX by remember { mutableFloatStateOf(0f) }
     val fabPosition by uiPreferences.readButtonPosition().collectAsState()
     val readButtonPosition = uiPreferences.readButtonPosition()
-    // KMK <--
-
     val insetPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal).asPaddingValues()
     var topBarHeight by remember { mutableIntStateOf(0) }
-
-    val chapterListState = rememberLazyListState()
 
     BackHandler(onBack = {
         if (isAnySelected) {
@@ -1065,6 +1203,7 @@ private fun MangaScreenLargeImpl(
                 onClickFilter = onFilterButtonClicked,
                 onClickShare = onShareClicked,
                 onClickDownload = onDownloadActionClicked,
+                onClickTranslate = onTranslateActionClicked,
                 onClickEditCategory = onEditCategoryClicked,
                 onClickRefresh = onRefresh,
                 onClickMigrate = onMigrateClicked,
@@ -1111,6 +1250,7 @@ private fun MangaScreenLargeImpl(
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onDownloadChapter = onDownloadChapter,
                     onMultiDeleteClicked = onMultiDeleteClicked,
+                    onMultiTranslateClicked = onMultiTranslateClicked,
                     fillFraction = 0.5f,
                 )
             }
@@ -1389,6 +1529,7 @@ private fun SharedMangaBottomActionMenu(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
+    onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)?,
     fillFraction: Float,
     modifier: Modifier = Modifier,
 ) {
@@ -1414,6 +1555,11 @@ private fun SharedMangaBottomActionMenu(
             onDownloadChapter!!(selected.toList(), ChapterDownloadAction.START)
         }.takeIf {
             onDownloadChapter != null && selected.fastAny { it.downloadState != Download.State.DOWNLOADED }
+        },
+        onTranslateClicked = {
+            onMultiTranslateClicked!!(selected)
+        }.takeIf {
+            onMultiTranslateClicked != null && selected.fastAny { it.downloadState == Download.State.DOWNLOADED }
         },
         onDeleteClicked = {
             onMultiDeleteClicked(selected.fastMap { it.chapter })

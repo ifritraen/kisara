@@ -1,6 +1,7 @@
 package eu.kanade.presentation.browse
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,10 +11,20 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
@@ -24,14 +35,17 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,8 +59,10 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.components.BaseBrowseItem
 import eu.kanade.presentation.browse.components.ExtensionIcon
+import eu.kanade.presentation.browse.components.SourceIcon
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.manga.components.DotSeparatorNoSpaceText
 import eu.kanade.presentation.more.settings.screen.browse.ExtensionReposScreen
@@ -72,8 +88,11 @@ import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.theme.header
+import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.plus
 import tachiyomi.presentation.core.util.secondaryItemAlpha
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 fun ExtensionScreen(
@@ -91,6 +110,8 @@ fun ExtensionScreen(
     onOpenExtension: (Extension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
+    onToggleJarSource: (Long) -> Unit = {},
+    onUninstallJar: (Extension.Jar) -> Unit = {},
 ) {
     val navigator = LocalNavigator.currentOrThrow
 
@@ -133,6 +154,8 @@ fun ExtensionScreen(
                     onTrustExtension = onTrustExtension,
                     onOpenExtension = onOpenExtension,
                     onClickUpdateAll = onClickUpdateAll,
+                    onToggleJarSource = onToggleJarSource,
+                    onUninstallJar = onUninstallJar,
                 )
             }
         }
@@ -153,6 +176,8 @@ private fun ExtensionContent(
     onTrustExtension: (Extension.Untrusted) -> Unit,
     onOpenExtension: (Extension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
+    onToggleJarSource: (Long) -> Unit = {},
+    onUninstallJar: (Extension.Jar) -> Unit = {},
 ) {
     val context = LocalContext.current
     var trustState by remember { mutableStateOf<Extension.Untrusted?>(null) }
@@ -241,59 +266,71 @@ private fun ExtensionContent(
                         is Extension.Untrusted -> "extension-untrusted-${item.hashCode()}"
                         is Extension.Installed -> "extension-installed-${item.hashCode()}"
                         is Extension.Available -> "extension-available-${item.hashCode()}"
+                        is Extension.Jar -> "extension-jar-${item.hashCode()}"
                     }
                 },
             ) { item ->
-                ExtensionItem(
-                    modifier = Modifier.animateItemFastScroll(),
-                    item = item,
-                    onClickItem = {
-                        when (it) {
-                            is Extension.Available -> onInstallExtension(it)
-                            is Extension.Installed -> onOpenExtension(it)
-                            is Extension.Untrusted -> {
-                                trustState = it
+                if (item.extension is Extension.Jar) {
+                    JarExtensionItem(
+                        modifier = Modifier.animateItemFastScroll(),
+                        extension = item.extension,
+                        onToggleJarSource = onToggleJarSource,
+                        onUninstallJar = onUninstallJar,
+                    )
+                } else {
+                    ExtensionItem(
+                        modifier = Modifier.animateItemFastScroll(),
+                        item = item,
+                        onClickItem = {
+                            when (it) {
+                                is Extension.Available -> onInstallExtension(it)
+                                is Extension.Installed -> onOpenExtension(it)
+                                is Extension.Untrusted -> {
+                                    trustState = it
+                                }
+                                else -> {}
                             }
-                        }
-                    },
-                    onLongClickItem = onLongClickItem,
-                    onClickItemSecondaryAction = {
-                        when (it) {
-                            is Extension.Available -> onOpenWebView(it)
-                            is Extension.Installed -> onOpenExtension(it)
-                            else -> {}
-                        }
-                    },
-                    onClickItemCancel = onClickItemCancel,
-                    onClickItemAction = {
-                        when (it) {
-                            is Extension.Available -> onInstallExtension(it)
-                            is Extension.Installed -> {
-                                if (it.hasUpdate) {
-                                    onUpdateExtension(it)
-                                } else {
-                                    onOpenExtension(it)
+                        },
+                        onLongClickItem = onLongClickItem,
+                        onClickItemSecondaryAction = {
+                            when (it) {
+                                is Extension.Available -> onOpenWebView(it)
+                                is Extension.Installed -> onOpenExtension(it)
+                                else -> {}
+                            }
+                        },
+                        onClickItemCancel = onClickItemCancel,
+                        onClickItemAction = {
+                            when (it) {
+                                is Extension.Available -> onInstallExtension(it)
+                                is Extension.Installed -> {
+                                    if (it.hasUpdate) {
+                                        onUpdateExtension(it)
+                                    } else {
+                                        onOpenExtension(it)
+                                    }
+                                }
+                                is Extension.Untrusted -> {
+                                    trustState = it
+                                }
+                                else -> {}
+                            }
+                        },
+                        onClickItemSideload = {
+                            if (it is Extension.Available) {
+                                onSideloadExtension(it)
+                            } else if (it is Extension.Installed && it.hasUpdate) {
+                                // Update as sideload
+                                val availableExt = state.items.values.flatten().map { it.extension }
+                                    .filterIsInstance<Extension.Available>()
+                                    .firstOrNull { avail -> avail.pkgName == it.pkgName }
+                                if (availableExt != null) {
+                                    onSideloadExtension(availableExt)
                                 }
                             }
-                            is Extension.Untrusted -> {
-                                trustState = it
-                            }
-                        }
-                    },
-                    onClickItemSideload = {
-                        if (it is Extension.Available) {
-                            onSideloadExtension(it)
-                        } else if (it is Extension.Installed && it.hasUpdate) {
-                            // Update as sideload
-                            val availableExt = state.items.values.flatten().map { it.extension }
-                                .filterIsInstance<Extension.Available>()
-                                .firstOrNull { avail -> avail.pkgName == it.pkgName }
-                            if (availableExt != null) {
-                                onSideloadExtension(availableExt)
-                            }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
         }
     }
@@ -525,6 +562,7 @@ private fun ExtensionItemActions(
                             }
                         }
                     }
+                    is Extension.Jar -> {}
                     is Extension.Untrusted -> {
                         IconButton(onClick = { onClickItemAction(extension) }) {
                             Icon(
@@ -700,3 +738,214 @@ private fun ExtensionItemContentPreview() {
     }
 }
 // KMK <--
+
+private fun cleanSourceName(name: String): String {
+    return name.replace(Regex("\\s*\\([^)]*\\)\\s*"), "").trim()
+}
+
+@Composable
+private fun JarExtensionItem(
+    modifier: Modifier = Modifier,
+    extension: Extension.Jar,
+    onToggleJarSource: (Long) -> Unit,
+    onUninstallJar: (Extension.Jar) -> Unit,
+) {
+    val disabledSources = remember { Injekt.get<SourcePreferences>() }.disabledSources().collectAsState().value
+    var expanded by remember { mutableStateOf(true) }
+
+    // Map to keep track of expanded groups with multiple languages
+    val expandedGroups = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .padding(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Extension,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1.5f)) {
+                Text(
+                    text = extension.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "JAR Extension • ${extension.sources.size} source(s)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(
+                onClick = { onUninstallJar(extension) },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Uninstall JAR",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
+            IconButton(
+                onClick = { expanded = !expanded },
+            ) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = "Toggle sources list",
+                )
+            }
+        }
+
+        if (expanded && extension.sources.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val toDomainSource: (eu.kanade.tachiyomi.source.Source) -> tachiyomi.domain.source.model.Source = { src ->
+                tachiyomi.domain.source.model.Source(
+                    id = src.id,
+                    lang = src.lang,
+                    name = src.name,
+                    supportsLatest = false,
+                    isStub = false,
+                )
+            }
+
+            // Group sources by their cleaned name
+            val grouped = remember(extension.sources) {
+                extension.sources
+                    .groupBy { cleanSourceName(it.name) }
+                    .toSortedMap()
+            }
+
+            grouped.forEach { (groupName, sourcesList) ->
+                if (sourcesList.size == 1) {
+                    val source = sourcesList.first()
+                    val isEnabled = "${source.id}" !in disabledSources
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SourceIcon(
+                            source = toDomainSource(source),
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = groupName,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                text = source.lang.uppercase(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = isEnabled,
+                            onCheckedChange = { onToggleJarSource(source.id) },
+                        )
+                    }
+                } else {
+                    // Multiple languages: Group them!
+                    val isAnyEnabled = sourcesList.any { "${it.id}" !in disabledSources }
+                    val isGroupExpanded = expandedGroups.getOrPut(groupName) { false }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { expandedGroups[groupName] = !isGroupExpanded }
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SourceIcon(
+                                source = toDomainSource(sourcesList.first()),
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = groupName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    text = sourcesList.joinToString(", ") { it.lang.uppercase() },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(
+                                imageVector = if (isGroupExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 8.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Switch(
+                                checked = isAnyEnabled,
+                                onCheckedChange = { enable ->
+                                    // Toggling master switch: if checking, enable all disabled ones. If unchecking, disable all enabled ones.
+                                    sourcesList.forEach { src ->
+                                        val isCurrentlyEnabled = "${src.id}" !in disabledSources
+                                        if (isCurrentlyEnabled != enable) {
+                                            onToggleJarSource(src.id)
+                                        }
+                                    }
+                                },
+                            )
+                        }
+
+                        if (isGroupExpanded) {
+                            sourcesList.forEach { source ->
+                                val isEnabled = "${source.id}" !in disabledSources
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 44.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = source.lang.uppercase() + " (${source.name})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = isEnabled,
+                                        onCheckedChange = { onToggleJarSource(source.id) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

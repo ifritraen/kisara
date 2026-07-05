@@ -3,11 +3,15 @@ package eu.kanade.tachiyomi.extension
 import android.content.Context
 import android.net.Uri
 import dalvik.system.DexClassLoader
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.source.AndroidBitmapWrapper
 import eu.kanade.tachiyomi.source.JarCatalogueSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
@@ -20,11 +24,17 @@ import org.koitharu.kotatsu.parsers.config.MangaSourceConfig
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.LinkResolver
+import org.koitharu.kotatsu.parsers.webview.InterceptedRequest
+import org.koitharu.kotatsu.parsers.webview.InterceptionConfig
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.lang.reflect.Method
+import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeoutException
 import org.koitharu.kotatsu.parsers.bitmap.Bitmap as KotatsuBitmap
 
 class PluginClassLoader(
@@ -83,6 +93,8 @@ object JarExtensionManager {
 
     private val plugins = ConcurrentHashMap<String, LoadedJarPlugin>()
 
+    fun getInstalledJars(): List<LoadedJarPlugin> = plugins.values.toList()
+
     fun initialize(context: Context) {
         val extensionDir = File(context.filesDir, "jar_extensions")
         if (!extensionDir.exists()) {
@@ -103,6 +115,34 @@ object JarExtensionManager {
                     },
                 )
             }
+        }
+
+        // Disable newly installed JAR sources by default on first install
+        try {
+            val prefs = context.getSharedPreferences("jar_extension_prefs", Context.MODE_PRIVATE)
+            val seenSources = prefs.getStringSet("seen_sources", emptySet()) ?: emptySet()
+            val newSeenSources = seenSources.toMutableSet()
+            val toDisable = mutableSetOf<String>()
+
+            for (wrappedSource in wrappedSources) {
+                val sourceIdStr = wrappedSource.id.toString()
+                if (sourceIdStr !in seenSources) {
+                    toDisable.add(sourceIdStr)
+                    newSeenSources.add(sourceIdStr)
+                }
+            }
+
+            if (toDisable.isNotEmpty()) {
+                val sourcePreferences = Injekt.get<SourcePreferences>()
+                val disabled = sourcePreferences.disabledSources().get()
+                sourcePreferences.disabledSources().set(disabled + toDisable)
+            }
+
+            if (newSeenSources.size > seenSources.size) {
+                prefs.edit().putStringSet("seen_sources", newSeenSources).apply()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("JarExtensionManager", "Failed to default disable new JAR sources: ${e.message}", e)
         }
 
         _sources.value = wrappedSources
@@ -183,7 +223,7 @@ object JarExtensionManager {
     }
 
     private fun createLoaderContext(context: Context): MangaLoaderContext {
-        val okHttpClient = OkHttpClient()
+        val okHttpClient = uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().client
         return object : MangaLoaderContext() {
             override val httpClient: OkHttpClient = okHttpClient
             override val cookieJar: CookieJar = okHttpClient.cookieJar
@@ -202,9 +242,209 @@ object JarExtensionManager {
                 }
             }
 
-            override suspend fun evaluateJs(script: String): String? = null
+            override suspend fun evaluateJs(script: String): String? {
+                return evaluateJs("about:blank", script, 10000L)
+            }
 
-            override suspend fun evaluateJs(baseUrl: String, script: String, timeout: Long): String? = null
+            override suspend fun evaluateJs(baseUrl: String, script: String, timeout: Long): String? {
+                return withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { continuation ->
+                        val webView = android.webkit.WebView(context)
+                        webView.settings.javaScriptEnabled = true
+                        webView.settings.domStorageEnabled = true
+
+                        var isFinished = false
+                        val cleanUp = {
+                            if (!isFinished) {
+                                isFinished = true
+                                try {
+                                    webView.stopLoading()
+                                    webView.destroy()
+                                } catch (e: Exception) {}
+                            }
+                        }
+
+                        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                        val timeoutRunnable = Runnable {
+                            cleanUp()
+                            if (continuation.isActive) {
+                                continuation.resumeWith(Result.failure(TimeoutException("JS evaluation timed out")))
+                            }
+                        }
+                        handler.postDelayed(timeoutRunnable, timeout)
+
+                        continuation.invokeOnCancellation {
+                            handler.removeCallbacks(timeoutRunnable)
+                            cleanUp()
+                        }
+
+                        webView.webViewClient = object : android.webkit.WebViewClient() {
+                            override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                val cleanUrl = url?.substringBefore("?")?.removeSuffix("/")
+                                val cleanBase = baseUrl.substringBefore("?")?.removeSuffix("/")
+                                if (cleanUrl == cleanBase || url == "about:blank" || cleanUrl == "about:blank") {
+                                    webView.evaluateJavascript(script) { result ->
+                                        handler.removeCallbacks(timeoutRunnable)
+                                        cleanUp()
+                                        if (continuation.isActive) {
+                                            val cleanResult = if (result == "null" || result == null) null else result.trim('"')
+                                            continuation.resumeWith(Result.success(cleanResult))
+                                        }
+                                    }
+                                }
+                            }
+
+                            override fun onReceivedError(
+                                view: android.webkit.WebView?,
+                                request: android.webkit.WebResourceRequest?,
+                                error: android.webkit.WebResourceError?,
+                            ) {
+                                if (request?.isForMainFrame == true) {
+                                    handler.removeCallbacks(timeoutRunnable)
+                                    cleanUp()
+                                    if (continuation.isActive) {
+                                        continuation.resumeWith(Result.failure(Exception("Page load error: ${error?.description}")))
+                                    }
+                                }
+                            }
+                        }
+                        webView.loadUrl(baseUrl)
+                    }
+                }
+            }
+
+            override suspend fun interceptWebViewRequests(
+                url: String,
+                interceptorScript: String,
+                timeout: Long,
+            ): List<InterceptedRequest> {
+                return withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { continuation ->
+                        val webView = android.webkit.WebView(context)
+                        webView.settings.javaScriptEnabled = true
+                        webView.settings.domStorageEnabled = true
+
+                        val captured = Collections.synchronizedList(mutableListOf<InterceptedRequest>())
+
+                        var isFinished = false
+                        val cleanUp = {
+                            if (!isFinished) {
+                                isFinished = true
+                                try {
+                                    webView.stopLoading()
+                                    webView.destroy()
+                                } catch (e: Exception) {}
+                            }
+                        }
+
+                        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                        val timeoutRunnable = Runnable {
+                            cleanUp()
+                            if (continuation.isActive) {
+                                continuation.resumeWith(Result.success(captured.toList()))
+                            }
+                        }
+                        handler.postDelayed(timeoutRunnable, timeout)
+
+                        continuation.invokeOnCancellation {
+                            handler.removeCallbacks(timeoutRunnable)
+                            cleanUp()
+                        }
+
+                        webView.webViewClient = object : android.webkit.WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: android.webkit.WebView?,
+                                request: android.webkit.WebResourceRequest?,
+                            ): android.webkit.WebResourceResponse? {
+                                if (request != null) {
+                                    val reqUrl = request.url.toString()
+                                    val reqMethod = request.method
+                                    val reqHeaders = request.requestHeaders ?: emptyMap()
+
+                                    var matches = true
+                                    if (interceptorScript.isNotEmpty() && interceptorScript != "return true;") {
+                                        val matchRegex = Regex("['\"]([^'\"]+)['\"]")
+                                        val keywords = matchRegex.findAll(interceptorScript).map { it.groupValues[1] }.toList()
+                                        if (keywords.isNotEmpty()) {
+                                            matches = keywords.any { reqUrl.contains(it, ignoreCase = true) }
+                                        }
+                                    }
+
+                                    if (matches) {
+                                        captured.add(
+                                            InterceptedRequest(
+                                                url = reqUrl,
+                                                method = reqMethod,
+                                                headers = reqHeaders,
+                                                timestamp = System.currentTimeMillis(),
+                                            ),
+                                        )
+                                    }
+                                }
+                                return super.shouldInterceptRequest(view, request)
+                            }
+                        }
+                        webView.loadUrl(url)
+                    }
+                }
+            }
+
+            override suspend fun captureWebViewUrls(
+                pageUrl: String,
+                urlPattern: Regex,
+                timeout: Long,
+            ): List<String> {
+                return withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { continuation ->
+                        val webView = android.webkit.WebView(context)
+                        webView.settings.javaScriptEnabled = true
+                        webView.settings.domStorageEnabled = true
+
+                        val captured = Collections.synchronizedList(mutableListOf<String>())
+
+                        var isFinished = false
+                        val cleanUp = {
+                            if (!isFinished) {
+                                isFinished = true
+                                try {
+                                    webView.stopLoading()
+                                    webView.destroy()
+                                } catch (e: Exception) {}
+                            }
+                        }
+
+                        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                        val timeoutRunnable = Runnable {
+                            cleanUp()
+                            if (continuation.isActive) {
+                                continuation.resumeWith(Result.success(captured.toList()))
+                            }
+                        }
+                        handler.postDelayed(timeoutRunnable, timeout)
+
+                        continuation.invokeOnCancellation {
+                            handler.removeCallbacks(timeoutRunnable)
+                            cleanUp()
+                        }
+
+                        webView.webViewClient = object : android.webkit.WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: android.webkit.WebView?,
+                                request: android.webkit.WebResourceRequest?,
+                            ): android.webkit.WebResourceResponse? {
+                                if (request != null) {
+                                    val reqUrl = request.url.toString()
+                                    if (urlPattern.containsMatchIn(reqUrl)) {
+                                        captured.add(reqUrl)
+                                    }
+                                }
+                                return super.shouldInterceptRequest(view, request)
+                            }
+                        }
+                        webView.loadUrl(pageUrl)
+                    }
+                }
+            }
 
             override fun getConfig(source: MangaSource): MangaSourceConfig {
                 return object : MangaSourceConfig {
@@ -253,4 +493,98 @@ object JarExtensionManager {
         }
         return uri.path?.substringAfterLast('/')
     }
+
+    fun uninstallJar(context: Context, filename: String): Boolean {
+        return try {
+            val extensionDir = File(context.filesDir, "jar_extensions")
+            val file = File(extensionDir, filename)
+            if (file.exists()) {
+                file.delete()
+            }
+            initialize(context)
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("JarExtensionManager", "Failed to uninstall JAR: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun downloadAndInstallJar(context: Context, url: String, filename: String): Boolean {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val extensionDir = File(context.filesDir, "jar_extensions")
+                if (!extensionDir.exists()) {
+                    extensionDir.mkdirs()
+                }
+                val destFile = File(extensionDir, filename)
+                val request = okhttp3.Request.Builder().url(url).build()
+                val response = OkHttpClient().newCall(request).execute()
+                if (!response.isSuccessful) return@withContext false
+                val body = response.body ?: return@withContext false
+                body.byteStream().use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    initialize(context)
+                }
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("JarExtensionManager", "Failed to download and install JAR: ${e.message}", e)
+                false
+            }
+        }
+    }
+
+    suspend fun fetchRepositoryIndex(repoUrl: String): List<JarExtensionInfo> {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val request = okhttp3.Request.Builder().url(repoUrl).build()
+                val response = OkHttpClient().newCall(request).execute()
+                if (!response.isSuccessful) return@withContext emptyList()
+                val body = response.body?.string() ?: return@withContext emptyList()
+                val array = org.json.JSONArray(body)
+                val list = mutableListOf<JarExtensionInfo>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val name = obj.getString("name")
+                    val pkg = obj.getString("pkg")
+                    val versionCode = if (obj.has("versionCode")) obj.getInt("versionCode") else obj.getInt("code")
+                    val version = obj.getString("version")
+                    val rawUrl = if (obj.has("url")) obj.getString("url") else obj.getString("apk")
+                    val url = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                        rawUrl
+                    } else {
+                        val base = repoUrl.substringBeforeLast('/')
+                        "$base/$rawUrl"
+                    }
+                    val iconUrl = obj.optString("iconUrl", null)
+                    list.add(
+                        JarExtensionInfo(
+                            name = name,
+                            pkg = pkg,
+                            versionCode = versionCode,
+                            version = version,
+                            url = url,
+                            iconUrl = iconUrl,
+                        ),
+                    )
+                }
+                list
+            } catch (e: Exception) {
+                android.util.Log.e("JarExtensionManager", "Failed to fetch repository index: ${e.message}", e)
+                emptyList()
+            }
+        }
+    }
 }
+
+data class JarExtensionInfo(
+    val name: String,
+    val pkg: String,
+    val versionCode: Int,
+    val version: String,
+    val url: String,
+    val iconUrl: String?,
+)

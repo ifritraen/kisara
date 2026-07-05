@@ -28,12 +28,13 @@ enum class TextTranslators(val label: String) {
         val maxOutputTokens = pref.translationEngineMaxOutputTokens().get().toIntOrNull() ?: 8914
         val temperature = pref.translationEngineTemperature().get().toFloatOrNull() ?: 1.0f
         val modelName = pref.translationEngineModel().get()
-        val apiKey = pref.translationEngineApiKey().get()
+        val apiKeysSet = pref.translationEngineApiKeys().get()
+        val apiKeys = apiKeysSet.toList().filter { it.isNotBlank() }.ifEmpty { listOf(pref.translationEngineApiKey().get()) }
         return when (this) {
             MLKIT -> MLKitTranslator(fromLang, toLang)
             GOOGLE -> GoogleTranslator(fromLang, toLang)
-            GEMINI -> GeminiTranslator(fromLang, toLang, apiKey, modelName, maxOutputTokens, temperature)
-            OPENROUTER -> OpenRouterTranslator(fromLang, toLang, apiKey, modelName, maxOutputTokens, temperature)
+            GEMINI -> GeminiTranslator(fromLang, toLang, apiKeys, modelName, maxOutputTokens, temperature)
+            OPENROUTER -> OpenRouterTranslator(fromLang, toLang, apiKeys, modelName, maxOutputTokens, temperature)
         }
     }
 

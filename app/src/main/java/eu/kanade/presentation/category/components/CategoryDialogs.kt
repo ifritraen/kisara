@@ -392,6 +392,7 @@ fun ChangeCategoryDialog(
             GlassSurface(
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                 style = GlassDefaults.prominentStyle(),
+                dialogSurface = true,
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),

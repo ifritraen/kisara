@@ -328,6 +328,7 @@
 
     <string name="ext_sideload">Sideload</string>
     <string name="ext_sideloaded">Sideloaded</string>
+    <string name="ext_jar_extensions">JAR Extensions</string>
     <string name="ext_sideload_success">Successfully sideloaded %1$s</string>
     <string name="ext_sideload_failed">Failed to sideload %1$s</string>
     <string name="ext_sideload_copy_error">Copy Error</string>

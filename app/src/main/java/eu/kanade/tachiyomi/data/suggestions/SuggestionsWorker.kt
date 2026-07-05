@@ -45,30 +45,25 @@ class SuggestionsWorker(
             val readHistory = mangaRepository.getReadMangaNotInLibrary()
             val seed = (favorites + readHistory).distinctBy { it.id }
 
-            if (seed.isEmpty()) {
-                logcat(LogPriority.INFO) { "No history or favorites to generate suggestions seed." }
-                suggestionRepository.clear()
-                return Result.success()
-            }
+            val weightedTags = mutableMapOf<String, Double>()
+            val topTags = mutableListOf<String>()
 
-            // 2. Compute weighted tag frequency
-            val allTags = seed.flatMap { it.genre.orEmpty() }
-            if (allTags.isEmpty()) {
-                logcat(LogPriority.INFO) { "Seed content contains no tags/genres." }
-                suggestionRepository.clear()
-                return Result.success()
-            }
-            val frequencies = allTags.groupingBy { it.lowercase() }.eachCount()
-            val maxFreq = frequencies.values.maxOrNull()?.toDouble() ?: 1.0
-            val weightedTags = frequencies.mapValues { (_, count) ->
-                0.1 + 0.9 * (count.toDouble() / maxFreq)
-            }
+            if (seed.isNotEmpty()) {
+                val allTags = seed.flatMap { it.genre.orEmpty() }
+                if (allTags.isNotEmpty()) {
+                    val frequencies = allTags.groupingBy { it.lowercase() }.eachCount()
+                    val maxFreq = frequencies.values.maxOrNull()?.toDouble() ?: 1.0
+                    frequencies.mapValuesTo(weightedTags) { (_, count) ->
+                        0.1 + 0.9 * (count.toDouble() / maxFreq)
+                    }
 
-            // Top 3 tags to search
-            val topTags = weightedTags.entries
-                .sortedByDescending { it.value }
-                .take(3)
-                .map { it.key }
+                    // Top 3 tags to search
+                    weightedTags.entries
+                        .sortedByDescending { it.value }
+                        .take(3)
+                        .forEach { topTags.add(it.key) }
+                }
+            }
 
             // 3. Prioritize sources
             val seedSourceIds = seed.map { it.source }.toSet()
@@ -97,16 +92,29 @@ class SuggestionsWorker(
                 val jobs = prioritizedSources.map { source ->
                     async {
                         semaphore.withPermit {
-                            for (tag in topTags) {
+                            if (topTags.isEmpty()) {
                                 try {
-                                    val results = source.getSearchManga(1, tag, eu.kanade.tachiyomi.source.model.FilterList())
+                                    val results = source.getPopularManga(1)
                                     results.mangas.forEach { smanga ->
                                         synchronized(candidates) {
                                             candidates[smanga.url] = Pair(smanga, source.id)
                                         }
                                     }
                                 } catch (e: Exception) {
-                                    logcat(LogPriority.WARN, e) { "Failed querying suggestions for source: ${source.name}" }
+                                    logcat(LogPriority.WARN, e) { "Failed querying popular suggestions for source: ${source.name}" }
+                                }
+                            } else {
+                                for (tag in topTags) {
+                                    try {
+                                        val results = source.getSearchManga(1, tag, eu.kanade.tachiyomi.source.model.FilterList())
+                                        results.mangas.forEach { smanga ->
+                                            synchronized(candidates) {
+                                                candidates[smanga.url] = Pair(smanga, source.id)
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        logcat(LogPriority.WARN, e) { "Failed querying suggestions for source: ${source.name}" }
+                                    }
                                 }
                             }
                         }
@@ -130,8 +138,12 @@ class SuggestionsWorker(
 
                     // Score relevance
                     var score = 0.0
-                    localManga.genre.orEmpty().forEach { tag ->
-                        score += weightedTags[tag.lowercase()] ?: 0.0
+                    if (weightedTags.isEmpty()) {
+                        score = 1.0
+                    } else {
+                        localManga.genre.orEmpty().forEach { tag ->
+                            score += weightedTags[tag.lowercase()] ?: 0.0
+                        }
                     }
                     if (score > 0.0) {
                         scoredSuggestions.add(Pair(localManga, score))
@@ -144,10 +156,19 @@ class SuggestionsWorker(
             // 6. Save top suggestions
             val topSuggestions = scoredSuggestions.sortedByDescending { it.second }.take(30)
             suggestionRepository.replace(topSuggestions)
+            context.getSharedPreferences("suggestions_prefs", Context.MODE_PRIVATE).edit().remove("last_error").apply()
             logcat(LogPriority.INFO) { "Suggestions updated successfully with ${topSuggestions.size} entries." }
             return Result.success()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Error in SuggestionsWorker" }
+            try {
+                val sw = java.io.StringWriter()
+                e.printStackTrace(java.io.PrintWriter(sw))
+                context.getSharedPreferences("suggestions_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("last_error", sw.toString())
+                    .apply()
+            } catch (ignored: Exception) {}
             return Result.failure()
         }
     }

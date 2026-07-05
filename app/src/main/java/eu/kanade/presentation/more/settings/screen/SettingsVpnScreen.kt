@@ -48,13 +48,29 @@ object SettingsVpnScreen : SearchableSettings {
         val scope = rememberCoroutineScope()
         val wireguardManager = remember { Injekt.get<eu.kanade.tachiyomi.vpn.WireguardManager>() }
         val sourceManager = remember { Injekt.get<SourceManager>() }
+        val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
 
         var profiles by remember { mutableStateOf(wireguardManager.getProfiles()) }
         val activeTunnel by wireguardManager.activeTunnel.collectAsState()
         var defaultProfile by remember { mutableStateOf(wireguardManager.getDefaultProfile()) }
 
         var selectedProfileForMenu by remember { mutableStateOf<String?>(null) }
-        var selectedSourceForProfileSelection by remember { mutableStateOf<HttpSource?>(null) }
+        var selectedGroupedSourceNameForProfileSelection by remember { mutableStateOf<String?>(null) }
+
+        var pendingProfileToConnect by remember { mutableStateOf<String?>(null) }
+        val vpnLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult(),
+            onResult = { result ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    pendingProfileToConnect?.let { profile ->
+                        scope.launch {
+                            wireguardManager.startTunnel(profile)
+                        }
+                    }
+                }
+                pendingProfileToConnect = null
+            },
+        )
 
         val sources = remember {
             sourceManager.getOnlineSources()
@@ -74,14 +90,43 @@ object SettingsVpnScreen : SearchableSettings {
                             null
                         }
                     } ?: uri.path?.substringAfterLast('/') ?: "imported"
-                    val cleanName = name.removeSuffix(".conf").replace(Regex("[^a-zA-Z0-9_-]"), "_")
 
-                    val content = context.contentResolver.openInputStream(uri)?.use { input ->
-                        input.bufferedReader().readText()
-                    }
-                    if (content != null) {
-                        if (wireguardManager.importProfile(cleanName, content)) {
-                            profiles = wireguardManager.getProfiles()
+                    if (name.endsWith(".zip", ignoreCase = true)) {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            val zipInput = java.util.zip.ZipInputStream(input)
+                            var entry = zipInput.nextEntry
+                            var importedAny = false
+                            while (entry != null) {
+                                if (!entry.isDirectory && entry.name.endsWith(".conf", ignoreCase = true)) {
+                                    val entryName = entry.name.substringAfterLast('/').removeSuffix(".conf").replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                                    val bos = java.io.ByteArrayOutputStream()
+                                    val buffer = ByteArray(4096)
+                                    var len = zipInput.read(buffer)
+                                    while (len != -1) {
+                                        bos.write(buffer, 0, len)
+                                        len = zipInput.read(buffer)
+                                    }
+                                    val content = bos.toString("UTF-8")
+                                    if (wireguardManager.importProfile(entryName, content)) {
+                                        importedAny = true
+                                    }
+                                }
+                                zipInput.closeEntry()
+                                entry = zipInput.nextEntry
+                            }
+                            if (importedAny) {
+                                profiles = wireguardManager.getProfiles()
+                            }
+                        }
+                    } else {
+                        val cleanName = name.removeSuffix(".conf").replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                        val content = context.contentResolver.openInputStream(uri)?.use { input ->
+                            input.bufferedReader().readText()
+                        }
+                        if (content != null) {
+                            if (wireguardManager.importProfile(cleanName, content)) {
+                                profiles = wireguardManager.getProfiles()
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -105,7 +150,13 @@ object SettingsVpnScreen : SearchableSettings {
                                     if (isActive) {
                                         wireguardManager.stopTunnel()
                                     } else {
-                                        wireguardManager.startTunnel(profile)
+                                        val intent = android.net.VpnService.prepare(context)
+                                        if (intent != null) {
+                                            pendingProfileToConnect = profile
+                                            vpnLauncher.launch(intent)
+                                        } else {
+                                            wireguardManager.startTunnel(profile)
+                                        }
                                     }
                                     selectedProfileForMenu = null
                                 }
@@ -148,13 +199,13 @@ object SettingsVpnScreen : SearchableSettings {
         }
 
         // Dialog for Source VPN Profile mapping
-        selectedSourceForProfileSelection?.let { source ->
+        selectedGroupedSourceNameForProfileSelection?.let { cleanedName ->
             var currentSelection by remember {
-                mutableStateOf(wireguardManager.getSourceProfile(source.id) ?: "default")
+                mutableStateOf(wireguardManager.getSourceProfileByName(cleanedName) ?: "default")
             }
             AlertDialog(
-                onDismissRequest = { selectedSourceForProfileSelection = null },
-                title = { Text(text = "Select VPN for ${source.name}") },
+                onDismissRequest = { selectedGroupedSourceNameForProfileSelection = null },
+                title = { Text(text = "Select VPN for $cleanedName") },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         Row(
@@ -208,15 +259,15 @@ object SettingsVpnScreen : SearchableSettings {
                                 "none" -> "none"
                                 else -> currentSelection
                             }
-                            wireguardManager.associateSource(source.id, value)
-                            selectedSourceForProfileSelection = null
+                            wireguardManager.associateSourceByName(cleanedName, value)
+                            selectedGroupedSourceNameForProfileSelection = null
                         },
                     ) {
                         Text(text = "OK")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { selectedSourceForProfileSelection = null }) {
+                    TextButton(onClick = { selectedGroupedSourceNameForProfileSelection = null }) {
                         Text(text = "Cancel")
                     }
                 },
@@ -225,20 +276,35 @@ object SettingsVpnScreen : SearchableSettings {
 
         val preferences = mutableListOf<Preference>()
 
-        // Import WireGuard profile
+        // Group the core VPN preferences into "VPN Settings" group
         preferences.add(
-            Preference.PreferenceItem.TextPreference(
-                title = stringResource(KMR.strings.pref_vpn_import),
-                subtitle = stringResource(KMR.strings.pref_vpn_import_summary),
-                onClick = { importLauncher.launch("*/*") },
-            ),
-        )
-
-        // Default Profile Info/Selection
-        preferences.add(
-            Preference.PreferenceItem.TextPreference(
-                title = stringResource(KMR.strings.pref_vpn_default_profile),
-                subtitle = defaultProfile ?: "None",
+            Preference.PreferenceGroup(
+                title = "VPN Settings",
+                preferenceItems = listOf(
+                    // Import WireGuard profile
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_vpn_import),
+                        subtitle = stringResource(KMR.strings.pref_vpn_import_summary),
+                        onClick = { importLauncher.launch("*/*") },
+                    ),
+                    // Auto-connect VPN on app start
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.vpnAutoConnectAtStart(),
+                        title = "Auto-connect VPN on app start",
+                        subtitle = "Automatically connect to the default VPN profile when opening the app",
+                    ),
+                    // Auto-disconnect VPN on app close
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.vpnDisconnectOnClose(),
+                        title = "Auto-disconnect VPN on app close",
+                        subtitle = "Automatically disconnect the active VPN when the app is closed",
+                    ),
+                    // Default Profile Info/Selection
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_vpn_default_profile),
+                        subtitle = defaultProfile ?: "None",
+                    ),
+                ).toImmutableList(),
             ),
         )
 
@@ -265,22 +331,28 @@ object SettingsVpnScreen : SearchableSettings {
         }
 
         // List of Sources
-        if (sources.isNotEmpty()) {
+        val groupedSources = remember {
+            sourceManager.getOnlineSources()
+                .groupBy { wireguardManager.cleanSourceName(it.name) }
+                .toSortedMap()
+        }
+
+        if (groupedSources.isNotEmpty()) {
             preferences.add(
                 Preference.PreferenceGroup(
                     title = stringResource(KMR.strings.pref_vpn_sources),
-                    preferenceItems = sources.map { source ->
-                        val associated = wireguardManager.getSourceProfile(source.id)
+                    preferenceItems = groupedSources.map { (cleanedName, _) ->
+                        val associated = wireguardManager.getSourceProfileByName(cleanedName)
                         val displayValue = when (associated) {
                             null -> "Use Default"
                             "none" -> "None"
                             else -> associated
                         }
                         Preference.PreferenceItem.TextPreference(
-                            title = source.name,
+                            title = cleanedName,
                             subtitle = displayValue,
                             onClick = {
-                                selectedSourceForProfileSelection = source
+                                selectedGroupedSourceNameForProfileSelection = cleanedName
                             },
                         )
                     }.toImmutableList(),

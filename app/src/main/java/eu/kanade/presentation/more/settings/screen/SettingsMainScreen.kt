@@ -262,12 +262,6 @@ object SettingsMainScreen : Screen() {
         ),
         // SY <--
         Item(
-            titleRes = KMR.strings.label_kisara_settings,
-            subtitleRes = KMR.strings.pref_kisara_settings_summary,
-            icon = Icons.Outlined.Settings,
-            screen = SettingsKisaraScreen,
-        ),
-        Item(
             titleRes = MR.strings.pref_category_advanced,
             subtitleRes = MR.strings.pref_advanced_summary,
             icon = Icons.Outlined.Code,

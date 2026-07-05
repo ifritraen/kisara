@@ -97,6 +97,11 @@ fun extensionsTab(
             }
         }
         launch {
+            BrowseTab.extensionsInstallJarEvent.receiveAsFlow().collectLatest {
+                chooseJar.launch("*/*")
+            }
+        }
+        launch {
             extensionsScreenModel.events.collectLatest { event ->
                 when (event) {
                     is ExtensionsScreenModel.Event.SideloadSuccess -> {
@@ -184,6 +189,8 @@ fun extensionsTab(
                 onUninstallExtension = { extensionsScreenModel.uninstallExtension(it) },
                 onUpdateExtension = extensionsScreenModel::updateExtension,
                 onRefresh = extensionsScreenModel::findAvailableExtensions,
+                onToggleJarSource = extensionsScreenModel::toggleJarSource,
+                onUninstallJar = extensionsScreenModel::uninstallJarExtension,
             )
 
             privateExtensionToUninstall?.let { extension ->

@@ -244,6 +244,12 @@
             android:foregroundServiceType="dataSync" />
 
         <service
+            android:name=".vpn.VpnCleanupService"
+            android:enabled="true"
+            android:exported="false"
+            android:process=":vpn" />
+
+        <service
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
             android:enabled="false"
             android:exported="false">
@@ -256,6 +262,14 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <receiver
+            android:name="eu.kanade.tachiyomi.vpn.VpnDisconnectReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="eu.kanade.tachiyomi.vpn.ACTION_DISCONNECT_VPN" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

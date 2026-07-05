@@ -290,6 +290,7 @@ class MangaScreen(
             },
             onDownloadChapter = screenModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslationChapter = screenModel::runChapterTranslationActions.takeIf { !successState.source.isLocalOrStub() },
+            onToggleAutoTranslate = screenModel::toggleAutoTranslate,
             onAddToLibraryClicked = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 screenModel.toggleFavorite()
@@ -375,6 +376,7 @@ class MangaScreen(
                 }
             }.takeIf { isHttpSource },
             onDownloadActionClicked = screenModel::runDownloadAction.takeIf { !successState.source.isLocalOrStub() },
+            onTranslateActionClicked = screenModel::runTranslateAction.takeIf { !successState.source.isLocalOrStub() },
             onEditCategoryClicked = screenModel::showChangeCategoryDialog.takeIf { successState.manga.favorite },
             onEditFetchIntervalClicked = screenModel::showSetFetchIntervalDialog.takeIf {
                 successState.manga.favorite
@@ -412,6 +414,7 @@ class MangaScreen(
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDeleteClicked = screenModel::showDeleteChapterDialog,
+            onMultiTranslateClicked = screenModel::runBulkTranslation.takeIf { !successState.source.isLocalOrStub() },
             onChapterSwipe = screenModel::chapterSwipe,
             onChapterSelected = screenModel::toggleSelection,
             onAllChapterSelected = screenModel::toggleAllSelection,

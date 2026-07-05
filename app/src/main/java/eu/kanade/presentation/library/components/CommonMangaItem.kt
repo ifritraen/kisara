@@ -28,6 +28,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,19 +37,35 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.manga.components.MangaCoverHide
 import eu.kanade.presentation.manga.components.RatioSwitchToPanorama
+import eu.kanade.tachiyomi.util.system.toast
 import exh.debug.DebugToggles
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import logcat.LogPriority
+import logcat.logcat
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.domain.category.interactor.GetCategories
+import tachiyomi.domain.category.interactor.SetMangaCategories
+import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.manga.interactor.NetworkToLocalManga
+import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.selectedBackground
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import tachiyomi.domain.manga.model.MangaCover as MangaCoverModel
 
 object CommonMangaItemDefaults {
@@ -88,15 +105,25 @@ fun MangaCompactGridItem(
     // KMK -->
     libraryColored: Boolean = true,
     // KMK <--
+    manga: Manga? = null,
 ) {
     // KMK -->
     val bgColor = coverData.dominantCoverColors?.first?.let { Color(it) }.takeIf { libraryColored }
     val onBgColor = coverData.dominantCoverColors?.second.takeIf { libraryColored }
     // KMK <--
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     GridItemSelectable(
         isSelected = isSelected,
         onClick = onClick,
         onLongClick = onLongClick,
+        onDoubleClick = manga?.let {
+            if (!coverData.isMangaFavorite) {
+                { handleMangaDoubleClick(it, context, scope) }
+            } else {
+                null
+            }
+        },
     ) {
         MangaGridCover(
             cover = {
@@ -222,16 +249,26 @@ fun MangaComfortableGridItem(
     usePanoramaCover: Boolean,
     fitToPanoramaCover: Boolean = false,
     // KMK <--
+    manga: Manga? = null,
 ) {
     // KMK -->
     val coverIsWide = coverRatio.floatValue <= RatioSwitchToPanorama
     val bgColor = coverData.dominantCoverColors?.first?.let { Color(it) }.takeIf { libraryColored }
     val onBgColor = coverData.dominantCoverColors?.second.takeIf { libraryColored }
     // KMK <--
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     GridItemSelectable(
         isSelected = isSelected,
         onClick = onClick,
         onLongClick = onLongClick,
+        onDoubleClick = manga?.let {
+            if (!coverData.isMangaFavorite) {
+                { handleMangaDoubleClick(it, context, scope) }
+            } else {
+                null
+            }
+        },
     ) {
         Column {
             MangaGridCover(
@@ -392,6 +429,7 @@ private fun GridItemSelectable(
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onDoubleClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -401,6 +439,7 @@ private fun GridItemSelectable(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
+                onDoubleClick = onDoubleClick,
             )
             .selectedOutline(isSelected = isSelected, color = MaterialTheme.colorScheme.secondary)
             .padding(4.dp),
@@ -440,11 +479,14 @@ fun MangaListItem(
     // KMK -->
     libraryColored: Boolean = true,
     // KMK <--
+    manga: Manga? = null,
 ) {
     // KMK -->
     val bgColor = coverData.dominantCoverColors?.first?.let { Color(it) }.takeIf { libraryColored }
     val onBgColor = coverData.dominantCoverColors?.second.takeIf { libraryColored }
     // KMK <--
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     Row(
         modifier = Modifier
             .selectedBackground(isSelected)
@@ -452,6 +494,13 @@ fun MangaListItem(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
+                onDoubleClick = manga?.let {
+                    if (!coverData.isMangaFavorite) {
+                        { handleMangaDoubleClick(it, context, scope) }
+                    } else {
+                        null
+                    }
+                },
             )
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -524,6 +573,46 @@ private fun ContinueReadingButton(
                 contentDescription = stringResource(MR.strings.action_resume),
                 modifier = Modifier.size(iconSize),
             )
+        }
+    }
+}
+
+fun handleMangaDoubleClick(
+    manga: Manga,
+    context: android.content.Context,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    scope.launch {
+        try {
+            val networkToLocalManga: NetworkToLocalManga = Injekt.get()
+            val updateManga: UpdateManga = Injekt.get()
+            val getCategories: GetCategories = Injekt.get()
+            val setMangaCategories: SetMangaCategories = Injekt.get()
+            val libraryPreferences: LibraryPreferences = Injekt.get()
+
+            val localManga = withContext(Dispatchers.IO) {
+                networkToLocalManga(manga)
+            }
+            val result = withContext(Dispatchers.IO) {
+                updateManga.awaitUpdateFavorite(localManga.id, true)
+            }
+            if (result) {
+                val categories = withContext(Dispatchers.IO) {
+                    getCategories.await()
+                }
+                val defaultCategoryId = libraryPreferences.defaultCategory().get().toLong()
+                val defaultCategory = categories.find { it.id == defaultCategoryId }
+                if (defaultCategory != null) {
+                    withContext(Dispatchers.IO) {
+                        setMangaCategories.await(localManga.id, listOf(defaultCategory.id))
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    context.toast(context.stringResource(MR.strings.manga_added_library))
+                }
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) { "Double tap favoriting failed: " + e.stackTraceToString() }
         }
     }
 }

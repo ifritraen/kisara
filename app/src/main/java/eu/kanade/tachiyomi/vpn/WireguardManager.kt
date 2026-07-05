@@ -1,13 +1,22 @@
 package eu.kanade.tachiyomi.vpn
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.android.backend.Tunnel.State
 import com.wireguard.config.Config
+import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.util.system.cancelNotification
+import eu.kanade.tachiyomi.util.system.notify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import tachiyomi.domain.source.service.SourceManager
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
 import java.io.File
 
@@ -81,6 +90,7 @@ class WireguardManager(private val context: Context) {
             val config = Config.parse(ByteArrayInputStream(configText.toByteArray()))
             backend.setState(KmkTunnel(name), State.UP, config)
             _activeTunnel.value = name
+            showVpnNotification(name)
             true
         } catch (e: Exception) {
             android.util.Log.e("WireguardManager", "Failed to start tunnel $name: ${e.message}", e)
@@ -89,14 +99,50 @@ class WireguardManager(private val context: Context) {
     }
 
     suspend fun stopTunnel() {
-        val active = _activeTunnel.value ?: return
         try {
-            backend.setState(KmkTunnel(active), State.DOWN, null)
+            val running = backend.runningTunnelNames
+            for (tunnel in running) {
+                backend.setState(KmkTunnel(tunnel), State.DOWN, null)
+            }
             _activeTunnel.value = null
             autoStartedSourceId = null
+            dismissVpnNotification()
         } catch (e: Exception) {
             android.util.Log.e("WireguardManager", "Failed to stop tunnel: ${e.message}", e)
         }
+    }
+
+    private fun showVpnNotification(profileName: String) {
+        val intent = Intent(context, VpnDisconnectReceiver::class.java).apply {
+            action = VpnDisconnectReceiver.ACTION_DISCONNECT_VPN
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        context.notify(
+            Notifications.ID_VPN,
+            Notifications.CHANNEL_VPN,
+        ) {
+            setContentTitle("VPN Connected")
+            setContentText("Active Profile: $profileName")
+            setSmallIcon(R.drawable.globe)
+            setOngoing(true)
+            setShowWhen(false)
+            addAction(
+                R.drawable.ic_close_24dp,
+                "Disconnect",
+                pendingIntent,
+            )
+            setContentIntent(pendingIntent)
+        }
+    }
+
+    private fun dismissVpnNotification() {
+        context.cancelNotification(Notifications.ID_VPN)
     }
 
     fun getDefaultProfile(): String? {
@@ -107,31 +153,76 @@ class WireguardManager(private val context: Context) {
         prefs.edit().putString("default_profile", name).apply()
     }
 
-    fun getSourceProfile(sourceId: Long): String? {
-        return prefs.getString("source_$sourceId", null)
+    fun cleanSourceName(name: String): String {
+        return name.replace(Regex("\\s*\\([^)]+\\)"), "").trim()
     }
 
-    fun associateSource(sourceId: Long, profileName: String?) {
+    fun getSourceProfileByName(cleanedName: String): String? {
+        return prefs.getString("source_name_$cleanedName", null)
+    }
+
+    fun associateSourceByName(cleanedName: String, profileName: String?) {
         if (profileName == null) {
-            prefs.edit().remove("source_$sourceId").apply()
+            prefs.edit().remove("source_name_$cleanedName").apply()
         } else {
-            prefs.edit().putString("source_$sourceId", profileName).apply()
+            prefs.edit().putString("source_name_$cleanedName", profileName).apply()
         }
     }
 
-    suspend fun startTunnelForSource(sourceId: Long) {
-        if (_activeTunnel.value != null) return
+    fun getSourceProfile(sourceId: Long): String? {
+        val source = try {
+            Injekt.get<SourceManager>().getOrStub(sourceId)
+        } catch (e: Exception) {
+            null
+        }
+        val cleanedName = source?.name?.let { cleanSourceName(it) }
+        return if (cleanedName != null) {
+            getSourceProfileByName(cleanedName) ?: prefs.getString("source_$sourceId", null)
+        } else {
+            prefs.getString("source_$sourceId", null)
+        }
+    }
 
-        val profile = getSourceProfile(sourceId) ?: getDefaultProfile()
-        if (profile != null) {
-            if (startTunnel(profile)) {
-                autoStartedSourceId = sourceId
+    fun associateSource(sourceId: Long, profileName: String?) {
+        val source = try {
+            Injekt.get<SourceManager>().getOrStub(sourceId)
+        } catch (e: Exception) {
+            null
+        }
+        val cleanedName = source?.name?.let { cleanSourceName(it) }
+        if (cleanedName != null) {
+            associateSourceByName(cleanedName, profileName)
+        } else {
+            if (profileName == null) {
+                prefs.edit().remove("source_$sourceId").apply()
+            } else {
+                prefs.edit().putString("source_$sourceId", profileName).apply()
             }
         }
     }
 
-    suspend fun stopTunnelForSource(sourceId: Long) {
-        if (autoStartedSourceId == sourceId) {
+    private val activeRequesters = mutableSetOf<String>()
+
+    suspend fun startTunnelForSource(sourceId: Long, requesterKey: String = "generic") {
+        val profile = getSourceProfile(sourceId) ?: getDefaultProfile()
+        if (profile != null) {
+            synchronized(activeRequesters) {
+                activeRequesters.add(requesterKey)
+            }
+            if (_activeTunnel.value == null) {
+                if (startTunnel(profile)) {
+                    autoStartedSourceId = sourceId
+                }
+            }
+        }
+    }
+
+    suspend fun stopTunnelForSource(sourceId: Long, requesterKey: String = "generic") {
+        val becameEmpty = synchronized(activeRequesters) {
+            activeRequesters.remove(requesterKey)
+            activeRequesters.isEmpty()
+        }
+        if (becameEmpty && autoStartedSourceId == sourceId) {
             stopTunnel()
         }
     }

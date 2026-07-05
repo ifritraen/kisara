@@ -653,6 +653,15 @@ class ReaderViewModel @JvmOverloads constructor(
         try {
             logcat { "Preloading ${chapter.chapter.url}" }
             loader.loadChapter(chapter)
+
+            val pages = (chapter.state as? ReaderChapter.State.Loaded)?.pages
+            val pageLoader = chapter.pageLoader
+            if (pages != null && pageLoader is eu.kanade.tachiyomi.ui.reader.loader.HttpPageLoader) {
+                val amount = readerPreferences.preloadSize().get()
+                pages.take(amount).forEach { page ->
+                    pageLoader.boostPage(page)
+                }
+            }
         } catch (e: Throwable) {
             if (e is CancellationException) {
                 throw e

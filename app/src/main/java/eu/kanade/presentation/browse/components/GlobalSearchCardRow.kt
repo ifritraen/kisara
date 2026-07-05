@@ -61,6 +61,7 @@ fun GlobalSearchCardRow(
                 // KMK -->
                 isSelected = selection.fastAny { selected -> selected.id == title.id },
                 // KMK <--
+                manga = title,
             )
         }
     }
@@ -77,6 +78,7 @@ internal fun MangaItem(
     isSelected: Boolean = false,
     usePanoramaCover: Boolean? = null,
     // KMK <--
+    manga: Manga? = null,
 ) {
     // KMK -->
     val panoramaCover = usePanoramaCover ?: Injekt.get<UiPreferences>().usePanoramaCoverFlow().collectAsState().value
@@ -102,6 +104,7 @@ internal fun MangaItem(
             usePanoramaCover = panoramaCover,
             fitToPanoramaCover = true,
             // KMK <--
+            manga = manga,
             coverAlpha = if (isFavorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
             onClick = onClick,
             onLongClick = onLongClick,

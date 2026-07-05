@@ -16,6 +16,7 @@ import eu.kanade.translation.model.TranslationBlock
 import eu.kanade.translation.model.TranslationReport
 import eu.kanade.translation.recognizer.BubbleDetector
 import eu.kanade.translation.recognizer.MangaOcrTextRecognizer
+import eu.kanade.translation.recognizer.PaddleOcrTextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import eu.kanade.translation.translator.TextTranslator
@@ -26,6 +27,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +41,8 @@ import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToStream
@@ -83,8 +88,9 @@ class ChapterTranslator(
 
     private var translationJob: Job? = null
 
+    private val _isRunning = MutableStateFlow(false)
     val isRunning: Boolean
-        get() = translationJob?.isActive == true
+        get() = _isRunning.value
 
     @Volatile
     var isPaused: Boolean = false
@@ -94,6 +100,7 @@ class ChapterTranslator(
 
     // KMK --> optional advanced OCR pipeline
     private var mangaOcrRecognizer: MangaOcrTextRecognizer? = null
+    private var paddleOcrRecognizer: PaddleOcrTextRecognizer? = null
     private var bubbleDetector: BubbleDetector? = null
     // KMK <--
 
@@ -113,7 +120,7 @@ class ChapterTranslator(
         val pending = queueState.value.filter { it.status != Translation.State.TRANSLATED }
         pending.forEach { if (it.status != Translation.State.QUEUE) it.status = Translation.State.QUEUE }
         isPaused = false
-        launchTranslatorJob()
+        TranslationJob.start(context)
         return pending.isNotEmpty()
     }
 
@@ -137,25 +144,25 @@ class ChapterTranslator(
         internalClearQueue()
     }
 
-    private fun launchTranslatorJob() {
-        if (isRunning) return
+    suspend fun translateQueue() = withContext(Dispatchers.IO) {
+        val activeTranslationFlow = queueState.transformLatest { queue ->
+            while (true) {
+                val activeTranslations =
+                    queue.asSequence().filter { it.status.value <= Translation.State.TRANSLATING.value }
+                        .groupBy { it.source }.toList().take(5).map { (_, translations) -> translations.first() }
+                emit(activeTranslations)
 
-        translationJob = scope.launch {
-            val activeTranslationFlow = queueState.transformLatest { queue ->
-                while (true) {
-                    val activeTranslations =
-                        queue.asSequence().filter { it.status.value <= Translation.State.TRANSLATING.value }
-                            .groupBy { it.source }.toList().take(5).map { (_, translations) -> translations.first() }
-                    emit(activeTranslations)
+                if (activeTranslations.isEmpty()) break
+                val activeTranslationsErroredFlow =
+                    combine(activeTranslations.map(Translation::statusFlow)) { states ->
+                        states.contains(Translation.State.ERROR)
+                    }.filter { it }
+                activeTranslationsErroredFlow.first()
+            }
+        }.distinctUntilChanged()
 
-                    if (activeTranslations.isEmpty()) break
-                    val activeTranslationsErroredFlow =
-                        combine(activeTranslations.map(Translation::statusFlow)) { states ->
-                            states.contains(Translation.State.ERROR)
-                        }.filter { it }
-                    activeTranslationsErroredFlow.first()
-                }
-            }.distinctUntilChanged()
+        try {
+            _isRunning.value = true
             supervisorScope {
                 val translationJobs = mutableMapOf<Translation, Job>()
 
@@ -172,6 +179,8 @@ class ChapterTranslator(
                     }
                 }
             }
+        } finally {
+            _isRunning.value = false
         }
     }
 
@@ -192,8 +201,7 @@ class ChapterTranslator(
     }
 
     private fun cancelTranslatorJob() {
-        translationJob?.cancel()
-        translationJob = null
+        TranslationJob.stop(context)
     }
 
     fun queueChapter(manga: Manga, chapter: Chapter) {
@@ -255,16 +263,20 @@ class ChapterTranslator(
             )!!
 
             val pages = mutableMapOf<String, PageTranslation>()
-            val tmpFile = translationMangaDir.createFile("tmp")!!
             val streams = getChapterPages(chapterPath)
             // saving the stream to tmp file cuz i can't get the
             // BitmapFactory.decodeStream() to work with the stream from .cbz archive
-            // KMK --> optional advanced pipeline: MangaOCR + BubbleDetector
-            val useMangaOcr = translationPreferences.ocrEngine().get() == 1
+            // KMK --> optional advanced pipeline: MangaOCR + PaddleOCR + BubbleDetector
+            val ocrEngine = translationPreferences.ocrEngine().get()
+            val useMangaOcr = ocrEngine == 1
+            val usePaddleOcr = ocrEngine == 2
             val useBubbleDetection = translationPreferences.bubbleDetectionEnabled().get()
 
             val ocrEngineReady = if (useMangaOcr) {
                 val recognizer = mangaOcrRecognizer ?: MangaOcrTextRecognizer(context, translation.fromLang).also { mangaOcrRecognizer = it }
+                recognizer.isReady
+            } else if (usePaddleOcr) {
+                val recognizer = paddleOcrRecognizer ?: PaddleOcrTextRecognizer(context, translation.fromLang).also { paddleOcrRecognizer = it }
                 recognizer.isReady
             } else {
                 true
@@ -281,131 +293,190 @@ class ChapterTranslator(
                 null
             }
 
-            withContext(Dispatchers.IO) {
-                streams.forEachIndexed { index, (fileName, streamFn) ->
-                    coroutineContext.ensureActive()
-                    TranslationReport.log("INFO", "OCR", "Processing page ${index + 1}/${streams.size} ($fileName)")
-                    _progressState.value = Progress(
-                        chapterId = translation.chapter.id,
-                        chapterName = translation.chapter.name,
-                        currentPage = index + 1,
-                        totalPages = streams.size,
-                        step = "Loading page...",
-                    )
-                    streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
-                    val fullBitmap = try {
-                        tmpFile.openInputStream().use { BitmapFactory.decodeStream(it) }
-                    } catch (e: Throwable) {
-                        TranslationReport.log("ERROR", "OCR", "Failed to decode page ${index + 1}", e)
-                        null
-                    } ?: return@forEachIndexed
+            val concurrencyLimit = translationPreferences.translationConcurrency().get().coerceIn(1, 8)
+            val semaphore = Semaphore(concurrencyLimit)
+            val completedPages = java.util.concurrent.atomic.AtomicInteger(0)
 
-                    val regions = if (detector != null && detector.isReady) {
-                        _progressState.value = Progress(
-                            chapterId = translation.chapter.id,
-                            chapterName = translation.chapter.name,
-                            currentPage = index + 1,
-                            totalPages = streams.size,
-                            step = "Detecting speech bubbles...",
-                        )
-                        try {
-                            val detected = detector.detect(fullBitmap).map { it.rect }
-                            TranslationReport.log("INFO", "BubbleDetector", "Detected ${detected.size} speech bubbles/regions on page ${index + 1}")
+            withContext(Dispatchers.IO) {
+                val deferreds = streams.mapIndexed { index, (fileName, streamFn) ->
+                    async {
+                        semaphore.withPermit {
+                            coroutineContext.ensureActive()
+                            TranslationReport.log("INFO", "OCR", "Processing page ${index + 1}/${streams.size} ($fileName)")
+                            val activeProgress = (completedPages.get() + 1).coerceAtMost(streams.size)
                             _progressState.value = Progress(
                                 chapterId = translation.chapter.id,
                                 chapterName = translation.chapter.name,
-                                currentPage = index + 1,
+                                currentPage = activeProgress,
                                 totalPages = streams.size,
-                                step = "Bubble detection done (${detected.size} found)",
+                                step = "Loading page ${index + 1}...",
                             )
-                            detected.ifEmpty {
-                                TranslationReport.log("INFO", "BubbleDetector", "No bubbles detected on page ${index + 1}, using full page")
-                                listOf(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height))
-                            }
-                        } catch (e: Throwable) {
-                            TranslationReport.log("ERROR", "BubbleDetector", "Bubble detector crashed on page ${index + 1}, fallback to full page", e)
-                            listOf(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height))
-                        }
-                    } else {
-                        listOf(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height))
-                    }
+                            val pageTmpFile = translationMangaDir.createFile("tmp_page_$index")!!
+                            try {
+                                streamFn().use { pageInput -> pageTmpFile.openOutputStream().use { out -> pageInput.copyTo(out) } }
+                                val fullBitmap = try {
+                                    pageTmpFile.openInputStream().use { BitmapFactory.decodeStream(it) }
+                                } catch (e: Throwable) {
+                                    TranslationReport.log("ERROR", "OCR", "Failed to decode page ${index + 1}", e)
+                                    null
+                                } ?: return@withPermit null
 
-                    val pageTranslation = PageTranslation(imgWidth = fullBitmap.width.toFloat(), imgHeight = fullBitmap.height.toFloat())
-                    for ((regionIndex, region) in regions.withIndex()) {
-                        _progressState.value = Progress(
-                            chapterId = translation.chapter.id,
-                            chapterName = translation.chapter.name,
-                            currentPage = index + 1,
-                            totalPages = streams.size,
-                            step = "Recognizing text block ${regionIndex + 1}/${regions.size}...",
-                        )
-                        val crop = try {
-                            android.graphics.Bitmap.createBitmap(
-                                fullBitmap,
-                                region.left.coerceAtLeast(0),
-                                region.top.coerceAtLeast(0),
-                                region.width().coerceAtMost(fullBitmap.width - region.left),
-                                region.height().coerceAtMost(fullBitmap.height - region.top),
-                            )
-                        } catch (e: Throwable) {
-                            TranslationReport.log("ERROR", "OCR", "Failed to crop region ${regionIndex + 1} on page ${index + 1}", e)
-                            continue
-                        }
-
-                        if (useMangaOcr && ocrEngineReady) {
-                            val recognizer = mangaOcrRecognizer!!
-                            val text = try {
-                                recognizer.engine.recognize(crop).also {
-                                    TranslationReport.log("INFO", "MangaOCR", "MangaOCR recognized crop ${regionIndex + 1} text: $it")
+                                val regions = if (detector != null && detector.isReady) {
+                                    val activeProgress = (completedPages.get() + 1).coerceAtMost(streams.size)
+                                    _progressState.value = Progress(
+                                        chapterId = translation.chapter.id,
+                                        chapterName = translation.chapter.name,
+                                        currentPage = activeProgress,
+                                        totalPages = streams.size,
+                                        step = "Detecting speech bubbles on page ${index + 1}...",
+                                    )
+                                    try {
+                                        val detected = detector.detect(fullBitmap)
+                                        TranslationReport.log("INFO", "BubbleDetector", "Detected ${detected.size} speech bubbles/regions on page ${index + 1}")
+                                        _progressState.value = Progress(
+                                            chapterId = translation.chapter.id,
+                                            chapterName = translation.chapter.name,
+                                            currentPage = activeProgress,
+                                            totalPages = streams.size,
+                                            step = "Bubble detection done on page ${index + 1} (${detected.size} found)",
+                                        )
+                                        detected.ifEmpty {
+                                            TranslationReport.log("INFO", "BubbleDetector", "No bubbles detected on page ${index + 1}, using full page")
+                                            listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
+                                        }
+                                    } catch (e: Throwable) {
+                                        TranslationReport.log("ERROR", "BubbleDetector", "Bubble detector crashed on page ${index + 1}, fallback to full page", e)
+                                        listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
+                                    }
+                                } else {
+                                    listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
                                 }
-                            } catch (e: Throwable) {
-                                TranslationReport.log("ERROR", "MangaOCR", "MangaOCR failed on page ${index + 1} crop ${regionIndex + 1}, fallback to MLKit", e)
-                                val fallbackBlocks = runMlKitOcrOnCrop(crop, region)
-                                fallbackBlocks.joinToString("\n") { it.text }
-                            }
 
-                            if (text.isNotBlank()) {
-                                pageTranslation.blocks.add(
-                                    TranslationBlock(
-                                        text = text,
-                                        width = region.width().toFloat(),
-                                        height = region.height().toFloat(),
-                                        x = region.left.toFloat(),
-                                        y = region.top.toFloat(),
-                                        symWidth = (region.width() / (text.length.coerceAtLeast(1))).toFloat(),
-                                        symHeight = (region.height() / (text.length.coerceAtLeast(1))).toFloat(),
-                                        angle = if (region.height() > region.width() * 1.3f) 90f else 0f,
-                                    ),
-                                )
-                            }
-                        } else {
-                            val blocks = runMlKitOcrOnCrop(crop, region)
-                            for (block in blocks) {
-                                pageTranslation.blocks.add(
-                                    TranslationBlock(
-                                        text = block.text,
-                                        width = block.width,
-                                        height = block.height,
-                                        x = block.x,
-                                        y = block.y,
-                                        symWidth = block.symWidth,
-                                        symHeight = block.symHeight,
-                                        angle = block.angle,
-                                    ),
+                                val pageTranslation = PageTranslation(imgWidth = fullBitmap.width.toFloat(), imgHeight = fullBitmap.height.toFloat())
+                                val activeProgress = (completedPages.get() + 1).coerceAtMost(streams.size)
+                                for ((regionIndex, regionObj) in regions.withIndex()) {
+                                    val region = regionObj.rect
+                                    val isBubbleRegion = regionObj.isBubble
+                                    _progressState.value = Progress(
+                                        chapterId = translation.chapter.id,
+                                        chapterName = translation.chapter.name,
+                                        currentPage = activeProgress,
+                                        totalPages = streams.size,
+                                        step = "Recognizing text block ${regionIndex + 1}/${regions.size} on page ${index + 1}...",
+                                    )
+                                    val crop = try {
+                                        android.graphics.Bitmap.createBitmap(
+                                            fullBitmap,
+                                            region.left.coerceAtLeast(0),
+                                            region.top.coerceAtLeast(0),
+                                            region.width().coerceAtMost(fullBitmap.width - region.left),
+                                            region.height().coerceAtMost(fullBitmap.height - region.top),
+                                        )
+                                    } catch (e: Throwable) {
+                                        TranslationReport.log("ERROR", "OCR", "Failed to crop region ${regionIndex + 1} on page ${index + 1}", e)
+                                        continue
+                                    }
+
+                                    val rawBlocks = if (usePaddleOcr && ocrEngineReady) {
+                                        runPaddleOcrOnCrop(crop, region)
+                                    } else if (useMangaOcr && ocrEngineReady) {
+                                        val recognizer = mangaOcrRecognizer!!
+                                        val text = try {
+                                            recognizer.engine.recognize(crop).also {
+                                                TranslationReport.log("INFO", "MangaOCR", "MangaOCR recognized crop ${regionIndex + 1} text: $it")
+                                            }
+                                        } catch (e: Throwable) {
+                                            TranslationReport.log("ERROR", "MangaOCR", "MangaOCR failed on page ${index + 1} crop ${regionIndex + 1}, fallback to MLKit", e)
+                                            val fallbackBlocks = runMlKitOcrOnCrop(crop, region)
+                                            fallbackBlocks.joinToString("\n") { it.text }
+                                        }
+
+                                        if (text.isNotBlank()) {
+                                            listOf(
+                                                TranslationBlock(
+                                                    text = text,
+                                                    width = region.width().toFloat(),
+                                                    height = region.height().toFloat(),
+                                                    x = region.left.toFloat(),
+                                                    y = region.top.toFloat(),
+                                                    symWidth = (region.width() / (text.length.coerceAtLeast(1))).toFloat(),
+                                                    symHeight = (region.height() / (text.length.coerceAtLeast(1))).toFloat(),
+                                                    angle = if (region.height() > region.width() * 1.3f) 90f else 0f,
+                                                ),
+                                            )
+                                        } else {
+                                            emptyList()
+                                        }
+                                    } else {
+                                        runMlKitOcrOnCrop(crop, region)
+                                    }
+
+                                    val blocks = if (isBubbleRegion && rawBlocks.isNotEmpty()) {
+                                        val isRtl = translation.fromLang.code.startsWith("ja", ignoreCase = true) ||
+                                            translation.fromLang.code.startsWith("zh", ignoreCase = true) ||
+                                            translation.fromLang.code.startsWith("ko", ignoreCase = true)
+
+                                        val sortedBlocks = if (isRtl) {
+                                            rawBlocks.sortedWith(compareByDescending<TranslationBlock> { it.x }.thenBy { it.y })
+                                        } else {
+                                            rawBlocks.sortedWith(compareBy<TranslationBlock> { it.y }.thenBy { it.x })
+                                        }
+
+                                        val merged = sortedBlocks.reduce { acc, b -> mergeTextBlock(acc, b) }
+                                        merged.isBubble = true
+                                        merged.width = region.width().toFloat()
+                                        merged.height = region.height().toFloat()
+                                        merged.x = region.left.toFloat()
+                                        merged.y = region.top.toFloat()
+                                        listOf(merged)
+                                    } else {
+                                        rawBlocks
+                                    }
+
+                                    for (block in blocks) {
+                                        pageTranslation.blocks.add(
+                                            TranslationBlock(
+                                                text = block.text,
+                                                width = block.width,
+                                                height = block.height,
+                                                x = block.x,
+                                                y = block.y,
+                                                symWidth = block.symWidth,
+                                                symHeight = block.symHeight,
+                                                angle = block.angle,
+                                                isBubble = block.isBubble,
+                                            ),
+                                        )
+                                    }
+                                }
+
+                                if (pageTranslation.blocks.isNotEmpty()) {
+                                    val deduped = deduplicateBlocks(pageTranslation.blocks)
+                                    pageTranslation.blocks = smartMergeBlocks(deduped, 50, 30, 30)
+                                    Pair(fileName, pageTranslation)
+                                } else {
+                                    null
+                                }
+                            } finally {
+                                try {
+                                    pageTmpFile.delete()
+                                } catch (e: Exception) {}
+                                val completed = completedPages.incrementAndGet()
+                                _progressState.value = Progress(
+                                    chapterId = translation.chapter.id,
+                                    chapterName = translation.chapter.name,
+                                    currentPage = completed,
+                                    totalPages = streams.size,
+                                    step = "Recognized $completed/${streams.size} pages",
                                 )
                             }
                         }
-                    }
-                    if (pageTranslation.blocks.isNotEmpty()) {
-                        val deduped = deduplicateBlocks(pageTranslation.blocks)
-                        pageTranslation.blocks = smartMergeBlocks(deduped, 50, 30, 30)
-                        pages[fileName] = pageTranslation
                     }
                 }
+                deferreds.awaitAll().filterNotNull().forEach { (fileName, pageTrans) ->
+                    pages[fileName] = pageTrans
+                }
             }
-            try {
-                tmpFile.delete()
-            } catch (e: Exception) {}
             _progressState.value = Progress(
                 chapterId = translation.chapter.id,
                 chapterName = translation.chapter.name,
@@ -610,10 +681,23 @@ class ChapterTranslator(
         xThreshold: Int,
         yThreshold: Int,
     ): Boolean {
+        // Condition 1: Vertically sequential (one below the other in the same column)
         val isWidthSimilar = (b.width < a.width) || (abs(a.width - b.width) < widthThreshold)
         val isXClose = abs(a.x - b.x) < xThreshold
         val isYClose = (b.y - (a.y + a.height)) < yThreshold
-        return isWidthSimilar && isXClose && isYClose
+        if (isWidthSimilar && isXClose && isYClose) return true
+
+        // Condition 2: Side-by-side vertical columns (overlapping vertically, close horizontally)
+        val bothVertical = (a.height > a.width * 1.2f) && (b.height > b.width * 1.2f)
+        if (bothVertical) {
+            val verticalOverlap = maxOf(a.y, b.y) < minOf(a.y + a.height, b.y + b.height)
+            val horizontalGap = if (a.x < b.x) b.x - (a.x + a.width) else a.x - (b.x + b.width)
+            if (verticalOverlap && horizontalGap < 50) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private fun mergeTextBlock(a: TranslationBlock, b: TranslationBlock): TranslationBlock {
@@ -647,12 +731,29 @@ class ChapterTranslator(
 
     private fun getChapterPages(chapterPath: UniFile): List<Pair<String, () -> InputStream>> {
         if (chapterPath.isFile) {
-            val reader = chapterPath.archiveReader(context)
-            return reader.useEntries { entries ->
-                entries.filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
-                    .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }.map { entry ->
-                        Pair(entry.name) { reader.getInputStream(entry.name)!! }
-                    }.toList()
+            val entryNames = chapterPath.archiveReader(context).use { reader ->
+                reader.useEntries { entries ->
+                    entries.filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
+                        .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
+                        .map { it.name }
+                        .toList()
+                }
+            }
+            return entryNames.map { name ->
+                Pair(name) {
+                    val r = chapterPath.archiveReader(context)
+                    val stream = r.getInputStream(name)
+                        ?: throw java.io.FileNotFoundException("Entry $name not found in archive")
+                    object : java.io.FilterInputStream(stream) {
+                        override fun close() {
+                            try {
+                                super.close()
+                            } finally {
+                                r.close()
+                            }
+                        }
+                    }
+                }
             }
         } else {
             return chapterPath.listFiles()!!.filter { ImageUtil.isImage(it.name) }.map { entry ->
@@ -717,8 +818,23 @@ class ChapterTranslator(
     }
 
     private suspend fun runMlKitOcrOnCrop(crop: android.graphics.Bitmap, region: android.graphics.Rect): List<TranslationBlock> {
+        val isPadded = crop.width < 32 || crop.height < 32
+        val finalCrop = if (isPadded) {
+            try {
+                android.graphics.Bitmap.createBitmap(32, 32, android.graphics.Bitmap.Config.ARGB_8888).also { padded ->
+                    val canvas = android.graphics.Canvas(padded)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    canvas.drawBitmap(crop, 0f, 0f, null)
+                }
+            } catch (e: Throwable) {
+                crop
+            }
+        } else {
+            crop
+        }
+
         return try {
-            val image = InputImage.fromBitmap(crop, 0)
+            val image = InputImage.fromBitmap(finalCrop, 0)
             val result = textRecognizer.recognize(image)
             val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
             blocks.map { block ->
@@ -737,6 +853,33 @@ class ChapterTranslator(
             }
         } catch (e: Throwable) {
             TranslationReport.log("ERROR", "MLKitOCR", "MLKit OCR failed on crop region", e)
+            emptyList()
+        } finally {
+            if (isPadded && finalCrop !== crop) {
+                finalCrop.recycle()
+            }
+        }
+    }
+
+    private suspend fun runPaddleOcrOnCrop(crop: android.graphics.Bitmap, region: android.graphics.Rect): List<TranslationBlock> {
+        return try {
+            val image = InputImage.fromBitmap(crop, 0)
+            val recognizer = paddleOcrRecognizer ?: PaddleOcrTextRecognizer(context, TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())).also { paddleOcrRecognizer = it }
+            val results = recognizer.recognize(image)
+            results.map { (text, bounds) ->
+                TranslationBlock(
+                    text = text,
+                    width = bounds.width().toFloat(),
+                    height = bounds.height().toFloat(),
+                    x = (region.left + bounds.left).toFloat(),
+                    y = (region.top + bounds.top).toFloat(),
+                    symWidth = (bounds.width() / text.length.coerceAtLeast(1)).toFloat(),
+                    symHeight = (bounds.height() / text.length.coerceAtLeast(1)).toFloat(),
+                    angle = if (bounds.height() > bounds.width() * 1.3f) 90f else 0f,
+                )
+            }
+        } catch (e: Throwable) {
+            TranslationReport.log("ERROR", "PaddleOCR", "PaddleOCR failed on crop region", e)
             emptyList()
         }
     }

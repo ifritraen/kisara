@@ -104,8 +104,19 @@ abstract class PagerViewer(
             onPageChange(position)
         }
 
+        private var userDragged = false
+
         override fun onPageScrollStateChanged(state: Int) {
             isIdle = state == ViewPager.SCROLL_STATE_IDLE
+            if (state == ViewPager.SCROLL_STATE_DRAGGING) {
+                userDragged = true
+            }
+            if (state == ViewPager.SCROLL_STATE_IDLE) {
+                if (userDragged) {
+                    userDragged = false
+                    activity.autoScrollTrigger.tryEmit(Unit)
+                }
+            }
         }
     }
 

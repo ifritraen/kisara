@@ -82,6 +82,7 @@ data object BrowseTab : Tab {
     val extensionsWebViewRefreshEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val extensionsFilterEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val extensionsReposEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val extensionsInstallJarEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 
     val migrateHelpEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 

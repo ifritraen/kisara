@@ -4,6 +4,11 @@
 -keep,allowoptimization class tachiyomi.**
 -keep,allowoptimization class mihon.**
 
+# Keep Kotatsu Parsers package intact for sideloaded jars
+-keep class org.koitharu.kotatsu.parsers.** { *; }
+-keep interface org.koitharu.kotatsu.parsers.** { *; }
+
+
 # Keep common dependencies used in extensions
 -keep,allowoptimization class androidx.preference.** { public protected *; }
 -keep,allowoptimization class kotlin.** { public protected *; }

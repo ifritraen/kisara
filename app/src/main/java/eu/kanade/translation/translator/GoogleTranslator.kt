@@ -32,9 +32,11 @@ class GoogleTranslator(
             page.blocks.map { block ->
                 async {
                     try {
-                        block.translation = translateText(toLang.code, block.text)
-                    } catch (e: Exception) {
-                        logcat { "Failed to translate block: ${e.message}" }
+                        val result = translateText(toLang.code, block.text)
+                        if (result.isBlank()) {
+                            throw Exception("Google Translate returned empty result")
+                        }
+                        block.translation = result
                     } finally {
                         val done = completed.incrementAndGet()
                         onProgress(done, totalBlocks)
@@ -51,15 +53,17 @@ class GoogleTranslator(
         val build: Request = Request.Builder().url(access).build()
         val newCall = okHttpClient.newCall(build)
         val response = newCall.await()
-        val body = response.body
+        if (!response.isSuccessful) {
+            throw Exception("Google Translate API error ${response.code}: ${response.message}")
+        }
+        val body = response.body ?: throw Exception("Empty response body")
         val string = body.string()
         try {
             val jSONArray = JSONArray(string).getJSONArray(0).getJSONArray(0)
             return jSONArray.getString(0)
         } catch (e: Exception) {
-            logcat { "Image Translation Error : $e" }
+            throw Exception("Failed to parse Google Translate response: ${e.message}", e)
         }
-        return ""
     }
 
     private fun getTranslateUrl(lang: String, text: String): String {

@@ -99,6 +99,25 @@ private val defaultContent: @Composable RowScope.(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+
+            val repoName = source.installedExtension?.repoName ?: if (eu.kanade.tachiyomi.extension.JarExtensionManager.sources.value.any { it.id == source.id }) {
+                "Kotatsu"
+            } else {
+                null
+            }
+            if (repoName != null) {
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = repoName,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
         // KMK <--
     }

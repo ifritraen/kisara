@@ -40,6 +40,7 @@ import eu.kanade.translation.data.TranslationFont
 import eu.kanade.translation.model.TranslationReport
 import eu.kanade.translation.recognizer.BubbleDetector
 import eu.kanade.translation.recognizer.MangaOcrTextRecognizer
+import eu.kanade.translation.recognizer.PaddleOcrTextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
@@ -49,6 +50,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -121,6 +123,12 @@ object SettingsTranslationScreen : SearchableSettings {
                     subtitle = stringResource(KMR.strings.pref_sub_engine_api_key),
                     title = stringResource(KMR.strings.pref_engine_api_key),
                 ),
+                Preference.PreferenceItem.CustomPreference(
+                    title = "API Key Management",
+                    content = {
+                        ApiKeysPreference(translationPreferences = translationPreferences)
+                    },
+                ),
             ),
         )
     }
@@ -144,6 +152,12 @@ object SettingsTranslationScreen : SearchableSettings {
                     preference = translationPreferences.translationEngineMaxOutputTokens(),
                     title = stringResource(KMR.strings.pref_engine_max_output),
                 ),
+                Preference.PreferenceItem.CustomPreference(
+                    title = "Translation Concurrency",
+                    content = {
+                        ConcurrencyPreference(translationPreferences = translationPreferences)
+                    },
+                ),
             ),
         )
     }
@@ -163,6 +177,7 @@ object SettingsTranslationScreen : SearchableSettings {
                     entries = mapOf(
                         0 to stringResource(KMR.strings.pref_ocr_engine_mlkit),
                         1 to stringResource(KMR.strings.pref_ocr_engine_mangaocr),
+                        2 to stringResource(KMR.strings.pref_ocr_engine_paddleocr),
                     ).toImmutableMap(),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
@@ -181,6 +196,21 @@ object SettingsTranslationScreen : SearchableSettings {
                                 val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
                                 val recognizer = MangaOcrTextRecognizer(context, fromLang)
                                 recognizer.engine.downloadModels(onProgress)
+                            },
+                        )
+                    },
+                ),
+                Preference.PreferenceItem.CustomPreference(
+                    title = stringResource(KMR.strings.pref_download_paddleocr_model),
+                    content = {
+                        ModelDownloadPreference(
+                            title = stringResource(KMR.strings.pref_download_paddleocr_model),
+                            subtitle = stringResource(KMR.strings.pref_download_paddleocr_model_summary),
+                            modelDirName = "paddleocr",
+                            onDownload = { onProgress ->
+                                val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
+                                val recognizer = PaddleOcrTextRecognizer(context, fromLang)
+                                recognizer.ensureModels(onProgress)
                             },
                         )
                     },
@@ -458,6 +488,114 @@ private fun TranslationReportPreference() {
                     Text("Close")
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun ApiKeysPreference(
+    translationPreferences: TranslationPreferences,
+) {
+    val apiKeysSet by translationPreferences.translationEngineApiKeys().collectAsState()
+    var keysList by remember(apiKeysSet) { mutableStateOf(apiKeysSet.toList()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = "API Key Rotation Queue",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = "Enter multiple keys to cycle through them on rate limits/failures.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        keysList.forEachIndexed { index, key ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = key,
+                    onValueChange = { newValue ->
+                        val updated = keysList.toMutableList().apply { set(index, newValue) }
+                        keysList = updated
+                        translationPreferences.translationEngineApiKeys().set(updated.filter { it.isNotBlank() }.toSet())
+                    },
+                    label = { Text("API Key #${index + 1}") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                IconButton(onClick = {
+                    val updated = keysList.toMutableList().apply { removeAt(index) }
+                    keysList = updated
+                    translationPreferences.translationEngineApiKeys().set(updated.filter { it.isNotBlank() }.toSet())
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+
+        TextButton(onClick = {
+            val updated = keysList + ""
+            keysList = updated
+        }) {
+            Text("+ Add API Key")
+        }
+    }
+}
+
+@Composable
+private fun ConcurrencyPreference(
+    translationPreferences: TranslationPreferences,
+) {
+    val concurrency by translationPreferences.translationConcurrency().collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Parallel Translation Pages",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Number of pages processed concurrently (1-8)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = concurrency.toString(),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+        androidx.compose.material3.Slider(
+            value = concurrency.toFloat(),
+            onValueChange = { newValue ->
+                translationPreferences.translationConcurrency().set(newValue.toInt())
+            },
+            valueRange = 1f..8f,
+            steps = 6,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

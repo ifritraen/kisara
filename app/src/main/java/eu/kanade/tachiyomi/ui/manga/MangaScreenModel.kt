@@ -1495,6 +1495,17 @@ class MangaScreenModel(
             }
         }
     }
+
+    fun runBulkTranslation(items: List<ChapterList.Item>) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            items.forEach { item ->
+                if (item.downloadState == Download.State.DOWNLOADED) {
+                    translationManager.translateChapter(manga, item.chapter)
+                }
+            }
+        }
+    }
     // KMK <--
 
     fun runDownloadAction(action: DownloadAction) {
@@ -1508,6 +1519,21 @@ class MangaScreenModel(
         }
         if (chaptersToDownload.isNotEmpty()) {
             startDownload(chaptersToDownload, false)
+        }
+    }
+
+    fun runTranslateAction(action: eu.kanade.presentation.manga.TranslationAction) {
+        val chaptersToTranslate = when (action) {
+            eu.kanade.presentation.manga.TranslationAction.NEXT_1_CHAPTER -> getUnreadChaptersSorted().take(1)
+            eu.kanade.presentation.manga.TranslationAction.NEXT_5_CHAPTERS -> getUnreadChaptersSorted().take(5)
+            eu.kanade.presentation.manga.TranslationAction.NEXT_10_CHAPTERS -> getUnreadChaptersSorted().take(10)
+            eu.kanade.presentation.manga.TranslationAction.NEXT_25_CHAPTERS -> getUnreadChaptersSorted().take(25)
+            eu.kanade.presentation.manga.TranslationAction.UNREAD_CHAPTERS -> getUnreadChapters()
+            eu.kanade.presentation.manga.TranslationAction.BOOKMARKED_CHAPTERS -> getBookmarkedChapters()
+        }
+        val manga = successState?.manga ?: return
+        chaptersToTranslate.forEach { chapterItem ->
+            translationManager.translateChapter(manga, chapterItem)
         }
     }
 
@@ -1822,6 +1848,13 @@ class MangaScreenModel(
 
         screenModelScope.launchNonCancellable {
             setMangaChapterFlags.awaitSetSortingModeOrFlipOrder(manga, sort)
+        }
+    }
+
+    fun toggleAutoTranslate() {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            setMangaChapterFlags.awaitSetAutoTranslate(manga, !manga.autoTranslateAfterDownload)
         }
     }
 

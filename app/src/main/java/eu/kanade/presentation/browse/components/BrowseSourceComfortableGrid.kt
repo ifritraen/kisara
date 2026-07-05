@@ -108,6 +108,7 @@ internal fun BrowseSourceComfortableGridItem(
         usePanoramaCover = usePanoramaCover,
         fitToPanoramaCover = true,
         // KMK <--
+        manga = manga,
         coverAlpha = if (manga.favorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
         coverBadgeStart = {
             InLibraryBadge(enabled = manga.favorite)

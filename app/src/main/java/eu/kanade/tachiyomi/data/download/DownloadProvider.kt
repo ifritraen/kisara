@@ -87,7 +87,11 @@ class DownloadProvider(
             storageManager.getLocalSourceDirectory()
         } else {
             // KMK <--
-            downloadsDir?.findFile(getSourceDirName(source))
+            try {
+                downloadsDir?.findFile(getSourceDirName(source))
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
@@ -99,7 +103,11 @@ class DownloadProvider(
      */
     fun findMangaDir(mangaTitle: String, source: Source): UniFile? {
         val sourceDir = findSourceDir(source)
-        return sourceDir?.findFile(getMangaDirName(mangaTitle))
+        return try {
+            sourceDir?.findFile(getMangaDirName(mangaTitle))
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
@@ -119,7 +127,13 @@ class DownloadProvider(
     ): UniFile? {
         val mangaDir = findMangaDir(mangaTitle, source)
         return getValidChapterDirNames(chapterName, chapterScanlator, chapterUrl).asSequence()
-            .mapNotNull { mangaDir?.findFile(it) }
+            .mapNotNull {
+                try {
+                    mangaDir?.findFile(it)
+                } catch (e: Exception) {
+                    null
+                }
+            }
             .firstOrNull()
     }
 
@@ -140,8 +154,12 @@ class DownloadProvider(
                     null
                 } else {
                     val (mangaDirName, chapterDirName) = splitUrl
-                    mangaDir.findFile(chapterDirName)
-                        ?: storageManager.getLocalSourceDirectory()?.findFile(mangaDirName)?.findFile(chapterDirName)
+                    try {
+                        mangaDir.findFile(chapterDirName)
+                            ?: storageManager.getLocalSourceDirectory()?.findFile(mangaDirName)?.findFile(chapterDirName)
+                    } catch (e: Exception) {
+                        null
+                    }
                 }
             } else {
                 // KMK <--

@@ -97,6 +97,11 @@ class AndroidSourceManager(
                     val (triple, isExtInitialized) = tripleAndInit
                     Triple(triple, isExtInitialized, jarSources)
                 }
+                .combine(sourcePreferences.disabledSources().changes()) { state, disabledSources ->
+                    val (triple, isExtInitialized, jarSources) = state
+                    val enabledJarSources = jarSources.filter { "${it.id}" !in disabledSources }
+                    Triple(triple, isExtInitialized, enabledJarSources)
+                }
                 .collectLatest { (triple, isExtInitialized, jarSources) ->
                     val (extensions, enableExhentai, isHentaiEnabled) = triple
                     val mutableMap = ConcurrentHashMap<Long, Source>(

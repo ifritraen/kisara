@@ -66,7 +66,7 @@ object LocalApkExtensionSupport {
             return sourcePath
         }
 
-        val cacheRoot = File(context.codeCacheDir, LOAD_CACHE_DIR).apply { mkdirs() }
+        val cacheRoot = File(context.filesDir, LOAD_CACHE_DIR).apply { mkdirs() }
         val targetFile = File(cacheRoot, "$pkgName.apk")
 
         if (
@@ -117,7 +117,7 @@ object LocalApkExtensionSupport {
         packageName: String,
     ): Boolean {
         val root = getSideloadDir(context)
-        val cacheRoot = File(context.codeCacheDir, LOAD_CACHE_DIR)
+        val cacheRoot = File(context.filesDir, LOAD_CACHE_DIR)
 
         fun deleteFromDir(dir: File): Boolean {
             var deleted = false

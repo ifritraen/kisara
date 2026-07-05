@@ -170,7 +170,7 @@ fun GlassSurface(
     }
 
     val hazeBackgroundColor = if (dialogSurface) Color.Transparent else containerColor
-    val surfaceColor = if (useRuntimeHaze && !isReaderSurface) Color.Transparent else containerColor
+    val surfaceColor = if (useRuntimeHaze && !isReaderSurface && !dialogSurface) Color.Transparent else containerColor
 
     CompositionLocalProvider(LocalAbsoluteTonalElevation provides 0.dp) {
         Surface(

@@ -39,7 +39,7 @@ import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
 
 class ExtensionsScreenModel(
-    preferences: SourcePreferences = Injekt.get(),
+    private val preferences: SourcePreferences = Injekt.get(),
     basePreferences: BasePreferences = Injekt.get(),
     private val extensionManager: ExtensionManager = Injekt.get(),
     private val getExtensions: GetExtensionsByType = Injekt.get(),
@@ -84,7 +84,9 @@ class ExtensionsScreenModel(
                 // KMK <--
                 currentDownloads,
                 getExtensions.subscribe(),
-            ) { predicate, nsfwOnly, downloads, (_updates, _installed, _available, _untrusted) ->
+                eu.kanade.tachiyomi.extension.JarExtensionManager.sources,
+            ) { predicate, nsfwOnly, downloads, (_updates, _installed, _available, _untrusted), jarSources ->
+                val enabledLanguages = preferences.enabledLanguages().get()
                 buildMap {
                     val updates = _updates.filter(predicate).map(extensionMapper(downloads))
                         // KMK -->
@@ -110,6 +112,33 @@ class ExtensionsScreenModel(
 
                     if (sideloaded.isNotEmpty()) {
                         put(ExtensionUiModel.Header.Resource(KMR.strings.ext_sideloaded), sideloaded)
+                    }
+
+                    val jarPlugins = eu.kanade.tachiyomi.extension.JarExtensionManager.getInstalledJars()
+                    if (jarPlugins.isNotEmpty()) {
+                        val jarItems = jarPlugins.mapNotNull { plugin ->
+                            val pluginSources = jarSources.filter { it.originalSource in plugin.sources && it.lang in enabledLanguages }
+                            if (pluginSources.isEmpty()) return@mapNotNull null
+                            val extension = Extension.Jar(
+                                name = plugin.jarName,
+                                pkgName = "jar:${plugin.jarName}",
+                                versionName = "1.0",
+                                versionCode = 1L,
+                                libVersion = 1.0,
+                                lang = "all",
+                                isNsfw = false,
+                                filename = plugin.jarName,
+                                sources = pluginSources,
+                            )
+                            ExtensionUiModel.Item(
+                                extension = extension,
+                                installStep = InstallStep.Idle,
+                            )
+                        }.filter { predicate(it.extension) }
+                            .sortedBy { it.extension.name }
+                        if (jarItems.isNotEmpty()) {
+                            put(ExtensionUiModel.Header.Resource(KMR.strings.ext_jar_extensions), jarItems)
+                        }
                     }
 
                     if (standardInstalled.isNotEmpty() || untrusted.isNotEmpty()) {
@@ -184,6 +213,12 @@ class ExtensionsScreenModel(
                             it.id == subquery.toLongOrNull()
                     }
 
+                    is Extension.Jar -> extension.sources.any { source ->
+                        source.name.contains(subquery, ignoreCase = true) ||
+                            (source as? HttpSource)?.baseUrl?.contains(subquery, ignoreCase = true) == true ||
+                            source.id == subquery.toLongOrNull()
+                    }
+
                     else -> false
                 }
             }
@@ -256,9 +291,38 @@ class ExtensionsScreenModel(
         }
     }
 
+    fun toggleJarSource(sourceId: Long) {
+        val disabled = preferences.disabledSources().get().toMutableSet()
+        val idStr = sourceId.toString()
+        if (disabled.contains(idStr)) {
+            disabled.remove(idStr)
+        } else {
+            disabled.add(idStr)
+        }
+        preferences.disabledSources().set(disabled)
+    }
+
+    fun uninstallJarExtension(extension: Extension.Jar) {
+        screenModelScope.launchIO {
+            val context = uy.kohesive.injekt.Injekt.get<android.app.Application>()
+            val success = eu.kanade.tachiyomi.extension.JarExtensionManager.uninstallJar(context, extension.filename)
+            if (success) {
+                _events.trySend(Event.SideloadSuccess("JAR Extension"))
+            } else {
+                _events.trySend(Event.SideloadError("JAR Extension", Exception("Failed to uninstall JAR extension")))
+            }
+        }
+    }
+
     fun updateExtension(extension: Extension.Installed) {
         screenModelScope.launchIO {
-            extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
+            val availableExt = extensionManager.availableExtensionsFlow.value
+                .find { it.pkgName == extension.pkgName }
+            if (availableExt != null && (!extension.isShared || availableExt.signatureHash != extension.signatureHash)) {
+                sideloadExtension(availableExt)
+            } else {
+                extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
+            }
         }
     }
 

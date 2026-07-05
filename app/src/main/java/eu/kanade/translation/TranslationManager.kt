@@ -41,21 +41,26 @@ class TranslationManager(
     val progressState
         get() = translator.progressState
 
-    fun translatorStart() = translator.start()
-    fun translatorStop(reason: String? = null) = translator.stop(reason)
+    fun translatorStart() = TranslationJob.start(context)
+    fun translatorStop(reason: String? = null) = TranslationJob.stop(context)
 
     fun startTranslation() {
-        if (translator.isRunning) return
-        translator.start()
+        TranslationJob.start(context)
+    }
+
+    suspend fun translateQueueSync() {
+        translator.translateQueue()
     }
 
     fun pauseTranslation() {
         translator.pause()
+        TranslationJob.stop(context)
         translator.stop()
     }
 
     fun clearQueue() {
         translator.clearQueue()
+        TranslationJob.stop(context)
         translator.stop()
     }
 

@@ -108,6 +108,20 @@ class WebtoonViewer(
         recycler.adapter = adapter
         recycler.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
+                private var userDragged = false
+
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                        userDragged = true
+                    }
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                        if (userDragged) {
+                            userDragged = false
+                            activity.autoScrollTrigger.tryEmit(Unit)
+                        }
+                    }
+                }
+
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     onScrolled()
 

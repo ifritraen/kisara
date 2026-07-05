@@ -75,6 +75,12 @@ object Notifications {
     const val CHANNEL_INCOGNITO_MODE = "incognito_mode_channel"
     const val ID_INCOGNITO_MODE = -701
 
+    /**
+     * Notification channel used for VPN status
+     */
+    const val CHANNEL_VPN = "vpn_channel"
+    const val ID_VPN = -801
+
     // AM (DISCORD) -->
     /**
      * Notification channel used for Discord RPC
@@ -188,6 +194,10 @@ object Notifications {
                 },
                 buildNotificationChannel(CHANNEL_INCOGNITO_MODE, IMPORTANCE_LOW) {
                     setName(context.stringResource(MR.strings.pref_incognito_mode))
+                },
+                buildNotificationChannel(CHANNEL_VPN, IMPORTANCE_LOW) {
+                    setName("VPN Connection")
+                    setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_APP_UPDATE, IMPORTANCE_HIGH) {
                     setGroup(GROUP_APK_UPDATES)

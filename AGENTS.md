@@ -1,6 +1,10 @@
-# Komikku – AI Agent Guide
+# Kisara – AI Agent Guide
 
-Komikku is an Android manga reader (min SDK 26, target SDK 36, JVM 17 / Kotlin) forked from **Mihon** + **TachiyomiSY**. Stack: Jetpack Compose + Material3, Voyager navigation, SQLDelight, Injekt DI. `applicationId`: `app.komikku`.
+Kisara is an Android manga reader (min SDK 26, target SDK 36, JVM 17 / Kotlin) forked from **Komikku** (which was forked from **Mihon** + **TachiyomiSY**). Stack: Jetpack Compose + Material3, Voyager navigation, SQLDelight, Injekt DI.
+Active package IDs:
+- `com.catmikku.raen.beta.dev` (dev edition of beta)
+- `com.catmikku.raen.beta` (preview edition)
+- `com.catmikku.raen` (stable edition)
 
 ---
 
@@ -216,3 +220,11 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 - No Android emulator or device is available on the Cloud VM, so `installDebug` will fail. Build verification is done via `assembleDebug`.
 - `google-services.json` and `client_secrets.json` are not present (CI secrets); builds without `-Pinclude-telemetry` succeed without them.
 - Gradle daemon may use significant memory (`-Xmx4g` in `gradle.properties`). If OOM occurs, kill and restart the daemon with `./gradlew --stop`.
+
+---
+
+## Additional Architecture Components & Sideloaded Jars
+
+- **Wireguard Integration (`eu.kanade.tachiyomi.vpn`)**: Thread-safe Wireguard session management with reference-counted active requesters to prevent premature disconnects.
+- **Suggestions System (`eu.kanade.tachiyomi.ui.suggestions` & `eu.kanade.tachiyomi.data.suggestions`)**: Background `SuggestionsWorker` queries configured sources based on favorite tags.
+- **Dynamic Jars Keep Rule**: Any dynamic jar (e.g. Kotatsu parser extensions) loader requires keeping `org.koitharu.kotatsu.parsers.**` intact in Proguard configurations (`proguard-rules.pro`).

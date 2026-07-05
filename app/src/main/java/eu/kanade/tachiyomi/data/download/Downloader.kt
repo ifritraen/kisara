@@ -237,7 +237,7 @@ class Downloader(
             supervisorScope {
                 val downloadJobs = mutableMapOf<Download, Job>()
 
-                activeDownloadsFlow.collectLatest { activeDownloads ->
+                activeDownloadsFlow.collect { activeDownloads ->
                     val downloadJobsToStop = downloadJobs.filter { it.key !in activeDownloads }
                     downloadJobsToStop.forEach { (download, job) ->
                         job.cancel()
@@ -350,7 +350,7 @@ class Downloader(
         // KMK <--
 
         val wireguardManager = uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.vpn.WireguardManager>()
-        wireguardManager.startTunnelForSource(download.source.id)
+        wireguardManager.startTunnelForSource(download.source.id, "downloader_${download.chapter.id}")
 
         try {
             val mangaDir = provider.getMangaDir(/* SY --> */ download.manga.ogTitle /* SY <-- */, download.source).getOrElse { e ->
@@ -456,7 +456,7 @@ class Downloader(
                 download.status = Download.State.DOWNLOADED
 
                 val translationPreferences = Injekt.get<tachiyomi.domain.translation.TranslationPreferences>()
-                if (translationPreferences.autoTranslateAfterDownload().get()) {
+                if (translationPreferences.autoTranslateAfterDownload().get() || download.manga.autoTranslateAfterDownload) {
                     try {
                         val translationManager = Injekt.get<eu.kanade.translation.TranslationManager>()
                         translationManager.translateChapter(download.manga, download.chapter)
@@ -472,7 +472,7 @@ class Downloader(
                 notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
             }
         } finally {
-            wireguardManager.stopTunnelForSource(download.source.id)
+            wireguardManager.stopTunnelForSource(download.source.id, "downloader_${download.chapter.id}")
         }
     }
 

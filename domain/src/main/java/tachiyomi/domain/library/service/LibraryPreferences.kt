@@ -171,7 +171,7 @@ class LibraryPreferences(
     fun subcategoryTabs() = preferenceStore.getBoolean("display_subcategory_tabs", false)
 
     // KMK -->
-    fun categoryBarPinned() = preferenceStore.getBoolean("pref_category_bar_pinned", false)
+    fun categoryBarPinned() = preferenceStore.getBoolean("pref_category_bar_pinned", true)
     // KMK <--
 
     fun categoryNumberOfItems() = preferenceStore.getBoolean("display_number_of_items", false)

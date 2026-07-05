@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.History
@@ -98,6 +99,7 @@ fun MoreScreen(
     onClickHistory: () -> Unit,
     // KMK -->
     onClickLibraryUpdateErrors: () -> Unit,
+    onClickKisaraSettings: () -> Unit,
     // KMK <--
 ) {
     val uriHandler = LocalUriHandler.current
@@ -281,6 +283,13 @@ fun MoreScreen(
                     title = stringResource(MR.strings.label_settings),
                     icon = Icons.Outlined.Settings,
                     onPreferenceClick = onClickSettings,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(KMR.strings.label_kisara_settings),
+                    icon = Icons.Outlined.AutoAwesome,
+                    onPreferenceClick = onClickKisaraSettings,
                 )
             }
             item {

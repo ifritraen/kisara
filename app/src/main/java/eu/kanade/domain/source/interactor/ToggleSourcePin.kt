@@ -9,9 +9,24 @@ class ToggleSourcePin(
 ) {
 
     fun await(source: Source) {
-        val isPinned = source.id.toString() in preferences.pinnedSources().get()
+        val idStr = source.id.toString()
+        val isPinned = idStr in preferences.pinnedSources().get()
         preferences.pinnedSources().getAndSet { pinned ->
-            if (isPinned) pinned.minus("${source.id}") else pinned.plus("${source.id}")
+            if (isPinned) pinned.minus(idStr) else pinned.plus(idStr)
         }
+
+        val currentOrdered = preferences.pinnedSourcesOrdered().get()
+            .split(",")
+            .filter { it.isNotBlank() }
+            .toMutableList()
+
+        if (isPinned) {
+            currentOrdered.remove(idStr)
+        } else {
+            if (!currentOrdered.contains(idStr)) {
+                currentOrdered.add(idStr)
+            }
+        }
+        preferences.pinnedSourcesOrdered().set(currentOrdered.joinToString(","))
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.MoreVert
@@ -194,6 +196,7 @@ object HomeScreen : Screen() {
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
         val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
         val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
+
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
         var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
@@ -632,21 +635,52 @@ object HomeScreen : Screen() {
                                         .padding(bottom = bottomBarBottomMargin.coerceAtLeast(0).dp)
                                         .align(Alignment.BottomCenter),
                                 ) {
-                                    val bottomBarButtonSize = (bottomBarHeight * 0.45f).coerceAtLeast(8f).dp
-                                    val bottomBarIconSize = (bottomBarHeight * 0.25f).coerceAtLeast(6f).dp
+                                    val bottomBarWidth by uiPreferences.bottomBarWidth().collectAsState()
+                                    val bottomBarAutoWidth by uiPreferences.bottomBarAutoWidth().collectAsState()
+                                    val bottomBarGap by uiPreferences.bottomBarGap().collectAsState()
+                                    val bottomBarKeepRatio by uiPreferences.bottomBarKeepRatio().collectAsState()
+                                    val bottomBarHorizontalPadding by uiPreferences.bottomBarHorizontalPadding().collectAsState()
+                                    val bottomBarVerticalPadding by uiPreferences.bottomBarVerticalPadding().collectAsState()
+                                    val bottomBarCornerRadius by uiPreferences.bottomBarCornerRadius().collectAsState()
+                                    val bottomBarButtonSizePref by uiPreferences.bottomBarButtonSize().collectAsState()
+                                    val bottomBarIconSizePref by uiPreferences.bottomBarIconSize().collectAsState()
+
+                                    val bottomBarButtonSize = if (bottomBarKeepRatio) {
+                                        (bottomBarHeight * 0.45f).coerceAtLeast(8f).dp
+                                    } else {
+                                        bottomBarButtonSizePref.dp
+                                    }
+                                    val bottomBarIconSize = if (bottomBarKeepRatio) {
+                                        (bottomBarHeight * 0.25f).coerceAtLeast(6f).dp
+                                    } else {
+                                        bottomBarIconSizePref.dp
+                                    }
+
                                     GlassSurface(
-                                        shape = RoundedCornerShape(24.dp),
+                                        shape = RoundedCornerShape(bottomBarCornerRadius.dp),
                                         style = GlassDefaults.prominentStyle(),
-                                        modifier = Modifier.height(bottomBarHeight.dp),
+                                        modifier = Modifier
+                                            .height(bottomBarHeight.dp)
+                                            .then(
+                                                if (bottomBarAutoWidth) {
+                                                    Modifier.wrapContentWidth()
+                                                } else {
+                                                    Modifier.width(bottomBarWidth.dp)
+                                                },
+                                            ),
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxHeight().padding(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .padding(horizontal = bottomBarHorizontalPadding.dp, vertical = bottomBarVerticalPadding.dp)
+                                                .wrapContentWidth(align = Alignment.CenterHorizontally, unbounded = true)
+                                                .align(Alignment.Center),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(bottomBarGap.dp),
                                         ) {
                                             // Left part: The 4 Navigation Tabs
                                             Row(
-                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(bottomBarGap.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 TABS.fastFilter { it.isEnabled() }.fastForEach { tab ->
@@ -994,6 +1028,15 @@ object HomeScreen : Screen() {
                                                                             modifier = Modifier.size(36.dp),
                                                                         ) {
                                                                             Icon(Icons.Outlined.Folder, contentDescription = "Repos", modifier = Modifier.size(20.dp))
+                                                                        }
+                                                                        IconButton(
+                                                                            onClick = {
+                                                                                BrowseTab.extensionsInstallJarEvent.trySend(Unit)
+                                                                                showActionPopup = false
+                                                                            },
+                                                                            modifier = Modifier.size(36.dp),
+                                                                        ) {
+                                                                            Icon(Icons.Outlined.Extension, contentDescription = "Install Kotatsu JAR", modifier = Modifier.size(20.dp))
                                                                         }
                                                                     }
                                                                     2 -> { // Migrate

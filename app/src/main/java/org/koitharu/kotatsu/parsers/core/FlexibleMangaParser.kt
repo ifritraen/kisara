@@ -63,6 +63,8 @@ internal abstract class FlexibleMangaParser @InternalParsersApi constructor(
 	@JvmField
 	protected val webClient: WebClient = OkHttpWebClient(context.httpClient, source)
 
+	public fun getWebClient(): WebClient = webClient
+
 	/**
 	 * Fetch direct link to the page image.
 	 */

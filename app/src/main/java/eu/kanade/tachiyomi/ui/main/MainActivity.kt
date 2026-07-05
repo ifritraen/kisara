@@ -80,6 +80,7 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.connections.service.ConnectionsPreferences
 import eu.kanade.domain.source.interactor.GetIncognitoState
 import eu.kanade.domain.sync.SyncPreferences
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
 import eu.kanade.presentation.components.IncognitoModeBannerBackgroundColor
@@ -125,6 +126,7 @@ import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import eu.kanade.tachiyomi.util.system.updaterEnabled
 import eu.kanade.tachiyomi.util.view.setComposeContent
+import eu.kanade.tachiyomi.vpn.WireguardManager
 import exh.debug.DebugToggles
 import exh.eh.EHentaiUpdateWorker
 import exh.log.DebugModeOverlay
@@ -138,6 +140,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.core.migration.Migrator
@@ -165,6 +168,8 @@ class MainActivity : BaseActivity() {
 
     private val libraryPreferences: LibraryPreferences by injectLazy()
     private val preferences: BasePreferences by injectLazy()
+    private val uiPreferences: UiPreferences by injectLazy()
+    private val wireguardManager: WireguardManager by injectLazy()
 
     // SY -->
     private val exhPreferences: ExhPreferences by injectLazy()
@@ -191,6 +196,11 @@ class MainActivity : BaseActivity() {
     // AM (CONNECTIONS) -->
     private val connectionsPreferences: ConnectionsPreferences by injectLazy()
     // <-- AM (CONNECTIONS)
+
+    private val vpnCleanupConnection = object : android.content.ServiceConnection {
+        override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {}
+        override fun onServiceDisconnected(name: android.content.ComponentName?) {}
+    }
 
     init {
         registerSecureActivity(this)
@@ -229,6 +239,27 @@ class MainActivity : BaseActivity() {
             Migrator.awaitAndRelease()
         } else {
             false
+        }
+
+        if (isLaunch) {
+            lifecycleScope.launch {
+                if (uiPreferences.vpnAutoConnectAtStart().get()) {
+                    val defaultProfile = wireguardManager.getDefaultProfile()
+                    if (defaultProfile != null) {
+                        if (android.net.VpnService.prepare(this@MainActivity) == null) {
+                            wireguardManager.startTunnel(defaultProfile)
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            val intent = Intent(this, eu.kanade.tachiyomi.vpn.VpnCleanupService::class.java)
+            startService(intent)
+            bindService(intent, vpnCleanupConnection, android.content.Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to start/bind VpnCleanupService: ${e.message}", e)
         }
 
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
@@ -880,6 +911,15 @@ class MainActivity : BaseActivity() {
 
         ready = true
         return true
+    }
+
+    override fun onDestroy() {
+        try {
+            unbindService(vpnCleanupConnection)
+        } catch (e: Exception) {
+            // Ignore
+        }
+        super.onDestroy()
     }
 
     companion object {

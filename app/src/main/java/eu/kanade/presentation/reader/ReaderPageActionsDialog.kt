@@ -264,8 +264,8 @@ fun ReaderPageActionsDialog(
                 )
                 Slider(
                     value = sliderValue,
-                    valueRange = 0.5f..15.0f,
-                    steps = 28,
+                    valueRange = 0.5f..60.0f,
+                    steps = 118,
                     onValueChange = {
                         sliderValue = it
                         onSetAutoScrollFrequency(String.format(java.util.Locale.US, "%.1f", it))

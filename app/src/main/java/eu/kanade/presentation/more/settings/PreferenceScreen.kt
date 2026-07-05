@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
@@ -30,6 +32,8 @@ fun PreferenceScreen(
 ) {
     val state = rememberLazyListState()
     val highlightKey = SearchableSettings.highlightKey
+    val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
+
     if (highlightKey != null) {
         LaunchedEffect(Unit) {
             val i = items.findHighlightedIndex(highlightKey)
@@ -52,16 +56,32 @@ fun PreferenceScreen(
                 is Preference.PreferenceGroup -> {
                     if (!preference.enabled) return@fastForEachIndexed
 
+                    val isExpanded = if (preference.isCollapsible) {
+                        expandedGroups.getOrPut(preference.title) { preference.isInitiallyExpanded }
+                    } else {
+                        true
+                    }
+
                     item {
                         Column {
-                            PreferenceGroupHeader(title = preference.title)
+                            PreferenceGroupHeader(
+                                title = preference.title,
+                                onClick = if (preference.isCollapsible) {
+                                    { expandedGroups[preference.title] = !isExpanded }
+                                } else {
+                                    null
+                                },
+                                isExpanded = if (preference.isCollapsible) isExpanded else null,
+                            )
                         }
                     }
-                    items(preference.preferenceItems) { item ->
-                        PreferenceItem(
-                            item = item,
-                            highlightKey = highlightKey,
-                        )
+                    if (isExpanded) {
+                        items(preference.preferenceItems) { item ->
+                            PreferenceItem(
+                                item = item,
+                                highlightKey = highlightKey,
+                            )
+                        }
                     }
                     item {
                         if (i < items.lastIndex) {

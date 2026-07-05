@@ -29,6 +29,11 @@ class SuggestionsScreenModel(
         androidx.work.WorkManager.getInstance(context).enqueue(request)
     }
 
+    fun getLastError(context: android.content.Context): String? {
+        return context.getSharedPreferences("suggestions_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("last_error", null)
+    }
+
     data class State(
         val isLoading: Boolean = true,
         val suggestions: List<Suggestion> = emptyList(),

@@ -7,17 +7,23 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dangerous
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.platform.LocalContext
@@ -37,31 +43,70 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.domain.source.model.Source
 import tachiyomi.source.local.isLocal
+import java.io.File
 
 private val defaultModifier = Modifier
     .height(40.dp)
     .aspectRatio(1f)
+
+private fun getCachedSourceIconFile(context: android.content.Context, sourceId: Long): File {
+    val dir = File(context.filesDir, "source_icons")
+    if (!dir.exists()) dir.mkdirs()
+    return File(dir, "$sourceId.png")
+}
 
 @Composable
 fun SourceIcon(
     source: Source,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val cachedFile = remember(source.id) { getCachedSourceIconFile(context, source.id) }
+    var cachedBitmap by remember(source.id) {
+        mutableStateOf<ImageBitmap?>(
+            if (cachedFile.isFile) {
+                try {
+                    android.graphics.BitmapFactory.decodeFile(cachedFile.absolutePath)?.asImageBitmap()
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                null
+            },
+        )
+    }
+
     val icon = source.icon
+    if (icon != null) {
+        LaunchedEffect(source.id, icon) {
+            withIOContext {
+                try {
+                    val out = java.io.FileOutputStream(cachedFile)
+                    icon.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    out.close()
+                    cachedBitmap = icon
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+        }
+    }
+
+    val displayIcon = icon ?: cachedBitmap
 
     when {
-        source.isStub && icon == null -> {
+        displayIcon != null -> {
+            Image(
+                bitmap = displayIcon,
+                contentDescription = null,
+                modifier = modifier.then(defaultModifier),
+            )
+        }
+        source.isStub -> {
             Image(
                 imageVector = Icons.Filled.Warning,
                 contentDescription = null,
                 colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.error),
-                modifier = modifier.then(defaultModifier),
-            )
-        }
-        icon != null -> {
-            Image(
-                bitmap = icon,
-                contentDescription = null,
                 modifier = modifier.then(defaultModifier),
             )
         }
@@ -145,6 +190,12 @@ fun ExtensionIcon(
             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.error),
             modifier = modifier.then(defaultModifier),
         )
+        is Extension.Jar -> Image(
+            imageVector = Icons.Filled.Extension,
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary),
+            modifier = modifier.then(defaultModifier),
+        )
     }
 }
 
@@ -172,10 +223,34 @@ private fun android.content.pm.PackageManager.getPackageArchiveInfoCompat(archiv
     }
 }
 
+private fun getCachedIconFile(context: android.content.Context, pkgName: String): File {
+    val dir = File(context.cacheDir, "extension_icons")
+    if (!dir.exists()) dir.mkdirs()
+    return File(dir, "$pkgName.png")
+}
+
 @Composable
-private fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): State<Result<ImageBitmap>> {
+internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): State<Result<ImageBitmap>> {
     val context = LocalContext.current
-    return produceState<Result<ImageBitmap>>(initialValue = Result.Loading, this) {
+    val cachedFile = remember(pkgName) { getCachedIconFile(context, pkgName) }
+    val initialValue = remember(pkgName) {
+        if (cachedFile.isFile) {
+            try {
+                val bitmap = android.graphics.BitmapFactory.decodeFile(cachedFile.absolutePath)
+                if (bitmap != null) {
+                    Result.Success(bitmap.asImageBitmap())
+                } else {
+                    Result.Loading
+                }
+            } catch (e: Exception) {
+                Result.Loading
+            }
+        } else {
+            Result.Loading
+        }
+    }
+
+    return produceState<Result<ImageBitmap>>(initialValue = initialValue, this) {
         withIOContext {
             value = try {
                 val packageInfo = ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)
@@ -232,16 +307,21 @@ private fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): St
                         throw e2
                     }
                 }
-                Result.Success(
-                    drawable.toBitmap()
-                        .asImageBitmap(),
-                )
+                val bitmap = drawable.toBitmap()
+                try {
+                    val out = java.io.FileOutputStream(cachedFile)
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    out.close()
+                } catch (e: Exception) {
+                    // Ignore caching errors
+                }
+                Result.Success(bitmap.asImageBitmap())
             } catch (e: Exception) {
                 android.util.Log.e("BrowseIcons", "Icon loading failed for $name", e)
                 withUIContext {
                     context.toast("Icon loading failed for $name: " + android.util.Log.getStackTraceString(e))
                 }
-                Result.Error
+                if (value is Result.Success) value else Result.Error
             }
         }
     }

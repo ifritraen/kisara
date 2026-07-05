@@ -5,6 +5,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.surfaceColorAtElevation
@@ -22,7 +23,9 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.AppBarTitle
 import eu.kanade.presentation.components.DownloadDropdownMenu
+import eu.kanade.presentation.components.TranslationDropdownMenu
 import eu.kanade.presentation.manga.DownloadAction
+import eu.kanade.presentation.manga.TranslationAction
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
 import eu.kanade.tachiyomi.ui.browse.source.feed.SourceFeedScreen
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
@@ -44,6 +47,7 @@ fun MangaToolbar(
     onClickFilter: () -> Unit,
     onClickShare: (() -> Unit)?,
     onClickDownload: ((DownloadAction) -> Unit)?,
+    onClickTranslate: ((TranslationAction) -> Unit)? = null,
     onClickEditCategory: (() -> Unit)?,
     onClickRefresh: () -> Unit,
     onClickMigrate: (() -> Unit)?,
@@ -116,6 +120,15 @@ fun MangaToolbar(
                     onDownloadClicked = onClickDownload,
                 )
             }
+            var translateExpanded by remember { mutableStateOf(false) }
+            if (onClickTranslate != null) {
+                val onDismissRequest = { translateExpanded = false }
+                TranslationDropdownMenu(
+                    expanded = translateExpanded,
+                    onDismissRequest = onDismissRequest,
+                    onTranslateClicked = onClickTranslate,
+                )
+            }
 
             val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
             AppBarActions(
@@ -143,6 +156,15 @@ fun MangaToolbar(
                                 title = stringResource(MR.strings.manga_download),
                                 icon = Icons.Outlined.Download,
                                 onClick = { downloadExpanded = !downloadExpanded },
+                            ),
+                        )
+                    }
+                    if (onClickTranslate != null) {
+                        add(
+                            AppBar.Action(
+                                title = "Bulk Translate",
+                                icon = Icons.Outlined.Translate,
+                                onClick = { translateExpanded = !translateExpanded },
                             ),
                         )
                     }

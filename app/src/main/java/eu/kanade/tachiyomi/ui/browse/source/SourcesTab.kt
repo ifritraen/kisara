@@ -81,11 +81,6 @@ fun Screen.sourcesTab(
             ),
             // KMK -->
             AppBar.Action(
-                title = stringResource(KMR.strings.action_suggestions),
-                icon = Icons.Outlined.TipsAndUpdates,
-                onClick = { navigator.push(eu.kanade.tachiyomi.ui.suggestions.SuggestionsScreen()) },
-            ),
-            AppBar.Action(
                 title = stringResource(KMR.strings.action_toggle_nsfw_only),
                 icon = Icons.Outlined._18UpRating,
                 iconTint = if (state.nsfwOnly) MaterialTheme.colorScheme.error else LocalContentColor.current,
@@ -151,7 +146,6 @@ fun Screen.sourcesTab(
                             screenModel.toggleExcludeFromDataSaver(source)
                             screenModel.closeDialog()
                         }.takeIf { state.dataSaverEnabled },
-                        // SY <--
                         onDismiss = screenModel::closeDialog,
                         // KMK -->
                         onClickSettings = {
@@ -161,6 +155,14 @@ fun Screen.sourcesTab(
                             screenModel.closeDialog()
                         },
                         // KMK <--
+                        onClickMoveUp = {
+                            screenModel.movePinnedSource(source, true)
+                            screenModel.closeDialog()
+                        },
+                        onClickMoveDown = {
+                            screenModel.movePinnedSource(source, false)
+                            screenModel.closeDialog()
+                        },
                     )
                 }
                 is SourcesScreenModel.Dialog.SourceCategories -> {

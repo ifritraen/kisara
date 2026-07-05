@@ -1,19 +1,26 @@
 package eu.kanade.tachiyomi.ui.suggestions
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -43,16 +50,16 @@ class SuggestionsScreen : Screen() {
                     navigateUp = navigator::pop,
                     actions = {
                         IconButton(
-                            onClick = { screenModel.triggerRefresh(context) }
+                            onClick = { screenModel.triggerRefresh(context) },
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Refresh,
                                 contentDescription = stringResource(MR.strings.action_webview_refresh),
                             )
                         }
-                    }
+                    },
                 )
-            }
+            },
         ) { paddingValues ->
             if (state.isLoading) {
                 LoadingScreen(modifier = Modifier.padding(paddingValues))
@@ -60,29 +67,48 @@ class SuggestionsScreen : Screen() {
             }
 
             if (state.suggestions.isEmpty()) {
-                EmptyScreen(
-                    modifier = Modifier.padding(paddingValues),
-                    message = stringResource(KMR.strings.pref_suggestions_summary) + "\n\nTap Refresh above to search sources.",
-                )
+                val lastError = remember { screenModel.getLastError(context) }
+                Column(
+                    modifier = Modifier.padding(paddingValues).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    EmptyScreen(
+                        message = stringResource(KMR.strings.pref_suggestions_summary) + "\n\nTap Refresh above to search sources.",
+                    )
+                    if (lastError != null) {
+                        Button(
+                            onClick = {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TEXT, lastError)
+                                }
+                                context.startActivity(android.content.Intent.createChooser(intent, "Share Error Details"))
+                            },
+                            modifier = Modifier.padding(top = 16.dp),
+                        ) {
+                            Text("Share Last Error")
+                        }
+                    }
+                }
                 return@Scaffold
             }
 
             LazyColumn(
                 contentPadding = PaddingValues(
                     top = paddingValues.calculateTopPadding(),
-                    bottom = paddingValues.calculateBottomPadding()
-                )
+                    bottom = paddingValues.calculateBottomPadding(),
+                ),
             ) {
                 items(
                     items = state.suggestions,
-                    key = { "suggestion-${it.manga.id}" }
+                    key = { "suggestion-${it.manga.id}" },
                 ) { suggestion ->
                     BrowseSourceListItem(
                         manga = suggestion.manga,
                         onClick = { navigator.push(MangaScreen(suggestion.manga.id)) },
                         onLongClick = { /* Do nothing or open details */ },
                         isSelected = false,
-                        metadata = null
+                        metadata = null,
                     )
                 }
             }

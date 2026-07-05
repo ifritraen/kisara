@@ -271,6 +271,8 @@ fun SourceOptionsDialog(
     // KMK -->
     onClickSettings: (() -> Unit)? = null,
     // KMK <--
+    onClickMoveUp: (() -> Unit)? = null,
+    onClickMoveDown: (() -> Unit)? = null,
 ) {
     AlertDialog(
         title = {
@@ -278,7 +280,8 @@ fun SourceOptionsDialog(
         },
         text = {
             Column {
-                val textId = if (Pin.Pinned in source.pin) MR.strings.action_unpin else MR.strings.action_pin
+                val isPinned = Pin.Pinned in source.pin
+                val textId = if (isPinned) MR.strings.action_unpin else MR.strings.action_pin
                 Text(
                     text = stringResource(textId),
                     modifier = Modifier
@@ -286,6 +289,26 @@ fun SourceOptionsDialog(
                         .fillMaxWidth()
                         .padding(vertical = 16.dp),
                 )
+                if (isPinned) {
+                    if (onClickMoveUp != null) {
+                        Text(
+                            text = "Move Up",
+                            modifier = Modifier
+                                .clickable(onClick = onClickMoveUp)
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                        )
+                    }
+                    if (onClickMoveDown != null) {
+                        Text(
+                            text = "Move Down",
+                            modifier = Modifier
+                                .clickable(onClick = onClickMoveDown)
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                        )
+                    }
+                }
                 if (!source.isLocal()) {
                     Text(
                         text = stringResource(MR.strings.action_disable),

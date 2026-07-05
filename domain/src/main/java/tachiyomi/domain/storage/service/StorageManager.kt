@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.i18n.MR
@@ -37,13 +38,29 @@ class StorageManager(
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    private var baseDir: UniFile? = getBaseDir(storagePreferences.baseStorageDirectory().get())
+    private var baseDir: UniFile? = null
 
     private val _changes: Channel<Unit> = Channel(Channel.UNLIMITED)
     val changes = _changes.receiveAsFlow()
         .shareIn(scope, SharingStarted.Lazily, 1)
 
     init {
+        scope.launch {
+            baseDir = getBaseDir(storagePreferences.baseStorageDirectory().get())
+            baseDir?.let { parent ->
+                parent.createDirectory(AUTOMATIC_BACKUPS_PATH)
+                parent.createDirectory(LOCAL_SOURCE_PATH)
+                parent.createDirectory(DOWNLOADS_PATH).also {
+                    DiskUtil.createNoMediaFile(it, context)
+                }
+                // KMK -->
+                parent.createDirectory(TRANSLATION_PATH).also {
+                    DiskUtil.createNoMediaFile(it, context)
+                }
+                // KMK <--
+            }
+        }
+
         storagePreferences.baseStorageDirectory().changes()
             .drop(1)
             .distinctUntilChanged()

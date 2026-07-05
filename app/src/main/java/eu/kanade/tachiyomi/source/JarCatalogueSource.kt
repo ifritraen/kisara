@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.source
 
+import android.content.Context
 import android.graphics.Canvas
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -7,6 +8,9 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
@@ -18,7 +22,10 @@ import org.koitharu.kotatsu.parsers.model.MangaPage
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.model.MangaState
 import org.koitharu.kotatsu.parsers.model.SortOrder
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
+import java.io.File
 import android.graphics.Rect as AndroidRect
 import org.koitharu.kotatsu.parsers.bitmap.Bitmap as KotatsuBitmap
 import org.koitharu.kotatsu.parsers.bitmap.Rect as KotatsuRect
@@ -46,13 +53,55 @@ class JarCatalogueSource(
     override val supportsLatest: Boolean = true
 
     // Use a unique long ID generated deterministically from package name + name
-    override val id: Long = generateId(originalSource.name, lang, 1)
+    override val id: Long = generateId(originalSource.name + " (Kotatsu)", lang, 1)
 
     override val baseUrl: String by lazy {
         "https://${originalSource.name.lowercase().replace(Regex("[^a-z0-9]"), "")}.com"
     }
 
     private val parser: MangaParser by lazy { parserFactory() }
+
+    init {
+        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val app = Injekt.get<android.app.Application>()
+                fetchAndCacheIcon(app)
+            } catch (e: Exception) {
+                android.util.Log.e("JarCatalogueSource", "Failed to resolve Application or fetch favicon: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun fetchAndCacheIcon(context: Context) {
+        val cachedFile = File(File(context.filesDir, "source_icons"), "$id.png")
+        if (cachedFile.exists() && cachedFile.length() > 0) return
+
+        try {
+            val favicons = parser.getFavicons()
+            val bestIcon = favicons.find(48)
+            if (bestIcon != null) {
+                val url = bestIcon.url
+                val request = Request.Builder()
+                    .url(url)
+                    .apply {
+                        favicons.referer?.let { header("Referer", it) }
+                    }
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val bytes = response.body?.bytes()
+                    if (bytes != null) {
+                        cachedFile.parentFile?.mkdirs()
+                        cachedFile.writeBytes(bytes)
+                    }
+                }
+                response.close()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("JarCatalogueSource", "Failed to fetch favicon for $name: ${e.message}")
+        }
+    }
 
     override suspend fun getPopularManga(page: Int): MangasPage {
         val offset = (page - 1) * 20
@@ -98,7 +147,7 @@ class JarCatalogueSource(
 
     override suspend fun getChapterList(manga: SManga): List<SChapter> {
         val kManga = parser.getDetails(manga.toKotatsuManga())
-        return kManga.chapters?.map { it.toSChapter() } ?: emptyList()
+        return kManga.chapters?.map { it.toSChapter() }?.reversed() ?: emptyList()
     }
 
     override suspend fun getPageList(chapter: SChapter): List<Page> {
@@ -166,26 +215,56 @@ class JarCatalogueSource(
         source = originalSource,
     )
 
-    private fun SChapter.toKotatsuChapter(): MangaChapter = MangaChapter(
-        id = 0L,
-        title = this.name,
-        number = this.chapter_number,
-        volume = 0,
-        url = this.url,
-        scanlator = this.scanlator,
-        uploadDate = this.date_upload,
-        branch = null,
-        source = originalSource,
-    )
+    private fun SChapter.toKotatsuChapter(): MangaChapter {
+        val rawScanlator = this.scanlator
+        val branchName = if (rawScanlator != null && " - " in rawScanlator) {
+            rawScanlator.substringBefore(" - ")
+        } else if (rawScanlator != null && rawScanlator.endsWith(" (Branch)")) {
+            rawScanlator.removeSuffix(" (Branch)")
+        } else {
+            null
+        }
+        val scanlatorName = if (rawScanlator != null && " - " in rawScanlator) {
+            rawScanlator.substringAfter(" - ")
+        } else if (rawScanlator != null && rawScanlator.endsWith(" (Branch)")) {
+            null
+        } else {
+            rawScanlator
+        }
+        return MangaChapter(
+            id = 0L,
+            title = this.name,
+            number = this.chapter_number,
+            volume = 0,
+            url = this.url,
+            scanlator = scanlatorName,
+            uploadDate = this.date_upload,
+            branch = branchName,
+            source = originalSource,
+        )
+    }
 
     private fun MangaChapter.toSChapter(): SChapter = SChapter.create().apply {
         url = this@toSChapter.url
-        name = this@toSChapter.title ?: buildString {
+        name = this@toSChapter.title?.takeIf { it.isNotBlank() } ?: buildString {
             if (this@toSChapter.volume > 0) append("Vol. ").append(this@toSChapter.volume).append(" ")
             append("Chapter ").append(this@toSChapter.number.toString().removeSuffix(".0"))
         }
         chapter_number = this@toSChapter.number
-        scanlator = this@toSChapter.scanlator
+        scanlator = buildString {
+            if (!this@toSChapter.branch.isNullOrBlank()) {
+                append(this@toSChapter.branch)
+                if (!this@toSChapter.scanlator.isNullOrBlank()) {
+                    append(" - ").append(this@toSChapter.scanlator)
+                } else {
+                    append(" (Branch)")
+                }
+            } else {
+                if (!this@toSChapter.scanlator.isNullOrBlank()) {
+                    append(this@toSChapter.scanlator)
+                }
+            }
+        }.takeIf { it.isNotBlank() }
         date_upload = this@toSChapter.uploadDate
     }
 

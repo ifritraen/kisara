@@ -96,6 +96,7 @@ internal fun BrowseSourceListItem(
         // KMK -->
         isSelected = isSelected,
         // KMK <--
+        manga = manga,
         coverAlpha = if (manga.favorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
         badge = {
             InLibraryBadge(enabled = manga.favorite)

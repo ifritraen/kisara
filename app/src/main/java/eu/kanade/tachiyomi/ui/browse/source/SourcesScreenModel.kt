@@ -151,6 +151,24 @@ class SourcesScreenModel(
                 }
             }
 
+            val pinnedOrder = sourcePreferences.pinnedSourcesOrdered().get()
+                .split(",")
+                .filter { it.isNotBlank() }
+            byLang[PINNED_KEY]?.let { pinnedList ->
+                byLang[PINNED_KEY] = pinnedList.sortedWith { s1, s2 ->
+                    val id1 = s1.id.toString()
+                    val id2 = s2.id.toString()
+                    val idx1 = pinnedOrder.indexOf(id1)
+                    val idx2 = pinnedOrder.indexOf(id2)
+                    when {
+                        idx1 != -1 && idx2 != -1 -> idx1.compareTo(idx2)
+                        idx1 != -1 -> -1
+                        idx2 != -1 -> 1
+                        else -> s1.name.compareTo(s2.name, ignoreCase = true)
+                    }
+                }.toMutableList()
+            }
+
             state.copy(
                 isLoading = false,
                 items = byLang
@@ -183,6 +201,26 @@ class SourcesScreenModel(
 
     fun togglePin(source: Source) {
         toggleSourcePin.await(source)
+    }
+
+    fun movePinnedSource(source: Source, moveUp: Boolean) {
+        val idStr = source.id.toString()
+        val currentOrdered = sourcePreferences.pinnedSourcesOrdered().get()
+            .split(",")
+            .filter { it.isNotBlank() }
+            .toMutableList()
+
+        val index = currentOrdered.indexOf(idStr)
+        if (index == -1) return
+
+        val newIndex = if (moveUp) index - 1 else index + 1
+        if (newIndex in 0 until currentOrdered.size) {
+            val temp = currentOrdered[index]
+            currentOrdered[index] = currentOrdered[newIndex]
+            currentOrdered[newIndex] = temp
+
+            sourcePreferences.pinnedSourcesOrdered().set(currentOrdered.joinToString(","))
+        }
     }
 
     // SY -->

@@ -90,8 +90,10 @@ import org.conscrypt.Conscrypt
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.DatabaseHandler
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.widget.WidgetManager
@@ -126,11 +128,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         // KMK <--
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
-
-        // TLS 1.3 support for Android < 10
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            Security.insertProviderAt(Conscrypt.newProvider(), 1)
-        }
 
         // Avoid potential crashes
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -219,11 +216,37 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         setAppCompatDelegateThemeMode(Injekt.get<UiPreferences>().themeMode().get())
 
         // KMK -->
-        MangaCoverMetadata.load()
+        scope.launchIO {
+            val tid = android.os.Process.myTid()
+            val oldPriority = android.os.Process.getThreadPriority(tid)
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
+                Injekt.get<DatabaseHandler>() // Warm up SQLite database connection
+                MangaCoverMetadata.load()
+            } finally {
+                android.os.Process.setThreadPriority(tid, oldPriority)
+            }
+        }
         // KMK <--
 
+        // TLS 1.3 support for Android < 10
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            scope.launchIO {
+                val tid = android.os.Process.myTid()
+                val oldPriority = android.os.Process.getThreadPriority(tid)
+                try {
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
+                    Security.insertProviderAt(Conscrypt.newProvider(), 1)
+                } finally {
+                    android.os.Process.setThreadPriority(tid, oldPriority)
+                }
+            }
+        }
+
         // Updates widget update
-        WidgetManager(Injekt.get(), Injekt.get()).apply { init(scope) }
+        scope.launchIO {
+            WidgetManager(Injekt.get(), Injekt.get()).apply { this@App.init(scope) }
+        }
 
         if (!WorkManager.isInitialized()) {
             WorkManager.initialize(this, Configuration.Builder().build())
@@ -235,7 +258,9 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         initializeMigrator()
-        eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this)
+        scope.launchIO {
+            eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this@App)
+        }
     }
 
     private fun initializeMigrator() {

@@ -47,6 +47,8 @@ import eu.kanade.tachiyomi.ui.browse.feed.feedTab
 import eu.kanade.tachiyomi.ui.history.HistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.HistorySettingsScreenModel
 import eu.kanade.tachiyomi.ui.history.historyTab
+import eu.kanade.tachiyomi.ui.suggestions.SuggestionsScreenModel
+import eu.kanade.tachiyomi.ui.suggestions.suggestionsTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.UpdatesSettingsScreenModel
 import eu.kanade.tachiyomi.ui.updates.updatesTab
@@ -75,6 +77,8 @@ data object HomeTab : Tab {
     val addFeedEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val sortFeedEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val bulkSelectEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+
+    val suggestionsRefreshEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 
     val updatesFilterEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val updatesUpdateLibraryEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
@@ -106,9 +110,12 @@ data object HomeTab : Tab {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val context = androidx.compose.ui.platform.LocalContext.current
 
         val feedScreenModel = rememberScreenModel { FeedScreenModel() }
         val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
+
+        val suggestionsScreenModel = rememberScreenModel { SuggestionsScreenModel() }
 
         val updatesScreenModel = rememberScreenModel { UpdatesScreenModel() }
         val updatesSettingsScreenModel = rememberScreenModel { UpdatesSettingsScreenModel() }
@@ -119,6 +126,7 @@ data object HomeTab : Tab {
 
         val tabs = persistentListOf(
             feedTab(feedScreenModel, bulkFavoriteScreenModel),
+            suggestionsTab(suggestionsScreenModel),
             updatesTab(updatesScreenModel, updatesSettingsScreenModel),
             historyTab(historyScreenModel, historySettingsScreenModel),
         )
@@ -151,6 +159,11 @@ data object HomeTab : Tab {
             launch {
                 bulkSelectEvent.receiveAsFlow().collectLatest {
                     bulkFavoriteScreenModel.toggleSelectionMode()
+                }
+            }
+            launch {
+                suggestionsRefreshEvent.receiveAsFlow().collectLatest {
+                    suggestionsScreenModel.triggerRefresh(context)
                 }
             }
             launch {

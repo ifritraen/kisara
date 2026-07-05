@@ -8,20 +8,31 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import coil3.compose.rememberAsyncImagePainter
 import eu.kanade.domain.extension.interactor.GetExtensionLanguages.Companion.getLanguageIconID
 import eu.kanade.domain.source.model.icon
+import eu.kanade.domain.source.model.installedExtension
+import eu.kanade.presentation.browse.components.getIcon
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.tachiyomi.R
 import tachiyomi.domain.source.model.Source
 import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.source.local.isLocal
+import java.io.File
 
 @Composable
 internal fun DownloadsBadge(count: Long) {
@@ -77,22 +88,73 @@ fun SourceIconBadge(
     source: Source?,
 ) {
     if (source == null) return
+    val context = LocalContext.current
+    val cachedFile = remember(source.id) { File(File(context.filesDir, "source_icons"), "${source.id}.png") }
+    var cachedBitmap by remember(source.id) {
+        mutableStateOf<ImageBitmap?>(
+            if (cachedFile.isFile) {
+                try {
+                    android.graphics.BitmapFactory.decodeFile(cachedFile.absolutePath)?.asImageBitmap()
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                null
+            },
+        )
+    }
+
     val icon = source.icon
+    val displayIcon = icon ?: cachedBitmap
+    val installedExt = source.installedExtension
 
     when {
-        source.isStub && icon == null -> {
+        displayIcon != null -> {
+            Badge(
+                imageBitmap = displayIcon,
+                modifier = Modifier
+                    .scale(1.3f)
+                    .height(18.dp),
+            )
+        }
+        installedExt != null -> {
+            val repoUrl = installedExt.repoUrl
+            if (repoUrl != null) {
+                val painter = rememberAsyncImagePainter(
+                    model = "$repoUrl/icon/${installedExt.pkgName}.png",
+                )
+                Badge(
+                    painter = painter,
+                    modifier = Modifier
+                        .scale(1.3f)
+                        .height(18.dp),
+                )
+            } else {
+                val iconState by installedExt.getIcon()
+                when (val iconResult = iconState) {
+                    is eu.kanade.presentation.browse.components.Result.Success -> {
+                        Badge(
+                            imageBitmap = iconResult.value,
+                            modifier = Modifier
+                                .scale(1.3f)
+                                .height(18.dp),
+                        )
+                    }
+                    else -> {
+                        Badge(
+                            imageVector = Icons.Outlined.LocalLibrary,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            iconColor = MaterialTheme.colorScheme.onTertiary,
+                        )
+                    }
+                }
+            }
+        }
+        source.isStub -> {
             Badge(
                 imageVector = Icons.Filled.Warning,
                 iconColor = MaterialTheme.colorScheme.error,
                 color = MaterialTheme.colorScheme.errorContainer,
-            )
-        }
-        icon != null -> {
-            Badge(
-                imageBitmap = icon,
-                modifier = Modifier
-                    .scale(1.3f)
-                    .height(18.dp),
             )
         }
         source.isLocal() -> {

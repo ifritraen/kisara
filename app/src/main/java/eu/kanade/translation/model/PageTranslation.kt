@@ -24,5 +24,5 @@ data class TranslationBlock(
     var symHeight: Float,
     var symWidth: Float,
     val angle: Float,
-
+    var isBubble: Boolean = false,
 )

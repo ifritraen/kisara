@@ -34,6 +34,11 @@ class SourcePreferences(
         emptySet(),
     )
 
+    fun pinnedSourcesOrdered() = preferenceStore.getString(
+        "pinned_catalogues_ordered",
+        "",
+    )
+
     fun lastUsedSource() = preferenceStore.getLong(
         Preference.appStateKey("last_catalogue_source"),
         -1,

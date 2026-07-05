@@ -26,11 +26,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -120,6 +123,8 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -128,6 +133,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import logcat.LogPriority
@@ -183,6 +189,14 @@ class ReaderActivity : BaseActivity() {
 
     val viewModel by viewModels<ReaderViewModel>()
     private var assistUrl: String? = null
+    private var tempDisabledTranslations = false
+    private var isDraggingForSpeed by mutableStateOf(false)
+    private var dragSpeedValue by mutableStateOf("")
+    private var dragSpeedStartX = 0f
+    private var dragSpeedStartY = 0f
+    private var dragSpeedStartInterval = 3f
+    private var speedToast: android.widget.Toast? = null
+    val autoScrollTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     // SY -->
     private val sourceManager = Injekt.get<SourceManager>()
@@ -359,6 +373,31 @@ class ReaderActivity : BaseActivity() {
                     }
 
                     ContentOverlay(state = state)
+
+                    if (isDraggingForSpeed) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                                        shape = CircleShape,
+                                    )
+                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = dragSpeedValue,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
 
                     AppBars(state = state)
                 }
@@ -632,6 +671,82 @@ class ReaderActivity : BaseActivity() {
         return handled || super.dispatchKeyEvent(event)
     }
 
+    private fun showSpeedToast(message: String) {
+        speedToast?.cancel()
+        speedToast = android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).apply {
+            show()
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::binding.isInitialized) {
+            val height = binding.root.height
+            if (height > 0) {
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        if (ev.y > height * 0.85f && readerPreferences.showTranslations().get()) {
+                            readerPreferences.showTranslations().set(false)
+                            tempDisabledTranslations = true
+                        }
+                        if (viewModel.state.value.autoScroll) {
+                            isDraggingForSpeed = false
+                            dragSpeedStartX = ev.x
+                            dragSpeedStartY = ev.y
+                            dragSpeedStartInterval = readerPreferences.autoscrollInterval().get()
+                            dragSpeedValue = String.format(java.util.Locale.US, "%.1f", dragSpeedStartInterval)
+                        }
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (viewModel.state.value.autoScroll) {
+                            val dx = ev.x - dragSpeedStartX
+                            val dy = ev.y - dragSpeedStartY
+
+                            if (!isDraggingForSpeed) {
+                                val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+                                if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 2) {
+                                    isDraggingForSpeed = true
+                                    dragSpeedStartX = ev.x
+                                    dragSpeedValue = String.format(java.util.Locale.US, "%.1f", dragSpeedStartInterval)
+
+                                    val cancelEvent = MotionEvent.obtain(ev).apply {
+                                        action = MotionEvent.ACTION_CANCEL
+                                    }
+                                    super.dispatchTouchEvent(cancelEvent)
+                                    cancelEvent.recycle()
+                                }
+                            }
+
+                            if (isDraggingForSpeed) {
+                                val change = dx / 60f
+                                var newInterval = dragSpeedStartInterval - change
+                                if (newInterval < 0.5f) newInterval = 0.5f
+                                if (newInterval > 60.0f) newInterval = 60.0f
+
+                                val formatted = String.format(java.util.Locale.US, "%.1f", newInterval)
+                                viewModel.setAutoScrollFrequency(formatted)
+                                dragSpeedValue = formatted
+                            }
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (tempDisabledTranslations) {
+                            readerPreferences.showTranslations().set(true)
+                            tempDisabledTranslations = false
+                        }
+                        if (isDraggingForSpeed) {
+                            isDraggingForSpeed = false
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+        if (isDraggingForSpeed) {
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     /**
      * Dispatches a generic motion event. If the viewer doesn't handle it, call the default
      * implementation.
@@ -801,29 +916,35 @@ class ReaderActivity : BaseActivity() {
 
     // EXH -->
     private fun enableExhAutoScroll() {
-        readerPreferences.autoscrollInterval().changes()
-            .combine(
-                viewModel.state.map { it.autoScroll to it.menuVisible }.distinctUntilChanged(),
-            ) { interval, (autoScroll, menuVisible) ->
-                Triple(interval.toDouble(), autoScroll, menuVisible)
-            }.mapLatest { (intervalFloat, autoScroll, menuVisible) ->
+        viewModel.state.map { it.autoScroll to it.menuVisible }.distinctUntilChanged()
+            .mapLatest { (autoScroll, menuVisible) ->
                 if (autoScroll && !menuVisible) {
                     repeatOnLifecycle(Lifecycle.State.STARTED) {
-                        val interval = intervalFloat.seconds
-                        while (true) {
-                            viewModel.state.value.viewer.let { v ->
-                                when (v) {
-                                    is PagerViewer -> v.moveToNext()
-                                    is WebtoonViewer -> {
-                                        if (readerPreferences.smoothAutoScroll().get()) {
-                                            v.linearScroll(interval)
-                                        } else {
-                                            v.scrollDown()
+                        autoScrollTrigger
+                            .onStart { emit(Unit) }
+                            .collectLatest {
+                                val currentIntervalDouble = readerPreferences.autoscrollInterval().get().toDouble()
+                                val interval = currentIntervalDouble.seconds
+                                viewModel.state.value.viewer.let { v ->
+                                    when (v) {
+                                        is PagerViewer -> v.moveToNext()
+                                        is WebtoonViewer -> {
+                                            if (readerPreferences.smoothAutoScroll().get()) {
+                                                v.linearScroll(interval)
+                                            } else {
+                                                v.scrollDown()
+                                            }
                                         }
                                     }
                                 }
+                                delay(interval)
+                                autoScrollTrigger.tryEmit(Unit)
                             }
-                            delay(interval)
+                    }
+                } else {
+                    viewModel.state.value.viewer?.let { v ->
+                        if (v is WebtoonViewer) {
+                            v.recycler.stopScroll()
                         }
                     }
                 }
@@ -1193,6 +1314,7 @@ class ReaderActivity : BaseActivity() {
      * actions to perform is shown.
      */
     fun onPageLongTap(page: ReaderPage, /* SY --> */ extraPage: ReaderPage? = null /* SY <-- */) {
+        if (tempDisabledTranslations) return
         viewModel.openPageDialog(page, /* SY --> */ extraPage /* SY <-- */)
     }
 
