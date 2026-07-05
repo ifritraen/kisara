@@ -19,6 +19,8 @@ import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import mihon.domain.extensionrepo.interactor.GetExtensionRepo
 import mihon.domain.extensionrepo.model.ExtensionRepo
@@ -179,20 +181,23 @@ internal object ExtensionLoader {
 
         if (extPkgs.isEmpty()) return emptyList()
 
-        // Load each extension concurrently and wait for completion
+        // Load each extension with throttled concurrency (Semaphore) to prevent ART ClassLinker lock contention & GC blocks
+        val semaphore = Semaphore(3)
         return runBlocking {
             // KMK -->
             val extRepos = getExtensionRepo.getAll()
             // KMK <--
             val deferred = extPkgs.map {
                 async {
-                    loadExtension(
-                        context,
-                        it,
-                        // KMK -->
-                        extRepos,
-                        // KMK <--
-                    )
+                    semaphore.withPermit {
+                        loadExtension(
+                            context,
+                            it,
+                            // KMK -->
+                            extRepos,
+                            // KMK <--
+                        )
+                    }
                 }
             }
             deferred.awaitAll()
@@ -389,7 +394,7 @@ internal object ExtensionLoader {
             isNsfw = isNsfw,
             sources = sources,
             pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
-            icon = appInfo.loadIcon(pkgManager),
+            icon = null,
             isShared = extensionInfo.isShared,
             // KMK -->
             signatureHash = signatures.last(),
