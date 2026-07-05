@@ -12,6 +12,7 @@ import eu.kanade.domain.source.service.SourcePreferences
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -33,6 +34,10 @@ class SuggestionsWorker(
 
     override suspend fun doWork(): Result {
         logcat(LogPriority.INFO) { "Starting suggestions updates in background" }
+        val isManual = inputData.getBoolean("is_manual", false)
+        if (!isManual) {
+            delay(15000)
+        }
         try {
             val mangaRepository = Injekt.get<MangaRepository>()
             val sourceManager = Injekt.get<SourceManager>()
@@ -57,10 +62,10 @@ class SuggestionsWorker(
                         0.1 + 0.9 * (count.toDouble() / maxFreq)
                     }
 
-                    // Top 3 tags to search
+                    // Top 1 tag to search
                     weightedTags.entries
                         .sortedByDescending { it.value }
-                        .take(3)
+                        .take(1)
                         .forEach { topTags.add(it.key) }
                 }
             }
@@ -75,9 +80,15 @@ class SuggestionsWorker(
                     showNsfw || !source.name.contains("nsfw", ignoreCase = true)
                 }
 
-            val prioritizedSources = enabledSources.sortedWith(
-                compareByDescending { seedSourceIds.contains(it.id) },
-            ).take(10) // Limit to 10 sources to prevent rate limits/overload
+            val sourceCounts = seed.groupingBy { it.source }.eachCount()
+            val prioritizedSources = if (seedSourceIds.isNotEmpty()) {
+                enabledSources
+                    .filter { seedSourceIds.contains(it.id) }
+                    .sortedByDescending { sourceCounts[it.id] ?: 0 }
+                    .take(5)
+            } else {
+                enabledSources.take(5)
+            }
 
             if (prioritizedSources.isEmpty()) {
                 logcat(LogPriority.INFO) { "No sources available for querying suggestions." }

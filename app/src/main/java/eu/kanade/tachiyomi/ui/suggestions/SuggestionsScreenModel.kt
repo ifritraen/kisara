@@ -25,7 +25,9 @@ class SuggestionsScreenModel(
 
     fun triggerRefresh(context: android.content.Context) {
         mutableState.update { it.copy(isLoading = true) }
-        val request = androidx.work.OneTimeWorkRequestBuilder<SuggestionsWorker>().build()
+        val request = androidx.work.OneTimeWorkRequestBuilder<SuggestionsWorker>()
+            .setInputData(androidx.work.workDataOf("is_manual" to true))
+            .build()
         androidx.work.WorkManager.getInstance(context).enqueue(request)
     }
 
