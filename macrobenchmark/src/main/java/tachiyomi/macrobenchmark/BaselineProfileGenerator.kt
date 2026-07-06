@@ -12,7 +12,7 @@ class BaselineProfileGenerator {
 
     @Test
     fun generate() = baselineProfileRule.collect(
-        packageName = "com.catmikku.raen.benchmark",
+        packageName = "com.raen.kisara.benchmark",
         profileBlock = {
             pressHome()
             startActivityAndWait()

@@ -1,10 +1,18 @@
 # Kisara – AI Agent Guide
 
 Kisara is an Android manga reader (min SDK 26, target SDK 36, JVM 17 / Kotlin) forked from **Komikku** (which was forked from **Mihon** + **TachiyomiSY**). Stack: Jetpack Compose + Material3, Voyager navigation, SQLDelight, Injekt DI.
-Active package IDs:
-- `com.catmikku.raen.beta.dev` (dev edition of beta)
-- `com.catmikku.raen.beta` (preview edition)
-- `com.catmikku.raen` (stable edition)
+
+## Active package IDs:
+- `com.raen.kisara` (stable edition)
+- `com.raen.kisara.beta` (preview/beta edition)
+- `com.raen.kisara.alpha` (alpha edition)
+- `com.raen.kisara.dev` (developer/debug edition)
+
+## Versioning Structure Guidelines:
+- **Stable**: Version name format `1.y.z` (starts at `1.0.0`)
+- **Beta**: Version name format `0.1.0` (or `0.1.0-beta.x`)
+- **Alpha**: Version name format `0.0.1-alpha.[commit-count]`
+- **Dev**: Version name format `0.0.1-dev-[commit-count]` (strictly local/developer build)
 
 ---
 

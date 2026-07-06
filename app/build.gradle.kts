@@ -26,10 +26,10 @@ android {
     namespace = "eu.kanade.tachiyomi"
 
     defaultConfig {
-        applicationId = "com.catmikku.raen.beta"
+        applicationId = "com.raen.kisara"
 
-        versionCode = 79
-        versionName = "1.13.6"
+        versionCode = 1
+        versionName = "1.0.0"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
@@ -43,7 +43,6 @@ android {
     buildTypes {
         val debug by getting {
             applicationIdSuffix = ".dev"
-            versionNameSuffix = "-${getCommitCount()}"
             isPseudoLocalesEnabled = true
         }
         val release by getting {
@@ -77,8 +76,16 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".beta"
+            signingConfig = debug.signingConfig
 
-            versionNameSuffix = debug.versionNameSuffix
+            matchingFallbacks.addAll(commonMatchingFallbacks)
+
+            buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = false)}\"")
+        }
+        create("alpha") {
+            initWith(release)
+
+            applicationIdSuffix = ".alpha"
             signingConfig = debug.signingConfig
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
@@ -90,7 +97,6 @@ android {
 
             isDebuggable = false
             isProfileable = true
-            versionNameSuffix = "${debug.versionNameSuffix}-benchmark"
             applicationIdSuffix = ".benchmark"
 
             signingConfig = debug.signingConfig
@@ -101,6 +107,7 @@ android {
 
     sourceSets {
         getByName("preview").res.srcDirs("src/beta/res")
+        getByName("alpha").res.srcDirs("src/beta/res")
         getByName("benchmark").res.srcDirs("src/debug/res")
     }
 
@@ -160,6 +167,24 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+    }
+
+    applicationVariants.all {
+        val variant = this
+        val buildType = variant.buildType.name
+        val name = when (buildType) {
+            "debug" -> "0.0.1-dev-${getCommitCount()}"
+            "alpha" -> "0.0.1-alpha.${getCommitCount()}"
+            "preview" -> "0.1.0"
+            "release" -> "1.0.0"
+            else -> null
+        }
+        if (name != null) {
+            variant.outputs.all {
+                val output = this as? com.android.build.gradle.api.ApkVariantOutput
+                output?.versionNameOverride = name
+            }
+        }
     }
 }
 
