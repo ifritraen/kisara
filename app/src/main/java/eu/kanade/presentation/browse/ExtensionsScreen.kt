@@ -103,7 +103,7 @@ fun ExtensionScreen(
     onClickItemCancel: (Extension) -> Unit,
     onOpenWebView: (Extension.Available) -> Unit,
     onInstallExtension: (Extension.Available) -> Unit,
-    onSideloadExtension: (Extension.Available) -> Unit,
+    onSideloadExtension: (Extension) -> Unit,
     onUninstallExtension: (Extension) -> Unit,
     onUpdateExtension: (Extension.Installed) -> Unit,
     onTrustExtension: (Extension.Untrusted) -> Unit,
@@ -318,17 +318,7 @@ private fun ExtensionContent(
                             }
                         },
                         onClickItemSideload = {
-                            if (it is Extension.Available) {
-                                onSideloadExtension(it)
-                            } else if (it is Extension.Installed && it.hasUpdate) {
-                                // Update as sideload
-                                val availableExt = state.items.values.flatten().map { it.extension }
-                                    .filterIsInstance<Extension.Available>()
-                                    .firstOrNull { avail -> avail.pkgName == it.pkgName }
-                                if (availableExt != null) {
-                                    onSideloadExtension(availableExt)
-                                }
-                            }
+                            onSideloadExtension(it)
                         },
                     )
                 }

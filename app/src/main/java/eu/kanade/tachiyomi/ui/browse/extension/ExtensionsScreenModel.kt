@@ -66,7 +66,7 @@ class ExtensionsScreenModel(
                             // KMK -->
                             "_${it.signatureHash}",
                         // KMK <--
-                    ] ?: InstallStep.Idle,
+                    ] ?: map[it.pkgName] ?: InstallStep.Idle,
                 )
             }
         }
@@ -247,17 +247,31 @@ class ExtensionsScreenModel(
         }
     }
 
-    fun sideloadExtension(extension: Extension.Available) {
+    fun sideloadExtension(extension: Extension) {
         screenModelScope.launchIO {
+            val availableExt = when (extension) {
+                is Extension.Available -> extension
+                is Extension.Installed -> {
+                    extensionManager.availableExtensionsFlow.value
+                        .find { it.pkgName == extension.pkgName }
+                }
+                else -> null
+            }
+            if (availableExt == null) {
+                _events.trySend(Event.SideloadError(extension.name, Exception("Extension update not found")))
+                return@launchIO
+            }
+
             var success = false
             var isError = false
             try {
-                extensionManager.sideloadExtension(extension)
+                extensionManager.sideloadExtension(availableExt)
                     .onEach { installStep ->
                         addDownloadState(extension, installStep)
+                        addDownloadState(availableExt, installStep)
                         if (installStep == InstallStep.Installed) {
                             success = true
-                            extensionManager.registerSideloadedExtension(extension.pkgName)
+                            extensionManager.registerSideloadedExtension(availableExt.pkgName)
                         } else if (installStep == InstallStep.Error) {
                             isError = true
                         }
@@ -265,16 +279,17 @@ class ExtensionsScreenModel(
                     .takeWhile { installStep -> installStep != InstallStep.Installed && installStep != InstallStep.Error }
                     .onCompletion {
                         removeDownloadState(extension)
+                        removeDownloadState(availableExt)
                         if (success) {
-                            _events.trySend(Event.SideloadSuccess(extension.name))
+                            _events.trySend(Event.SideloadSuccess(availableExt.name))
                         } else if (isError) {
-                            val err = extensionManager.getAndClearSideloadError(extension.pkgName) ?: Exception("Unknown error during sideloading")
-                            _events.trySend(Event.SideloadError(extension.name, err))
+                            val err = extensionManager.getAndClearSideloadError(availableExt.pkgName) ?: Exception("Unknown error during sideloading")
+                            _events.trySend(Event.SideloadError(availableExt.name, err))
                         }
                     }
                     .collect()
             } catch (e: Exception) {
-                _events.trySend(Event.SideloadError(extension.name, e))
+                _events.trySend(Event.SideloadError(availableExt.name, e))
             }
         }
     }
@@ -339,7 +354,7 @@ class ExtensionsScreenModel(
                     "_${extension.signatureHash}",
                 // KMK <--
                 installStep,
-            )
+            ) + Pair(extension.pkgName, installStep)
         }
     }
 
@@ -350,7 +365,7 @@ class ExtensionsScreenModel(
                     // KMK -->
                     "_${extension.signatureHash}"
                 // KMK <--
-                )
+                ) - extension.pkgName
         }
     }
 
