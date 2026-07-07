@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
@@ -46,6 +47,8 @@ import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.kmk.KMR
@@ -78,7 +81,7 @@ object SettingsTranslationScreen : SearchableSettings {
             getTranslatioEngineGroup(translationPreferences),
             getOcrGroup(translationPreferences),
             getTranslatioAdvancedGroup(translationPreferences),
-            getDiagnosticGroup(),
+            getDiagnosticGroup(translationPreferences),
         )
     }
 
@@ -233,10 +236,17 @@ object SettingsTranslationScreen : SearchableSettings {
     }
 
     @Composable
-    private fun getDiagnosticGroup(): Preference.PreferenceGroup {
+    private fun getDiagnosticGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
             title = "Diagnostics",
             preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = translationPreferences.translationLoggingEnabled(),
+                    title = "Enable Translation Logging",
+                    subtitle = "When disabled, translation reports and logs will not be recorded.",
+                ),
                 Preference.PreferenceItem.CustomPreference(
                     title = "Translation Logs & Reports",
                     content = {
@@ -277,6 +287,7 @@ private fun ModelDownloadPreference(
     var downloadStatus by remember { mutableStateOf("") }
     var isDownloading by remember { mutableStateOf(false) }
     var errorDialogText by remember { mutableStateOf<String?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
 
     val isDownloaded = sizeMb > 0.1
 
@@ -320,24 +331,40 @@ private fun ModelDownloadPreference(
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }
-            } else if (!isDownloading) {
+            } else if (isDownloading) {
+                IconButton(onClick = {
+                    downloadJob?.cancel()
+                    context.toast("Cancelling download...")
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cancel",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
                 IconButton(onClick = {
                     isDownloading = true
                     downloadStatus = "Starting download..."
-                    scope.launch {
+                    val job = scope.launch {
                         try {
                             onDownload { progress ->
                                 downloadStatus = progress
                             }
                             sizeMb = getFolderSizeMb(modelDir)
                             context.toast("Download complete!")
+                        } catch (e: CancellationException) {
+                            context.toast("Download cancelled")
+                            sizeMb = getFolderSizeMb(modelDir) // Refresh size to show clean state
                         } catch (e: Exception) {
                             errorDialogText = e.stackTraceToString()
                             context.toast("Download failed!")
                         } finally {
                             isDownloading = false
+                            downloadJob = null
                         }
                     }
+                    downloadJob = job
                 }) {
                     Icon(
                         imageVector = Icons.Default.Download,

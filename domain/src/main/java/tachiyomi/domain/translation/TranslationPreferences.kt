@@ -25,5 +25,7 @@ class TranslationPreferences(
     fun ocrEngine() = preferenceStore.getInt("ocr_engine", 0)
     /** When true, runs ONNX bubble detector before OCR to get better bounding boxes */
     fun bubbleDetectionEnabled() = preferenceStore.getBoolean("bubble_detection_enabled", true)
+    fun translationLoggingEnabled() = preferenceStore.getBoolean("translation_logging_enabled", true)
+    fun hasAutoDownloadedBubbleModel() = preferenceStore.getBoolean("has_auto_downloaded_bubble_model", false)
     // KMK <--
 }

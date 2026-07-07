@@ -8,7 +8,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
@@ -42,11 +44,31 @@ class PaddleOcrRecognizer(
                 val name = dest.name
                 onProgress("Downloading $name…")
                 URL(url).openStream().use { input ->
-                    dest.outputStream().use { output -> input.copyTo(output) }
+                    dest.outputStream().use { output ->
+                        val buffer = ByteArray(8 * 1024)
+                        var bytes = input.read(buffer)
+                        while (bytes >= 0) {
+                            ensureActive()
+                            output.write(buffer, 0, bytes)
+                            bytes = input.read(buffer)
+                        }
+                    }
                 }
             }
             onProgress("Done")
+        } catch (e: CancellationException) {
+            for ((_, dest) in files) {
+                if (dest.exists()) {
+                    dest.delete()
+                }
+            }
+            throw e
         } catch (e: Exception) {
+            for ((_, dest) in files) {
+                if (dest.exists()) {
+                    dest.delete()
+                }
+            }
             onProgress("Download failed: ${e.localizedMessage}")
             throw e
         }

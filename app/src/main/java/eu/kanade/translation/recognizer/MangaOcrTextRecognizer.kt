@@ -10,7 +10,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -59,11 +61,31 @@ class MangaOcrEngine(
                 if (dest.exists()) continue
                 onProgress("Downloading $name…")
                 URL("$base/$name").openStream().use { input ->
-                    dest.outputStream().use { output -> input.copyTo(output) }
+                    dest.outputStream().use { output ->
+                        val buffer = ByteArray(8 * 1024)
+                        var bytes = input.read(buffer)
+                        while (bytes >= 0) {
+                            ensureActive()
+                            output.write(buffer, 0, bytes)
+                            bytes = input.read(buffer)
+                        }
+                    }
                 }
             }
             onProgress("Done")
+        } catch (e: CancellationException) {
+            for ((_, dest) in files) {
+                if (dest.exists()) {
+                    dest.delete()
+                }
+            }
+            throw e
         } catch (e: Exception) {
+            for ((_, dest) in files) {
+                if (dest.exists()) {
+                    dest.delete()
+                }
+            }
             onProgress("Download failed: ${e.localizedMessage}")
             throw e
         }

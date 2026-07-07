@@ -127,6 +127,7 @@ import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import eu.kanade.tachiyomi.util.system.updaterEnabled
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import eu.kanade.tachiyomi.vpn.WireguardManager
+import eu.kanade.translation.recognizer.BubbleDetector
 import exh.debug.DebugToggles
 import exh.eh.EHentaiUpdateWorker
 import exh.log.DebugModeOverlay
@@ -154,6 +155,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.release.interactor.GetApplicationRelease
+import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -178,6 +180,7 @@ class MainActivity : BaseActivity() {
     // KMK -->
     private val backupPreferences: BackupPreferences by injectLazy()
     private val syncPreferences: SyncPreferences by injectLazy()
+    private val translationPreferences: TranslationPreferences by injectLazy()
     private val backupRestoreStatus: BackupRestoreStatus by injectLazy()
     private val syncStatus: SyncStatus by injectLazy()
     private val libraryUpdateStatus: LibraryUpdateStatus by injectLazy()
@@ -242,6 +245,8 @@ class MainActivity : BaseActivity() {
         }
 
         if (isLaunch) {
+            eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.triggerOnAppStart(this)
+            eu.kanade.tachiyomi.data.suggestions.HomeFeedWorker.scheduleBackground(this, uiPreferences.homeFeedBackgroundPrefetch().get())
             lifecycleScope.launch {
                 if (uiPreferences.vpnAutoConnectAtStart().get()) {
                     val defaultProfile = wireguardManager.getDefaultProfile()
@@ -249,6 +254,19 @@ class MainActivity : BaseActivity() {
                         if (android.net.VpnService.prepare(this@MainActivity) == null) {
                             wireguardManager.startTunnel(defaultProfile)
                         }
+                    }
+                }
+            }
+            lifecycleScope.launch {
+                val detector = BubbleDetector(this@MainActivity)
+                if (!detector.isReady && !translationPreferences.hasAutoDownloadedBubbleModel().get()) {
+                    translationPreferences.hasAutoDownloadedBubbleModel().set(true)
+                    try {
+                        logcat(LogPriority.INFO) { "Auto-starting Bubble detector model download..." }
+                        detector.downloadModel()
+                        logcat(LogPriority.INFO) { "Bubble detector model auto-download complete!" }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR, e) { "Bubble detector model auto-download failed" }
                     }
                 }
             }

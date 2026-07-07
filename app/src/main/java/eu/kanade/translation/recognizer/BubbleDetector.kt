@@ -9,7 +9,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
@@ -54,10 +56,26 @@ class BubbleDetector(private val context: Context) : AutoCloseable {
         val url = "https://huggingface.co/ogkalu/comic-text-and-bubble-detector/resolve/main/detector.onnx"
         try {
             URL(url).openStream().use { input ->
-                modelFile.outputStream().use { output -> input.copyTo(output) }
+                modelFile.outputStream().use { output ->
+                    val buffer = ByteArray(8 * 1024)
+                    var bytes = input.read(buffer)
+                    while (bytes >= 0) {
+                        ensureActive()
+                        output.write(buffer, 0, bytes)
+                        bytes = input.read(buffer)
+                    }
+                }
             }
             onProgress("Done")
+        } catch (e: CancellationException) {
+            if (modelFile.exists()) {
+                modelFile.delete()
+            }
+            throw e
         } catch (e: Exception) {
+            if (modelFile.exists()) {
+                modelFile.delete()
+            }
             onProgress("Download failed: ${e.localizedMessage}")
             throw e
         }
