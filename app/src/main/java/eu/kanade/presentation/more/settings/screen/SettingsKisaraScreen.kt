@@ -4,12 +4,25 @@ import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -32,6 +47,9 @@ import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.screen.SettingsBlockedTagsScreen
+import eu.kanade.presentation.more.settings.screen.SettingsHomeScreen
+import eu.kanade.presentation.more.settings.screen.SettingsSuggestionsScreen
 import eu.kanade.presentation.more.settings.screen.SettingsVpnScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
@@ -178,8 +196,29 @@ object SettingsKisaraScreen : SearchableSettings {
         val bottomBarButtonSizePref = uiPreferences.bottomBarButtonSize()
         val bottomBarButtonSizeVal by bottomBarButtonSizePref.collectAsState()
 
-        val jarExtensionRepoPref = uiPreferences.jarExtensionRepo()
-        val jarExtensionRepo by jarExtensionRepoPref.collectAsState()
+        val standardBottomBarHeightPref = uiPreferences.standardBottomBarHeight()
+        val standardBottomBarHeight by standardBottomBarHeightPref.collectAsState()
+
+        val standardBottomBarWidthPref = uiPreferences.standardBottomBarWidth()
+        val standardBottomBarWidth by standardBottomBarWidthPref.collectAsState()
+
+        val standardBottomBarOpacityPref = uiPreferences.standardBottomBarOpacity()
+        val standardBottomBarOpacity by standardBottomBarOpacityPref.collectAsState()
+
+        val standardBottomBarBlurPref = uiPreferences.standardBottomBarBlur()
+        val standardBottomBarBlur by standardBottomBarBlurPref.collectAsState()
+
+        val standardBottomBarBottomMarginPref = uiPreferences.standardBottomBarBottomMargin()
+        val standardBottomBarBottomMargin by standardBottomBarBottomMarginPref.collectAsState()
+
+        val standardBottomBarCornerRadiusPref = uiPreferences.standardBottomBarCornerRadius()
+        val standardBottomBarCornerRadius by standardBottomBarCornerRadiusPref.collectAsState()
+
+        val jarExtensionReposPref = uiPreferences.jarExtensionRepos()
+        val jarExtensionRepos by jarExtensionReposPref.collectAsState()
+
+        var showJarReposDialog by remember { mutableStateOf(false) }
+        var showAddJarRepoDialog by remember { mutableStateOf(false) }
 
         var showFontColorPicker by remember { mutableStateOf(false) }
 
@@ -272,159 +311,376 @@ object SettingsKisaraScreen : SearchableSettings {
                 },
             )
         }
+        if (showJarReposDialog) {
+            AlertDialog(
+                onDismissRequest = { showJarReposDialog = false },
+                title = { Text(text = "JAR Extension Repositories") },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (jarExtensionRepos.isEmpty()) {
+                            Text(
+                                text = "No repositories configured. Add one below.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 240.dp),
+                            ) {
+                                items(jarExtensionRepos.toList()) { repoString ->
+                                    val parts = repoString.split("|", limit = 2)
+                                    val repoNickname = parts.getOrNull(0) ?: "Unknown"
+                                    val repoUrl = parts.getOrNull(1) ?: ""
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = repoNickname,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                            Text(
+                                                text = repoUrl,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                val newRepos = jarExtensionRepos.toMutableSet()
+                                                newRepos.remove(repoString)
+                                                jarExtensionReposPref.set(newRepos)
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete Repo",
+                                                tint = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showAddJarRepoDialog = true },
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(text = "Add Repository")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showJarReposDialog = false }) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+            )
+        }
+
+        if (showAddJarRepoDialog) {
+            var newRepoName by remember { mutableStateOf("") }
+            var newRepoUrl by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showAddJarRepoDialog = false },
+                title = { Text(text = "Add Repository") },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = newRepoName,
+                            onValueChange = { newRepoName = it },
+                            label = { Text("Nickname") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = newRepoUrl,
+                            onValueChange = { newRepoUrl = it },
+                            label = { Text("URL") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newRepoName.isNotBlank() && newRepoUrl.isNotBlank()) {
+                                val newRepos = jarExtensionRepos.toMutableSet()
+                                val repoString = "${newRepoName.trim()}|${newRepoUrl.trim()}"
+                                newRepos.add(repoString)
+                                jarExtensionReposPref.set(newRepos)
+                                showAddJarRepoDialog = false
+                            }
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_add))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddJarRepoDialog = false }) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
 
         val allPreferences = listOf(
             Preference.PreferenceGroup(
                 title = "Layout & Appearance",
-                preferenceItems = listOf<Preference.PreferenceItem<out Any, out Any>>(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = floatingBottomBarPref,
-                        title = stringResource(KMR.strings.pref_floating_bottom_bar),
-                        subtitle = stringResource(KMR.strings.pref_floating_bottom_bar_summary),
-                    ),
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = bottomBarAutoWidthPref,
-                        title = "Auto Width",
-                        subtitle = "Automatically adjust bar width to fit items with horizontal padding",
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarWidth,
-                        valueRange = 100..600,
-                        title = "Bottom Bar Width",
-                        subtitle = "Width of the bottom navigation bar in dp",
-                        valueString = "$bottomBarWidth dp",
-                        enabled = !bottomBarAutoWidth,
-                        onValueChanged = { bottomBarWidthPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = bottomBarKeepRatioPref,
-                        title = "Keep Bottom Bar & Icon Ratio",
-                        subtitle = "Automatically scale icon size with bottom bar height (2:1 ratio)",
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarHeight,
-                        valueRange = 10..100,
-                        title = "Bottom Bar Height",
-                        valueString = "$bottomBarHeight dp",
-                        onValueChanged = {
-                            bottomBarHeightPref.set(it)
-                            if (bottomBarKeepRatio) {
-                                bottomBarIconSizePref.set(it / 2)
-                            }
-                        },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarGap,
-                        valueRange = -20..40,
-                        title = "Bottom Bar Item Gap",
-                        subtitle = "Spacing gap between bottom bar items in dp",
-                        valueString = "$bottomBarGap dp",
-                        onValueChanged = { bottomBarGapPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarHorizontalPadding,
-                        valueRange = 0..32,
-                        title = "Bottom Bar Horizontal Padding",
-                        subtitle = "Horizontal padding of the bottom navigation bar in dp",
-                        valueString = "$bottomBarHorizontalPadding dp",
-                        onValueChanged = { bottomBarHorizontalPaddingPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarVerticalPadding,
-                        valueRange = 0..32,
-                        title = "Bottom Bar Vertical Padding",
-                        subtitle = "Vertical padding of the bottom navigation bar in dp",
-                        valueString = "$bottomBarVerticalPadding dp",
-                        onValueChanged = { bottomBarVerticalPaddingPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarCornerRadius,
-                        valueRange = 0..48,
-                        title = "Bottom Bar Corner Radius",
-                        subtitle = "Corner radius of the bottom navigation bar in dp",
-                        valueString = "$bottomBarCornerRadius dp",
-                        onValueChanged = { bottomBarCornerRadiusPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarBottomMargin,
-                        valueRange = -40..80,
-                        title = stringResource(KMR.strings.pref_bottom_bar_bottom_margin),
-                        subtitle = stringResource(KMR.strings.pref_bottom_bar_bottom_margin_summary),
-                        valueString = "$bottomBarBottomMargin dp",
-                        onValueChanged = { bottomBarBottomMarginPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarOpacity,
-                        valueRange = 0..100,
-                        title = stringResource(KMR.strings.pref_bottom_bar_opacity),
-                        valueString = "$bottomBarOpacity%",
-                        enabled = floatingBottomBar,
-                        onValueChanged = { bottomBarOpacityPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = bottomBarBlur,
-                        valueRange = 0..24,
-                        title = stringResource(KMR.strings.pref_bottom_bar_blur),
-                        valueString = if (bottomBarBlur > 0) "$bottomBarBlur dp" else stringResource(MR.strings.disabled),
-                        enabled = floatingBottomBar,
-                        onValueChanged = { bottomBarBlurPref.set(it) },
-                    ),
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.kisaraFrostedGlass(),
-                        title = stringResource(KMR.strings.pref_kisara_frosted_glass),
-                        subtitle = stringResource(KMR.strings.pref_kisara_frosted_glass_summary),
-                    ),
-                    Preference.PreferenceItem.ListPreference(
-                        preference = kisaraGlassColorTypePref,
-                        entries = mapOf(
-                            0 to stringResource(KMR.strings.glass_color_type_default),
-                            1 to stringResource(KMR.strings.glass_color_type_accent),
-                            2 to stringResource(KMR.strings.glass_color_type_surface),
-                            3 to stringResource(KMR.strings.glass_color_type_black),
-                            4 to stringResource(KMR.strings.glass_color_type_white),
-                            5 to "Custom Color",
-                        ).toImmutableMap(),
-                        title = stringResource(KMR.strings.pref_glass_color_type),
-                        subtitle = "%s",
-                    ),
-                    Preference.PreferenceItem.TextPreference(
-                        title = "Custom Glass Color",
-                        subtitle = if (kisaraGlassColorType == 5) "#%08X".format(kisaraGlassCustomColor) else "Tap to choose a custom color",
-                        enabled = kisaraGlassColorType == 5,
-                        onClick = { showColorPicker = true },
-                    ),
-                    Preference.PreferenceItem.SliderPreference(
-                        value = kisaraGlassColorMix,
-                        valueRange = 0..100,
-                        title = stringResource(KMR.strings.pref_glass_color_mix),
-                        subtitle = stringResource(KMR.strings.pref_glass_color_mix_summary),
-                        valueString = "$kisaraGlassColorMix%",
-                        enabled = kisaraGlassColorType != 0,
-                        onValueChanged = { kisaraGlassColorMixPref.set(it) },
-                    ),
-                ).let { list ->
-                    if (!bottomBarKeepRatio) {
-                        list + listOf(
-                            Preference.PreferenceItem.SliderPreference(
-                                value = bottomBarButtonSizeVal,
-                                valueRange = 8..64,
-                                title = "Bottom Bar Button Size",
-                                subtitle = "Size of the clickable item buttons in dp",
-                                valueString = "$bottomBarButtonSizeVal dp",
-                                onValueChanged = { bottomBarButtonSizePref.set(it) },
-                            ),
-                            Preference.PreferenceItem.SliderPreference(
-                                value = bottomBarIconSize,
-                                valueRange = 6..48,
-                                title = "Bottom Bar Icon Size",
-                                subtitle = "Size of the icons inside the buttons in dp",
-                                valueString = "$bottomBarIconSize dp",
-                                onValueChanged = { bottomBarIconSizePref.set(it) },
+                preferenceItems = buildList {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = floatingBottomBarPref,
+                            title = stringResource(KMR.strings.pref_floating_bottom_bar),
+                            subtitle = stringResource(KMR.strings.pref_floating_bottom_bar_summary),
+                        ),
+                    )
+
+                    if (floatingBottomBar) {
+                        add(
+                            Preference.PreferenceItem.SwitchPreference(
+                                preference = bottomBarAutoWidthPref,
+                                title = "Dock Auto Width",
+                                subtitle = "Automatically adjust dock width to fit items with horizontal padding",
                             ),
                         )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarWidth,
+                                valueRange = 100..600,
+                                title = "Dock Width",
+                                subtitle = "Width of the floating bottom dock in dp",
+                                valueString = "$bottomBarWidth dp",
+                                enabled = !bottomBarAutoWidth,
+                                onValueChanged = { bottomBarWidthPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SwitchPreference(
+                                preference = bottomBarKeepRatioPref,
+                                title = "Keep Dock & Icon Ratio",
+                                subtitle = "Automatically scale icon size with bottom dock height (2:1 ratio)",
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarHeight,
+                                valueRange = 10..100,
+                                title = "Dock Height",
+                                valueString = "$bottomBarHeight dp",
+                                onValueChanged = {
+                                    bottomBarHeightPref.set(it)
+                                    if (bottomBarKeepRatio) {
+                                        bottomBarIconSizePref.set(it / 2)
+                                    }
+                                },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarGap,
+                                valueRange = -20..40,
+                                title = "Dock Item Gap",
+                                subtitle = "Spacing gap between bottom dock items in dp",
+                                valueString = "$bottomBarGap dp",
+                                onValueChanged = { bottomBarGapPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarHorizontalPadding,
+                                valueRange = 0..32,
+                                title = "Dock Horizontal Padding",
+                                subtitle = "Horizontal padding of the bottom dock in dp",
+                                valueString = "$bottomBarHorizontalPadding dp",
+                                onValueChanged = { bottomBarHorizontalPaddingPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarVerticalPadding,
+                                valueRange = 0..32,
+                                title = "Dock Vertical Padding",
+                                subtitle = "Vertical padding of the bottom dock in dp",
+                                valueString = "$bottomBarVerticalPadding dp",
+                                onValueChanged = { bottomBarVerticalPaddingPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarCornerRadius,
+                                valueRange = 0..48,
+                                title = "Dock Corner Radius",
+                                subtitle = "Corner radius of the bottom dock in dp",
+                                valueString = "$bottomBarCornerRadius dp",
+                                onValueChanged = { bottomBarCornerRadiusPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarBottomMargin,
+                                valueRange = -40..80,
+                                title = "Dock Bottom Margin",
+                                subtitle = "Spacing margin below the bottom dock in dp",
+                                valueString = "$bottomBarBottomMargin dp",
+                                onValueChanged = { bottomBarBottomMarginPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarOpacity,
+                                valueRange = 0..100,
+                                title = "Dock Opacity",
+                                valueString = "$bottomBarOpacity%",
+                                onValueChanged = { bottomBarOpacityPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomBarBlur,
+                                valueRange = 0..24,
+                                title = "Dock Blur Radius",
+                                valueString = if (bottomBarBlur > 0) "$bottomBarBlur dp" else "Disabled",
+                                onValueChanged = { bottomBarBlurPref.set(it) },
+                            ),
+                        )
+                        if (!bottomBarKeepRatio) {
+                            add(
+                                Preference.PreferenceItem.SliderPreference(
+                                    value = bottomBarButtonSizeVal,
+                                    valueRange = 8..64,
+                                    title = "Dock Button Size",
+                                    subtitle = "Size of the clickable dock item buttons in dp",
+                                    valueString = "$bottomBarButtonSizeVal dp",
+                                    onValueChanged = { bottomBarButtonSizePref.set(it) },
+                                ),
+                            )
+                            add(
+                                Preference.PreferenceItem.SliderPreference(
+                                    value = bottomBarIconSize,
+                                    valueRange = 6..48,
+                                    title = "Dock Icon Size",
+                                    subtitle = "Size of the icons inside the buttons in dp",
+                                    valueString = "$bottomBarIconSize dp",
+                                    onValueChanged = { bottomBarIconSizePref.set(it) },
+                                ),
+                            )
+                        }
                     } else {
-                        list
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = standardBottomBarHeight,
+                                valueRange = 40..120,
+                                title = "Standard Bottom Bar Height",
+                                valueString = "$standardBottomBarHeight dp",
+                                onValueChanged = { standardBottomBarHeightPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = standardBottomBarWidth,
+                                valueRange = 30..100,
+                                title = "Standard Bottom Bar Width (Scale)",
+                                subtitle = "Horizontal scaling of the standard bottom bar as a percentage",
+                                valueString = "$standardBottomBarWidth%",
+                                onValueChanged = { standardBottomBarWidthPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = standardBottomBarBottomMargin,
+                                valueRange = 0..80,
+                                title = "Standard Bottom Bar Bottom Margin",
+                                subtitle = "Spacing margin below the standard bottom bar in dp",
+                                valueString = "$standardBottomBarBottomMargin dp",
+                                onValueChanged = { standardBottomBarBottomMarginPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = standardBottomBarCornerRadius,
+                                valueRange = 0..48,
+                                title = "Standard Bottom Bar Corner Radius",
+                                subtitle = "Corner radius of standard bottom bar in dp",
+                                valueString = "$standardBottomBarCornerRadius dp",
+                                onValueChanged = { standardBottomBarCornerRadiusPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = standardBottomBarOpacity,
+                                valueRange = 0..100,
+                                title = "Standard Bottom Bar Opacity",
+                                valueString = "$standardBottomBarOpacity%",
+                                onValueChanged = { standardBottomBarOpacityPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = standardBottomBarBlur,
+                                valueRange = 0..24,
+                                title = "Standard Bottom Bar Blur Radius",
+                                valueString = if (standardBottomBarBlur > 0) "$standardBottomBarBlur dp" else "Disabled",
+                                onValueChanged = { standardBottomBarBlurPref.set(it) },
+                            ),
+                        )
                     }
+
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.kisaraFrostedGlass(),
+                            title = stringResource(KMR.strings.pref_kisara_frosted_glass),
+                            subtitle = stringResource(KMR.strings.pref_kisara_frosted_glass_summary),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = kisaraGlassColorTypePref,
+                            entries = mapOf(
+                                0 to stringResource(KMR.strings.glass_color_type_default),
+                                1 to stringResource(KMR.strings.glass_color_type_accent),
+                                2 to stringResource(KMR.strings.glass_color_type_surface),
+                                3 to stringResource(KMR.strings.glass_color_type_black),
+                                4 to stringResource(KMR.strings.glass_color_type_white),
+                                5 to "Custom Color",
+                            ).toImmutableMap(),
+                            title = stringResource(KMR.strings.pref_glass_color_type),
+                            subtitle = "%s",
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.TextPreference(
+                            title = "Custom Glass Color",
+                            subtitle = if (kisaraGlassColorType == 5) "#%08X".format(kisaraGlassCustomColor) else "Tap to choose a custom color",
+                            enabled = kisaraGlassColorType == 5,
+                            onClick = { showColorPicker = true },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = kisaraGlassColorMix,
+                            valueRange = 0..100,
+                            title = stringResource(KMR.strings.pref_glass_color_mix),
+                            subtitle = stringResource(KMR.strings.pref_glass_color_mix_summary),
+                            valueString = "$kisaraGlassColorMix%",
+                            enabled = kisaraGlassColorType != 0,
+                            onValueChanged = { kisaraGlassColorMixPref.set(it) },
+                        ),
+                    )
                 }.toPersistentList(),
             ),
             Preference.PreferenceGroup(
@@ -628,10 +884,51 @@ object SettingsKisaraScreen : SearchableSettings {
                         subtitle = "Select and install a .jar parser extension from your device",
                         onClick = { chooseJar.launch("*/*") },
                     ),
-                    Preference.PreferenceItem.EditTextPreference(
-                        preference = jarExtensionRepoPref,
-                        title = "Kotatsu JAR Extension Repository",
-                        subtitle = if (jarExtensionRepo.isEmpty()) "Not set" else jarExtensionRepo,
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Kotatsu JAR Extension Repositories",
+                        subtitle = "Manage multiple JAR parser extension repositories",
+                        onClick = { showJarReposDialog = true },
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.pref_home_title),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_home_title),
+                        subtitle = stringResource(KMR.strings.pref_home_summary),
+                        onClick = {
+                            navigator.push(SettingsHomeScreen)
+                        },
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
+                title = "Suggestions & Content Filtering",
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>().isSuggestionsEnabled(),
+                        title = "Enable Suggestions",
+                        subtitle = "Enable recommendations based on reading taste",
+                        onValueChanged = { isEnabled ->
+                            eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.scheduleBackground(context, isEnabled)
+                            true
+                        },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Suggestions Settings",
+                        subtitle = "Configure, drag-and-drop reorder, or block tags and extensions",
+                        onClick = {
+                            navigator.push(SettingsSuggestionsScreen())
+                        },
+                        enabled = Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>().isSuggestionsEnabled().get(),
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "System Wide Blocked Tags",
+                        subtitle = "Globally hide manga containing specified tags (genres)",
+                        onClick = {
+                            navigator.push(SettingsBlockedTagsScreen())
+                        },
                     ),
                 ),
             ),

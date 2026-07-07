@@ -123,9 +123,33 @@ class UiPreferences(
     fun bottomBarVerticalPadding() = preferenceStore.getInt("kisara_bottom_bar_vertical_padding", 2)
     fun bottomBarCornerRadius() = preferenceStore.getInt("kisara_bottom_bar_corner_radius", 24)
     fun bottomBarButtonSize() = preferenceStore.getInt("kisara_bottom_bar_button_size_dp", 32)
+
+    // Standard Bottom Bar Customizations
+    fun standardBottomBarHeight() = preferenceStore.getInt("kisara_standard_bottom_bar_height", 80)
+    fun standardBottomBarWidth() = preferenceStore.getInt("kisara_standard_standard_bottom_bar_width", 100)
+    fun standardBottomBarOpacity() = preferenceStore.getInt("kisara_standard_bottom_bar_opacity", 100)
+    fun standardBottomBarBlur() = preferenceStore.getInt("kisara_standard_bottom_bar_blur", 0)
+    fun standardBottomBarBottomMargin() = preferenceStore.getInt("kisara_standard_bottom_bar_bottom_margin", 0)
+    fun standardBottomBarCornerRadius() = preferenceStore.getInt("kisara_standard_bottom_bar_corner_radius", 0)
+
     fun vpnAutoConnectAtStart() = preferenceStore.getBoolean("kisara_vpn_auto_connect_at_start", false)
     fun vpnDisconnectOnClose() = preferenceStore.getBoolean("kisara_vpn_disconnect_on_close", true)
-    fun jarExtensionRepo() = preferenceStore.getString("kisara_jar_extension_repo", "")
+    fun jarExtensionRepos() = preferenceStore.getStringSet("kisara_jar_extension_repos", emptySet())
+    fun jarExtensionRepoMap() = preferenceStore.getStringSet("kisara_jar_extension_repo_map", emptySet())
+
+    // Home Landing Page Settings
+    fun showHomeSuggestions() = preferenceStore.getBoolean("kisara_home_show_suggestions", true)
+    fun showHomeHistory() = preferenceStore.getBoolean("kisara_home_show_history", true)
+    fun showHomeUpdates() = preferenceStore.getBoolean("kisara_home_show_updates", true)
+    fun showHomeLibrary() = preferenceStore.getBoolean("kisara_home_show_library", true)
+    fun showHomeFeed() = preferenceStore.getBoolean("kisara_home_show_feed", true)
+    fun homeFeedSourceCount() = preferenceStore.getInt("kisara_home_feed_source_count", 10)
+    fun homeFeedItemsCount() = preferenceStore.getInt("kisara_home_feed_items_count", 10)
+    fun homeSuggestionsAutoplay() = preferenceStore.getBoolean("kisara_home_suggestions_autoplay", true)
+    fun homeSuggestionsAutoplayInterval() = preferenceStore.getInt("kisara_home_suggestions_autoplay_interval", 5)
+    fun homeFeedUsePinnedSources() = preferenceStore.getBoolean("kisara_home_feed_use_pinned_sources", false)
+    fun homeFeedPinnedSources() = preferenceStore.getStringSet("kisara_home_feed_pinned_sources", emptySet())
+    fun homeFeedBackgroundPrefetch() = preferenceStore.getBoolean("kisara_home_feed_background_prefetch", false)
     // KMK <--
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)

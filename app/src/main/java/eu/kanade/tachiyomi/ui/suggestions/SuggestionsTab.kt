@@ -327,7 +327,16 @@ fun suggestionsTab(
                                             )
                                         }
                                         if (showSourceBadge && source != null) {
-                                            SourceIconBadge(source = source)
+                                            val domainSource = remember(source) {
+                                                tachiyomi.domain.source.model.Source(
+                                                    id = source.id,
+                                                    lang = source.lang,
+                                                    name = source.name,
+                                                    supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
+                                                    isStub = false,
+                                                )
+                                            }
+                                            SourceIconBadge(source = domainSource)
                                         }
 
                                         IconButton(

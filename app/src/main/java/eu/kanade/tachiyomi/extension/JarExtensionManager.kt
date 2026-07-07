@@ -109,9 +109,10 @@ object JarExtensionManager {
 
         for (plugin in loaded) {
             plugins[plugin.jarName] = plugin
+            val repoName = getRepoNameForJar(context, plugin.jarName)
             for (source in plugin.sources) {
                 wrappedSources.add(
-                    JarCatalogueSource(source) {
+                    JarCatalogueSource(source, repoName) {
                         instantiateMangaParser(plugin, source, loaderContext)
                     },
                 )
@@ -495,8 +496,25 @@ object JarExtensionManager {
         return uri.path?.substringAfterLast('/')
     }
 
+    fun getRepoNameForJar(context: Context, jarName: String): String? {
+        try {
+            val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
+            val repoMap = uiPreferences.jarExtensionRepoMap().get()
+            return repoMap.find { it.startsWith("$jarName:") }?.substringAfter(":")
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
     fun uninstallJar(context: Context, filename: String): Boolean {
         return try {
+            try {
+                val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
+                val repoMap = uiPreferences.jarExtensionRepoMap().get().toMutableSet()
+                repoMap.removeAll { it.startsWith("$filename:") }
+                uiPreferences.jarExtensionRepoMap().set(repoMap)
+            } catch (_: Exception) {}
+
             val extensionDir = File(context.filesDir, "jar_extensions")
             val file = File(extensionDir, filename)
             if (file.exists()) {
@@ -510,9 +528,19 @@ object JarExtensionManager {
         }
     }
 
-    suspend fun downloadAndInstallJar(context: Context, url: String, filename: String): Boolean {
+    suspend fun downloadAndInstallJar(context: Context, url: String, filename: String, repoName: String? = null): Boolean {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                if (repoName != null) {
+                    try {
+                        val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
+                        val repoMap = uiPreferences.jarExtensionRepoMap().get().toMutableSet()
+                        repoMap.removeAll { it.startsWith("$filename:") }
+                        repoMap.add("$filename:$repoName")
+                        uiPreferences.jarExtensionRepoMap().set(repoMap)
+                    } catch (_: Exception) {}
+                }
+
                 val extensionDir = File(context.filesDir, "jar_extensions")
                 if (!extensionDir.exists()) {
                     extensionDir.mkdirs()

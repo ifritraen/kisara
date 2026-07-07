@@ -105,5 +105,21 @@ sealed class Extension {
         override val repoName: String? = null,
         val filename: String,
         val sources: List<Source>,
+        val hasUpdate: Boolean = false,
+    ) : Extension()
+
+    data class AvailableJar(
+        override val name: String,
+        override val pkgName: String,
+        override val versionName: String,
+        override val versionCode: Long,
+        override val libVersion: Double,
+        override val lang: String?,
+        override val isNsfw: Boolean,
+        override val signatureHash: String = "",
+        override val repoName: String? = null,
+        val url: String,
+        val iconUrl: String?,
+        val repoUrl: String,
     ) : Extension()
 }

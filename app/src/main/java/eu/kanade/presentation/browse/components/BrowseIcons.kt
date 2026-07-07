@@ -198,6 +198,25 @@ fun ExtensionIcon(
             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary),
             modifier = modifier.then(defaultModifier),
         )
+        is Extension.AvailableJar -> {
+            if (!extension.iconUrl.isNullOrEmpty()) {
+                AsyncImage(
+                    model = extension.iconUrl,
+                    contentDescription = null,
+                    placeholder = ColorPainter(Color(0x1F888888)),
+                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
+                    modifier = modifier
+                        .clip(MaterialTheme.shapes.extraSmall),
+                )
+            } else {
+                Image(
+                    imageVector = Icons.Filled.Extension,
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary),
+                    modifier = modifier.then(defaultModifier),
+                )
+            }
+        }
     }
 }
 

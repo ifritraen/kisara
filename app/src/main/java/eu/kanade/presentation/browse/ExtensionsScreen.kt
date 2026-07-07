@@ -113,6 +113,8 @@ fun ExtensionScreen(
     onRefresh: () -> Unit,
     onToggleJarSource: (Long) -> Unit = {},
     onUninstallJar: (Extension.Jar) -> Unit = {},
+    onInstallAvailableJar: (Extension.AvailableJar) -> Unit = {},
+    onUpdateJar: (Extension.Jar) -> Unit = {},
 ) {
     val navigator = LocalNavigator.currentOrThrow
 
@@ -154,9 +156,12 @@ fun ExtensionScreen(
                     onUpdateExtension = onUpdateExtension,
                     onTrustExtension = onTrustExtension,
                     onOpenExtension = onOpenExtension,
+                    onOpenExtensionDetails = onOpenExtensionDetails,
                     onClickUpdateAll = onClickUpdateAll,
                     onToggleJarSource = onToggleJarSource,
                     onUninstallJar = onUninstallJar,
+                    onInstallAvailableJar = onInstallAvailableJar,
+                    onUpdateJar = onUpdateJar,
                 )
             }
         }
@@ -171,14 +176,17 @@ private fun ExtensionContent(
     onClickItemCancel: (Extension) -> Unit,
     onOpenWebView: (Extension.Available) -> Unit,
     onInstallExtension: (Extension.Available) -> Unit,
-    onSideloadExtension: (Extension.Available) -> Unit,
+    onSideloadExtension: (Extension) -> Unit,
     onUninstallExtension: (Extension) -> Unit,
     onUpdateExtension: (Extension.Installed) -> Unit,
     onTrustExtension: (Extension.Untrusted) -> Unit,
     onOpenExtension: (Extension.Installed) -> Unit,
+    onOpenExtensionDetails: (Extension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
     onToggleJarSource: (Long) -> Unit = {},
     onUninstallJar: (Extension.Jar) -> Unit = {},
+    onInstallAvailableJar: (Extension.AvailableJar) -> Unit = {},
+    onUpdateJar: (Extension.Jar) -> Unit = {},
 ) {
     val context = LocalContext.current
     var trustState by remember { mutableStateOf<Extension.Untrusted?>(null) }
@@ -268,6 +276,7 @@ private fun ExtensionContent(
                         is Extension.Installed -> "extension-installed-${item.hashCode()}"
                         is Extension.Available -> "extension-available-${item.hashCode()}"
                         is Extension.Jar -> "extension-jar-${item.hashCode()}"
+                        is Extension.AvailableJar -> "extension-availablejar-${item.hashCode()}"
                     }
                 },
             ) { item ->
@@ -277,6 +286,7 @@ private fun ExtensionContent(
                         extension = item.extension,
                         onToggleJarSource = onToggleJarSource,
                         onUninstallJar = onUninstallJar,
+                        onUpdateJar = onUpdateJar,
                     )
                 } else {
                     ExtensionItem(
@@ -285,6 +295,7 @@ private fun ExtensionContent(
                         onClickItem = {
                             when (it) {
                                 is Extension.Available -> onInstallExtension(it)
+                                is Extension.AvailableJar -> onInstallAvailableJar(it)
                                 is Extension.Installed -> onOpenExtension(it)
                                 is Extension.Untrusted -> {
                                     trustState = it
@@ -304,6 +315,7 @@ private fun ExtensionContent(
                         onClickItemAction = {
                             when (it) {
                                 is Extension.Available -> onInstallExtension(it)
+                                is Extension.AvailableJar -> onInstallAvailableJar(it)
                                 is Extension.Installed -> {
                                     if (it.hasUpdate) {
                                         onUpdateExtension(it)
@@ -554,6 +566,14 @@ private fun ExtensionItemActions(
                         }
                     }
                     is Extension.Jar -> {}
+                    is Extension.AvailableJar -> {
+                        IconButton(onClick = { onClickItemAction(extension) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.GetApp,
+                                contentDescription = stringResource(MR.strings.ext_install),
+                            )
+                        }
+                    }
                     is Extension.Untrusted -> {
                         IconButton(onClick = { onClickItemAction(extension) }) {
                             Icon(
@@ -740,6 +760,7 @@ private fun JarExtensionItem(
     extension: Extension.Jar,
     onToggleJarSource: (Long) -> Unit,
     onUninstallJar: (Extension.Jar) -> Unit,
+    onUpdateJar: (Extension.Jar) -> Unit,
 ) {
     val disabledSources = remember { Injekt.get<SourcePreferences>() }.disabledSources().collectAsState().value
     var expanded by remember { mutableStateOf(true) }
@@ -782,10 +803,21 @@ private fun JarExtensionItem(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "JAR Extension • ${extension.sources.size} source(s)",
+                    text = "JAR Extension • ${extension.repoName ?: "Local"} • ${extension.sources.size} source(s)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (extension.hasUpdate) {
+                IconButton(
+                    onClick = { onUpdateJar(extension) },
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.GetApp,
+                        contentDescription = "Update JAR",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             IconButton(
                 onClick = { onUninstallJar(extension) },

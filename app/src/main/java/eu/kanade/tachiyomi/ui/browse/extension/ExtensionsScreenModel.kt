@@ -12,6 +12,7 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
+import eu.kanade.tachiyomi.source.JarCatalogueSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.channels.Channel
@@ -47,13 +48,29 @@ class ExtensionsScreenModel(
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
 
-    private val _events = Channel<Event>(Channel.UNLIMITED)
+    private val _events = kotlinx.coroutines.channels.Channel<Event>(kotlinx.coroutines.channels.Channel.UNLIMITED)
     val events = _events.receiveAsFlow()
 
     sealed interface Event {
         data class SideloadSuccess(val extensionName: String) : Event
         data class SideloadError(val extensionName: String, val error: Throwable) : Event
     }
+
+    private val availableJars = MutableStateFlow<List<Extension.AvailableJar>>(emptyList())
+
+    data class ExtensionsCombo(
+        val predicate: (Extension) -> Boolean,
+        val nsfwOnly: Boolean,
+        val downloads: Map<String, InstallStep>,
+        val extensions: eu.kanade.domain.extension.model.Extensions,
+        val jarSources: List<JarCatalogueSource>,
+    )
+
+    data class ExtensionsData(
+        val extensions: eu.kanade.domain.extension.model.Extensions,
+        val jarAvailables: List<Extension.AvailableJar>,
+        val jarSources: List<JarCatalogueSource>,
+    )
 
     init {
         val context = Injekt.get<Application>()
@@ -71,24 +88,37 @@ class ExtensionsScreenModel(
             }
         }
 
+        val extensionsFlow: kotlinx.coroutines.flow.Flow<ExtensionsData> = combine(
+            getExtensions.subscribe(),
+            availableJars,
+            eu.kanade.tachiyomi.extension.JarExtensionManager.sources,
+        ) { extensions, jarAvailables, jarSources ->
+            ExtensionsData(extensions, jarAvailables, jarSources)
+        }
+
         screenModelScope.launchIO {
             combine(
                 state.map { it.searchQuery }
                     .distinctUntilChanged()
                     .debounce(SEARCH_DEBOUNCE_MILLIS)
                     .map { searchQueryPredicate(it ?: "") },
-                // KMK -->
                 state.map { it.nsfwOnly }
                     .distinctUntilChanged()
                     .debounce(SEARCH_DEBOUNCE_MILLIS),
-                // KMK <--
                 currentDownloads,
-                getExtensions.subscribe(),
-                eu.kanade.tachiyomi.extension.JarExtensionManager.sources,
-            ) { predicate, nsfwOnly, downloads, (_updates, _installed, _available, _untrusted), jarSources ->
+                extensionsFlow,
+            ) { predicate: (Extension) -> Boolean, nsfwOnly: Boolean, downloads: Map<String, InstallStep>, extensionsData: ExtensionsData ->
+                val extensions: eu.kanade.domain.extension.model.Extensions = extensionsData.extensions
+                val jarAvailables: List<Extension.AvailableJar> = extensionsData.jarAvailables
+                val jarSources: List<JarCatalogueSource> = extensionsData.jarSources
+
+                val updatesList: List<Extension.Installed> = extensions.updates
+                val installedList: List<Extension.Installed> = extensions.installed
+                val availableList: List<Extension.Available> = extensions.available
+                val untrustedList: List<Extension.Untrusted> = extensions.untrusted
                 val enabledLanguages = preferences.enabledLanguages().get()
-                buildMap {
-                    val updates = _updates.filter(predicate).map(extensionMapper(downloads))
+                buildMap<ExtensionUiModel.Header, List<ExtensionUiModel.Item>> {
+                    val updates = updatesList.filter(predicate).map(extensionMapper(downloads))
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
@@ -96,11 +126,11 @@ class ExtensionsScreenModel(
                         put(ExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending), updates)
                     }
 
-                    val installed = _installed.filter(predicate).map(extensionMapper(downloads))
+                    val installed = installedList.filter(predicate).map(extensionMapper(downloads))
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
-                    val untrusted = _untrusted.filter(predicate).map(extensionMapper(downloads))
+                    val untrusted = untrustedList.filter(predicate).map(extensionMapper(downloads))
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
@@ -119,6 +149,13 @@ class ExtensionsScreenModel(
                         val jarItems = jarPlugins.mapNotNull { plugin ->
                             val pluginSources = jarSources.filter { it.originalSource in plugin.sources && it.lang in enabledLanguages }
                             if (pluginSources.isEmpty()) return@mapNotNull null
+                            val repoName = eu.kanade.tachiyomi.extension.JarExtensionManager.getRepoNameForJar(
+                                uy.kohesive.injekt.Injekt.get<android.app.Application>(),
+                                plugin.jarName,
+                            )
+                            val pkgName = plugin.jarName.removeSuffix(".jar")
+                            val matchingAvail = jarAvailables.find { it.pkgName == pkgName }
+                            val hasUpdate = matchingAvail != null && matchingAvail.versionCode > 1L
                             val extension = Extension.Jar(
                                 name = plugin.jarName,
                                 pkgName = "jar:${plugin.jarName}",
@@ -128,11 +165,13 @@ class ExtensionsScreenModel(
                                 lang = "all",
                                 isNsfw = false,
                                 filename = plugin.jarName,
+                                repoName = repoName,
                                 sources = pluginSources,
+                                hasUpdate = hasUpdate,
                             )
                             ExtensionUiModel.Item(
                                 extension = extension,
-                                installStep = InstallStep.Idle,
+                                installStep = downloads[pkgName] ?: InstallStep.Idle,
                             )
                         }.filter { predicate(it.extension) }
                             .sortedBy { it.extension.name }
@@ -141,11 +180,28 @@ class ExtensionsScreenModel(
                         }
                     }
 
+                    val installedJarPkgs = jarPlugins.map { it.jarName.removeSuffix(".jar") }.toSet()
+                    val availableJarsToDisplay = jarAvailables.filter { it.pkgName !in installedJarPkgs }
+                        .filter(predicate)
+
+                    val availableJarsByRepo = availableJarsToDisplay.groupBy { it.repoName ?: "Unknown JAR Repo" }
+                    for ((repoName, avails) in availableJarsByRepo) {
+                        val repoItems = avails.map { avail ->
+                            ExtensionUiModel.Item(
+                                extension = avail,
+                                installStep = downloads[avail.pkgName] ?: InstallStep.Idle,
+                            )
+                        }.sortedBy { it.extension.name }
+                        if (repoItems.isNotEmpty()) {
+                            put(ExtensionUiModel.Header.Text("$repoName (JAR)"), repoItems)
+                        }
+                    }
+
                     if (standardInstalled.isNotEmpty() || untrusted.isNotEmpty()) {
                         put(ExtensionUiModel.Header.Resource(MR.strings.ext_installed), standardInstalled + untrusted)
                     }
 
-                    val languagesWithExtensions = _available
+                    val languagesWithExtensions = availableList
                         .filter(predicate)
                         // KMK -->
                         .filter { !nsfwOnly || it.isNsfw }
@@ -162,7 +218,7 @@ class ExtensionsScreenModel(
 
                     // KMK -->
                     // Show "More..." header if no available extensions
-                    if (_available.isEmpty()) {
+                    if (availableList.isEmpty()) {
                         put(ExtensionUiModel.Header.Resource(KMR.strings.extensions_page_more), emptyList())
                     }
                     // KMK <--
@@ -385,11 +441,82 @@ class ExtensionsScreenModel(
             mutableState.update { it.copy(isRefreshing = true) }
 
             extensionManager.findAvailableExtensions()
+            fetchAvailableJars()
 
             // Fake slower refresh so it doesn't seem like it's not doing anything
             delay(1.seconds)
 
             mutableState.update { it.copy(isRefreshing = false) }
+        }
+    }
+
+    fun fetchAvailableJars() {
+        screenModelScope.launchIO {
+            val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
+            val repos = uiPreferences.jarExtensionRepos().get()
+            val list = mutableListOf<Extension.AvailableJar>()
+            for (repoString in repos) {
+                val parts = repoString.split("|", limit = 2)
+                if (parts.size < 2) continue
+                val repoName = parts[0]
+                val repoUrl = parts[1]
+                try {
+                    val jarInfos = eu.kanade.tachiyomi.extension.JarExtensionManager.fetchRepositoryIndex(repoUrl)
+                    for (info in jarInfos) {
+                        list.add(
+                            Extension.AvailableJar(
+                                name = info.name,
+                                pkgName = info.pkg,
+                                versionName = info.version,
+                                versionCode = info.versionCode.toLong(),
+                                libVersion = 1.0,
+                                lang = null,
+                                isNsfw = false,
+                                repoName = repoName,
+                                url = info.url,
+                                iconUrl = info.iconUrl,
+                                repoUrl = repoUrl,
+                            ),
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ExtensionsScreenModel", "Failed to fetch JAR repo index for $repoName ($repoUrl): ${e.message}", e)
+                }
+            }
+            availableJars.update { list }
+        }
+    }
+
+    fun installAvailableJar(extension: Extension.AvailableJar) {
+        screenModelScope.launchIO {
+            addDownloadState(extension, InstallStep.Installing)
+            val context = Injekt.get<Application>()
+            val filename = "${extension.pkgName}.jar"
+            val success = eu.kanade.tachiyomi.extension.JarExtensionManager.downloadAndInstallJar(
+                context = context,
+                url = extension.url,
+                filename = filename,
+                repoName = extension.repoName,
+            )
+            removeDownloadState(extension)
+            if (success) {
+                _events.trySend(Event.SideloadSuccess(extension.name))
+                findAvailableExtensions()
+            } else {
+                _events.trySend(Event.SideloadError(extension.name, Exception("Failed to download and install JAR file")))
+            }
+        }
+    }
+
+    fun updateJarExtension(extension: Extension.Jar) {
+        screenModelScope.launchIO {
+            val cleanPkg = extension.pkgName.removePrefix("jar:").removeSuffix(".jar")
+            val matchingAvail = availableJars.value.find { it.pkgName == cleanPkg }
+            if (matchingAvail != null) {
+                installAvailableJar(matchingAvail)
+            } else {
+                _events.trySend(Event.SideloadError(extension.name, Exception("Update source URL not found")))
+            }
         }
     }
 

@@ -26,7 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.ExtensionScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
@@ -35,7 +35,6 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
-import eu.kanade.tachiyomi.ui.browse.source.browse.GetRemoteManga
 import eu.kanade.tachiyomi.ui.browse.source.feed.SourceFeedScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -45,6 +44,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import tachiyomi.domain.source.interactor.GetRemoteManga
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -193,8 +193,8 @@ fun extensionsTab(
                 onOpenExtension = { extension ->
                     val source = extension.sources.firstOrNull()
                     if (source != null) {
-                        val sourcePreferences = Injekt.get<SourcePreferences>()
-                        val useNewSourceNavigation = sourcePreferences.useNewSourceNavigation().get()
+                        val uiPreferences = Injekt.get<UiPreferences>()
+                        val useNewSourceNavigation = uiPreferences.useNewSourceNavigation().get()
                         val screen = if (useNewSourceNavigation) {
                             SourceFeedScreen(source.id)
                         } else {
@@ -212,6 +212,8 @@ fun extensionsTab(
                 onRefresh = extensionsScreenModel::findAvailableExtensions,
                 onToggleJarSource = extensionsScreenModel::toggleJarSource,
                 onUninstallJar = extensionsScreenModel::uninstallJarExtension,
+                onInstallAvailableJar = extensionsScreenModel::installAvailableJar,
+                onUpdateJar = extensionsScreenModel::updateJarExtension,
             )
 
             privateExtensionToUninstall?.let { extension ->

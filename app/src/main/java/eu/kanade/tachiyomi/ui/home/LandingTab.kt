@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,7 +28,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.hapticfeedback.HapticFeedbackType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -884,7 +885,16 @@ fun MangaCoverCard(
                         )
                     }
                     if (showSourceBadge && source != null) {
-                        SourceIconBadge(source = source)
+                        val domainSource = remember(source) {
+                            tachiyomi.domain.source.model.Source(
+                                id = source.id,
+                                lang = source.lang,
+                                name = source.name,
+                                supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
+                                isStub = false,
+                            )
+                        }
+                        SourceIconBadge(source = domainSource)
                     }
                 }
             }
