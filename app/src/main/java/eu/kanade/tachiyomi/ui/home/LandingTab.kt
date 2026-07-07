@@ -32,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,12 +47,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -64,13 +70,19 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.DisplayOverlaySettingsDialog
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.library.components.CommonMangaItemDefaults
+import eu.kanade.presentation.library.components.DownloadsBadge
+import eu.kanade.presentation.library.components.LanguageBadge
+import eu.kanade.presentation.library.components.SourceIconBadge
+import eu.kanade.presentation.library.components.UnreadBadge
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.more.settings.screen.SettingsHomeScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.presentation.util.isTabletUi
+import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.util.lang.toTimestampString
 import kotlinx.collections.immutable.persistentListOf
@@ -78,13 +90,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.domain.history.interactor.GetNextChapters
 import tachiyomi.domain.history.model.HistoryWithRelations
+import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.manga.interactor.GetLibraryManga
 import tachiyomi.domain.manga.model.asMangaCover
+import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.suggestions.model.Suggestion
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.Badge
+import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -106,9 +123,16 @@ fun landingTab(
     val showLibrary = uiPreferences.showHomeLibrary().collectAsState().value
     val showFeed = uiPreferences.showHomeFeed().collectAsState().value
 
+    var showDisplayOverlayDialog by rememberSaveable { mutableStateOf(false) }
+
     return TabContent(
         titleRes = KMR.strings.label_home,
         actions = persistentListOf(
+            AppBar.Action(
+                title = stringResource(tachiyomi.i18n.MR.strings.action_filter),
+                icon = Icons.Outlined.FilterList,
+                onClick = { showDisplayOverlayDialog = true },
+            ),
             AppBar.Action(
                 title = stringResource(KMR.strings.pref_home_title),
                 icon = Icons.Outlined.Settings,
@@ -116,6 +140,10 @@ fun landingTab(
             ),
         ),
         content = { paddingValues, _ ->
+            if (showDisplayOverlayDialog) {
+                DisplayOverlaySettingsDialog(onDismissRequest = { showDisplayOverlayDialog = false })
+            }
+
             PullRefresh(
                 refreshing = state.isFeedRefreshing,
                 enabled = true,
@@ -730,6 +758,25 @@ fun MangaCoverCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val libraryMangaList by remember { Injekt.get<GetLibraryManga>().subscribe() }.collectAsState(initial = emptyList())
+    val libraryManga = remember(libraryMangaList, mangaId) { libraryMangaList.firstOrNull { it.id == mangaId } }
+
+    val sourceManager = remember { Injekt.get<SourceManager>() }
+    val source = remember(coverData.sourceId) { sourceManager.get(coverData.sourceId) }
+
+    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+    val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
+    val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
+    val showLocalBadge by libraryPreferences.localBadge().collectAsState()
+    val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
+    val useLangIcon by libraryPreferences.useLangIcon().collectAsState()
+    val showSourceBadge by libraryPreferences.sourceBadge().collectAsState()
+
+    val downloadManager = remember { Injekt.get<DownloadManager>() }
+    val downloadCount = remember(libraryManga, coverData.mangaId) {
+        libraryManga?.let { downloadManager.getDownloadCount(it.manga).toLong() } ?: 0L
+    }
+
     Column(
         modifier = Modifier
             .width(100.dp)
@@ -763,13 +810,39 @@ fun MangaCoverCard(
                 }
             }
 
-            if (badgeText != null) {
-                Surface(
-                    shape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 4.dp, bottomEnd = 4.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+            // START Badges (downloads, unread count)
+            val badgeStartVisible = (showDownloadBadge && downloadCount > 0) || (showUnreadBadge && (libraryManga?.unreadCount ?: 0L) > 0)
+            if (badgeStartVisible) {
+                BadgeGroup(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(top = 4.dp)
+                        .padding(4.dp),
+                ) {
+                    if (showDownloadBadge) {
+                        DownloadsBadge(count = downloadCount)
+                    }
+                    if (showUnreadBadge) {
+                        UnreadBadge(count = libraryManga?.unreadCount ?: 0L)
+                    }
+                }
+            }
+
+            // Chapter Badge
+            if (badgeText != null) {
+                Surface(
+                    shape = RoundedCornerShape(
+                        topStart = if (badgeStartVisible) 4.dp else 0.dp,
+                        bottomStart = if (badgeStartVisible) 0.dp else 4.dp,
+                        topEnd = 4.dp,
+                        bottomEnd = 4.dp,
+                    ),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                    modifier = Modifier
+                        .align(if (badgeStartVisible) Alignment.BottomStart else Alignment.TopStart)
+                        .padding(
+                            top = if (badgeStartVisible) 0.dp else 4.dp,
+                            bottom = if (badgeStartVisible) 4.dp else 0.dp,
+                        )
                         .widthIn(max = 80.dp),
                 ) {
                     Text(
@@ -783,6 +856,36 @@ fun MangaCoverCard(
                             .basicMarquee()
                             .padding(horizontal = 4.dp, vertical = 2.dp),
                     )
+                }
+            }
+
+            // END Badges (local, language, source icons)
+            val badgeEndVisible = (showLocalBadge && source?.isLocal() == true) ||
+                (showLanguageBadge && source != null && !source.isLocal() && source.lang.isNotEmpty()) ||
+                (showSourceBadge && source != null)
+            if (badgeEndVisible) {
+                BadgeGroup(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp),
+                ) {
+                    if (showLocalBadge && source?.isLocal() == true) {
+                        Badge(
+                            imageVector = Icons.Outlined.Folder,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            iconColor = MaterialTheme.colorScheme.onTertiary,
+                        )
+                    }
+                    if (showLanguageBadge && source != null && !source.isLocal() && source.lang.isNotEmpty()) {
+                        LanguageBadge(
+                            isLocal = false,
+                            sourceLanguage = source.lang,
+                            useLangIcon = useLangIcon,
+                        )
+                    }
+                    if (showSourceBadge && source != null) {
+                        SourceIconBadge(source = source)
+                    }
                 }
             }
         }

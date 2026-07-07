@@ -17,8 +17,29 @@ object LocalApkExtensionSupport {
         PackageManager.GET_SIGNATURES or
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else 0)
 
+    private fun migrateDir(from: File, to: File) {
+        try {
+            if (from.exists() && from.isDirectory) {
+                to.mkdirs()
+                from.listFiles()?.forEach { file ->
+                    val target = File(to, file.name)
+                    if (!target.exists()) {
+                        file.copyTo(target, overwrite = true)
+                    }
+                    file.delete()
+                }
+                from.delete()
+            }
+        } catch (_: Exception) {}
+    }
+
     fun getSideloadDir(context: Context): File {
-        return File(context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
+        val internalDir = File(context.filesDir, SIDELOAD_DIR)
+        val externalDir = File(context.getExternalFilesDir(null) ?: context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
+        if (internalDir.exists() && internalDir.isDirectory && internalDir != externalDir) {
+            migrateDir(internalDir, externalDir)
+        }
+        return externalDir
     }
 
     fun getLocalApkFiles(context: Context): List<File> {
@@ -66,7 +87,11 @@ object LocalApkExtensionSupport {
             return sourcePath
         }
 
-        val cacheRoot = File(context.filesDir, LOAD_CACHE_DIR).apply { mkdirs() }
+        val internalCache = File(context.filesDir, LOAD_CACHE_DIR)
+        val cacheRoot = File(context.getExternalFilesDir(null) ?: context.filesDir, LOAD_CACHE_DIR).apply { mkdirs() }
+        if (internalCache.exists() && internalCache.isDirectory && internalCache != cacheRoot) {
+            migrateDir(internalCache, cacheRoot)
+        }
         val targetFile = File(cacheRoot, "$pkgName.apk")
 
         if (

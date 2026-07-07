@@ -157,30 +157,32 @@ fun ExtensionIcon(
             )
         }
         is Extension.Installed -> {
-            val repoUrl = extension.repoUrl
-            if (repoUrl != null) {
-                AsyncImage(
-                    model = "$repoUrl/icon/${extension.pkgName}.png",
+            val icon by extension.getIcon(density)
+            when (icon) {
+                is Result.Loading -> Box(modifier = modifier)
+                is Result.Success -> Image(
+                    bitmap = (icon as Result.Success<ImageBitmap>).value,
                     contentDescription = null,
-                    placeholder = ColorPainter(Color(0x1F888888)),
-                    error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
-                    modifier = modifier
-                        .clip(MaterialTheme.shapes.extraSmall),
+                    modifier = modifier,
                 )
-            } else {
-                val icon by extension.getIcon(density)
-                when (icon) {
-                    is Result.Loading -> Box(modifier = modifier)
-                    is Result.Success -> Image(
-                        bitmap = (icon as Result.Success<ImageBitmap>).value,
-                        contentDescription = null,
-                        modifier = modifier,
-                    )
-                    is Result.Error -> Image(
-                        bitmap = ImageBitmap.imageResource(id = R.mipmap.ic_default_source),
-                        contentDescription = null,
-                        modifier = modifier,
-                    )
+                is Result.Error -> {
+                    val repoUrl = extension.repoUrl
+                    if (repoUrl != null) {
+                        AsyncImage(
+                            model = "$repoUrl/icon/${extension.pkgName}.png",
+                            contentDescription = null,
+                            placeholder = ColorPainter(Color(0x1F888888)),
+                            error = rememberResourceBitmapPainter(id = R.mipmap.ic_default_source),
+                            modifier = modifier
+                                .clip(MaterialTheme.shapes.extraSmall),
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.mipmap.ic_default_source),
+                            contentDescription = null,
+                            modifier = modifier,
+                        )
+                    }
                 }
             }
         }
@@ -251,6 +253,7 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
     }
 
     return produceState<Result<ImageBitmap>>(initialValue = initialValue, this) {
+        if (value is Result.Success) return@produceState
         withIOContext {
             value = try {
                 val packageInfo = ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)
@@ -260,7 +263,7 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
                         if (sideloadedFile.isFile) {
                             context.packageManager.getPackageArchiveInfoCompat(sideloadedFile.absolutePath, android.content.pm.PackageManager.GET_META_DATA)
                         } else {
-                            val privateExtensionFile = java.io.File(context.filesDir, "exts/$pkgName.ext")
+                            val privateExtensionFile = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext")
                             if (privateExtensionFile.isFile) {
                                 context.packageManager.getPackageArchiveInfoCompat(privateExtensionFile.absolutePath, android.content.pm.PackageManager.GET_META_DATA)
                             } else {
@@ -278,7 +281,7 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
                     appInfo.publicSourceDir = sideloadedFile.absolutePath
                     true
                 } else {
-                    val privateExtensionFile = java.io.File(context.filesDir, "exts/$pkgName.ext")
+                    val privateExtensionFile = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext")
                     if (privateExtensionFile.isFile) {
                         appInfo.sourceDir = privateExtensionFile.absolutePath
                         appInfo.publicSourceDir = privateExtensionFile.absolutePath
@@ -301,9 +304,6 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
                         appInfo.loadIcon(context.packageManager)
                     } catch (e2: Exception) {
                         android.util.Log.e("BrowseIcons", "Failed to extract/setup icon for $name", e2)
-                        withUIContext {
-                            context.toast("Failed to extract/setup icon for $name: " + android.util.Log.getStackTraceString(e2))
-                        }
                         throw e2
                     }
                 }
@@ -318,9 +318,6 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
                 Result.Success(bitmap.asImageBitmap())
             } catch (e: Exception) {
                 android.util.Log.e("BrowseIcons", "Icon loading failed for $name", e)
-                withUIContext {
-                    context.toast("Icon loading failed for $name: " + android.util.Log.getStackTraceString(e))
-                }
                 if (value is Result.Success) value else Result.Error
             }
         }

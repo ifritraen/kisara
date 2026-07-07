@@ -70,7 +70,23 @@ internal object ExtensionLoader {
 
     private const val PRIVATE_EXTENSION_EXTENSION = "ext"
 
-    private fun getPrivateExtensionDir(context: Context) = File(context.filesDir, "exts")
+    private fun getPrivateExtensionDir(context: Context): File {
+        val internalDir = File(context.filesDir, "exts")
+        val externalDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "exts").apply { mkdirs() }
+        if (internalDir.exists() && internalDir.isDirectory && internalDir != externalDir) {
+            try {
+                internalDir.listFiles()?.forEach { file ->
+                    val target = File(externalDir, file.name)
+                    if (!target.exists()) {
+                        file.copyTo(target, overwrite = true)
+                    }
+                    file.delete()
+                }
+                internalDir.delete()
+            } catch (_: Exception) {}
+        }
+        return externalDir
+    }
 
     fun installPrivateExtensionFile(context: Context, file: File): Boolean {
         val extension = context.packageManager.getPackageArchiveInfoCompat(file.absolutePath, PACKAGE_FLAGS)
