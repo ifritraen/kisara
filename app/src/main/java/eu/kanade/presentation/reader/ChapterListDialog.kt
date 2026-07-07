@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -78,6 +81,23 @@ fun ChapterListDialog(
         tabTitles = mappedTabTitles,
         pagerState = pagerState,
         actions = {
+            val scope = rememberCoroutineScope()
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        val index = chapters.indexOfFirst { it.isCurrent }
+                        if (index >= 0) {
+                            state.animateScrollToItem(index)
+                        }
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.PlayArrow,
+                    contentDescription = stringResource(MR.strings.action_resume),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             if (isHttpSource && onBrowserClick != null) {
                 IconButton(onClick = onBrowserClick) {
                     Icon(
@@ -143,7 +163,7 @@ fun ChapterListDialog(
                             sourceName = null,
                             read = chapterItem.chapter.read,
                             bookmark = chapterItem.chapter.bookmark,
-                            selected = false,
+                            selected = chapterItem.isCurrent,
                             downloadIndicatorEnabled = onDownloadAction != null,
                             downloadStateProvider = { downloadState },
                             downloadProgressProvider = { progress },
