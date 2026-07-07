@@ -340,6 +340,9 @@ data object LibraryTab : Tab {
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
         val kisaraShowItemCountInTabs by uiPreferences.kisaraShowItemCountInTabs().collectAsState()
         val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
+        val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
+        val standardBottomBarHeight by uiPreferences.standardBottomBarHeight().collectAsState()
+        val standardBottomBarBottomMargin by uiPreferences.standardBottomBarBottomMargin().collectAsState()
 
         val categoryBarSelectedFontColorType by uiPreferences.categoryBarSelectedFontColorType().collectAsState()
         val categoryBarSelectedFontCustomColor by uiPreferences.categoryBarSelectedFontCustomColor().collectAsState()
@@ -671,7 +674,7 @@ data object LibraryTab : Tab {
                 }
 
                 val fabBottomPadding = if (bottomBarVisible) {
-                    ((if (floatingBottomBar) (72 - 12) else (80 - 12)) + bottomBarBottomMargin + subTabsBottomMargin).coerceAtLeast(0).dp
+                    ((if (floatingBottomBar) (bottomBarHeight + bottomBarBottomMargin) else (standardBottomBarHeight + standardBottomBarBottomMargin)) + subTabsBottomMargin).coerceAtLeast(0).dp
                 } else {
                     16.dp
                 }
