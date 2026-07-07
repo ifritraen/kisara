@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,9 +27,11 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.hapticfeedback.HapticFeedbackType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +55,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,6 +81,7 @@ import tachiyomi.domain.history.model.HistoryWithRelations
 import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.domain.suggestions.model.Suggestion
 import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
@@ -88,6 +94,7 @@ fun landingTab(
 ): TabContent {
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val state by screenModel.state.collectAsState()
     val scope = rememberCoroutineScope()
     val columnsCount = if (isTabletUi()) 4 else 2
@@ -132,6 +139,10 @@ fun landingTab(
                                 suggestions = state.suggestions,
                                 tagName = state.suggestionsTagName,
                                 onMangaClick = { mangaId -> navigator.push(MangaScreen(mangaId)) },
+                                onMangaLongClick = { manga ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    screenModel.toggleFavorite(manga.id, manga.favorite)
+                                },
                             )
                         }
                     }
@@ -154,34 +165,36 @@ fun landingTab(
                                     key = { "history-${it.id}" },
                                 ) { historyItem ->
                                     val isFirst = state.history.firstOrNull()?.id == historyItem.id
+                                    val onResume: () -> Unit = {
+                                        scope.launch {
+                                            val getNextChapters = Injekt.get<GetNextChapters>()
+                                            val nextChapters = getNextChapters.await(
+                                                historyItem.mangaId,
+                                                historyItem.chapterId,
+                                                onlyUnread = false,
+                                            )
+                                            val chapter = nextChapters.firstOrNull()
+                                            if (chapter != null) {
+                                                val intent = eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
+                                                    context,
+                                                    chapter.mangaId,
+                                                    chapter.id,
+                                                )
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                    }
                                     if (isFirst) {
                                         HistoryWideCard(
                                             history = historyItem,
                                             onClick = { navigator.push(MangaScreen(historyItem.mangaId)) },
-                                            onResume = {
-                                                scope.launch {
-                                                    val getNextChapters = Injekt.get<GetNextChapters>()
-                                                    val nextChapters = getNextChapters.await(
-                                                        historyItem.mangaId,
-                                                        historyItem.chapterId,
-                                                        onlyUnread = false,
-                                                    )
-                                                    val chapter = nextChapters.firstOrNull()
-                                                    if (chapter != null) {
-                                                        val intent = eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
-                                                            context,
-                                                            chapter.mangaId,
-                                                            chapter.id,
-                                                        )
-                                                        context.startActivity(intent)
-                                                    }
-                                                }
-                                            },
+                                            onResume = onResume,
                                         )
                                     } else {
                                         HistoryCompactCard(
                                             history = historyItem,
                                             onClick = { navigator.push(MangaScreen(historyItem.mangaId)) },
+                                            onResume = onResume,
                                         )
                                     }
                                 }
@@ -216,6 +229,10 @@ fun landingTab(
                                         title = updateItem.mangaTitle,
                                         badgeText = updateItem.chapterName,
                                         onClick = { navigator.push(MangaScreen(updateItem.mangaId)) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            screenModel.toggleFavorite(updateItem.mangaId, updateItem.coverData.isMangaFavorite)
+                                        },
                                     )
                                 }
 
@@ -248,6 +265,10 @@ fun landingTab(
                                         title = manga.title,
                                         badgeText = null,
                                         onClick = { navigator.push(MangaScreen(manga.id)) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            screenModel.toggleFavorite(manga.id, manga.favorite)
+                                        },
                                     )
                                 }
                             }
@@ -304,6 +325,10 @@ fun landingTab(
                                             FeedItemCard(
                                                 item = item,
                                                 onClick = { navigator.push(MangaScreen(item.id)) },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    screenModel.toggleFavorite(item.id, item.favorite)
+                                                },
                                             )
                                         }
                                     }
@@ -327,6 +352,7 @@ fun SpotlightCarousel(
     suggestions: List<Suggestion>,
     tagName: String?,
     onMangaClick: (Long) -> Unit,
+    onMangaLongClick: (tachiyomi.domain.manga.model.Manga) -> Unit,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val autoplay by uiPreferences.homeSuggestionsAutoplay().collectAsState()
@@ -392,7 +418,10 @@ fun SpotlightCarousel(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { onMangaClick(manga.id) },
+                    .combinedClickable(
+                        onClick = { onMangaClick(manga.id) },
+                        onLongClick = { onMangaLongClick(manga) },
+                    ),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Blur Background Cover
@@ -598,18 +627,97 @@ fun HistoryWideCard(
 fun HistoryCompactCard(
     history: HistoryWithRelations,
     onClick: () -> Unit,
+    onResume: () -> Unit,
 ) {
-    Box(
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        ),
         modifier = Modifier
-            .width(80.dp)
+            .width(160.dp)
             .height(120.dp)
-            .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() },
     ) {
-        MangaCover.Book(
-            data = history.coverData,
-            modifier = Modifier.fillMaxSize(),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MangaCover.Book(
+                data = history.coverData,
+                modifier = Modifier
+                    .width(50.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(6.dp)),
+            )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(
+                        text = history.title,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp,
+                        ),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (history.chapterNumber > -1) {
+                            "Ch. ${formatChapterNumber(history.chapterNumber)}"
+                        } else {
+                            ""
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 8.sp,
+                            lineHeight = 10.sp,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = history.readAt?.toTimestampString() ?: "",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    IconButton(
+                        onClick = onResume,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Resume",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -620,11 +728,15 @@ fun MangaCoverCard(
     title: String,
     badgeText: String?,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
             .width(100.dp)
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
@@ -636,7 +748,20 @@ fun MangaCoverCard(
             MangaCover.Book(
                 data = coverData,
                 modifier = Modifier.fillMaxSize(),
+                alpha = if (coverData.isMangaFavorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
             )
+
+            if (coverData.isMangaFavorite) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp),
+                ) {
+                    Badge(
+                        imageVector = Icons.Outlined.CollectionsBookmark,
+                    )
+                }
+            }
 
             if (badgeText != null) {
                 Surface(
@@ -644,7 +769,8 @@ fun MangaCoverCard(
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(top = 4.dp),
+                        .padding(top = 4.dp)
+                        .widthIn(max = 80.dp),
                 ) {
                     Text(
                         text = badgeText,
@@ -652,7 +778,10 @@ fun MangaCoverCard(
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        maxLines = 1,
+                        modifier = Modifier
+                            .basicMarquee()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
                     )
                 }
             }
@@ -706,6 +835,7 @@ fun SeeAllEndCard(
 fun FeedItemCard(
     item: CachedFeedManga,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -713,7 +843,10 @@ fun FeedItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             val coverData = remember(item.id, item.sourceId, item.favorite, item.thumbnailUrl, item.coverLastModified) {
