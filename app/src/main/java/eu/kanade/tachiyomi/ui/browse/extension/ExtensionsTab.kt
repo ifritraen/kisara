@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.ExtensionScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
@@ -33,6 +34,9 @@ import eu.kanade.presentation.more.settings.screen.browse.ExtensionReposScreen
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
+import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
+import eu.kanade.tachiyomi.ui.browse.source.browse.GetRemoteManga
+import eu.kanade.tachiyomi.ui.browse.source.feed.SourceFeedScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
@@ -44,6 +48,8 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 @Composable
@@ -184,7 +190,22 @@ fun extensionsTab(
                 },
                 onInstallExtension = extensionsScreenModel::installExtension,
                 onSideloadExtension = extensionsScreenModel::sideloadExtension,
-                onOpenExtension = { navigator.push(ExtensionDetailsScreen(it.pkgName)) },
+                onOpenExtension = { extension ->
+                    val source = extension.sources.firstOrNull()
+                    if (source != null) {
+                        val sourcePreferences = Injekt.get<SourcePreferences>()
+                        val useNewSourceNavigation = sourcePreferences.useNewSourceNavigation().get()
+                        val screen = if (useNewSourceNavigation) {
+                            SourceFeedScreen(source.id)
+                        } else {
+                            BrowseSourceScreen(source.id, GetRemoteManga.QUERY_POPULAR)
+                        }
+                        navigator.push(screen)
+                    } else {
+                        navigator.push(ExtensionDetailsScreen(extension.pkgName))
+                    }
+                },
+                onOpenExtensionDetails = { navigator.push(ExtensionDetailsScreen(it.pkgName)) },
                 onTrustExtension = { extensionsScreenModel.trustExtension(it) },
                 onUninstallExtension = { extensionsScreenModel.uninstallExtension(it) },
                 onUpdateExtension = extensionsScreenModel::updateExtension,

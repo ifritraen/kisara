@@ -108,6 +108,7 @@ fun ExtensionScreen(
     onUpdateExtension: (Extension.Installed) -> Unit,
     onTrustExtension: (Extension.Untrusted) -> Unit,
     onOpenExtension: (Extension.Installed) -> Unit,
+    onOpenExtensionDetails: (Extension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
     onToggleJarSource: (Long) -> Unit = {},
@@ -295,7 +296,7 @@ private fun ExtensionContent(
                         onClickItemSecondaryAction = {
                             when (it) {
                                 is Extension.Available -> onOpenWebView(it)
-                                is Extension.Installed -> onOpenExtension(it)
+                                is Extension.Installed -> onOpenExtensionDetails(it)
                                 else -> {}
                             }
                         },
