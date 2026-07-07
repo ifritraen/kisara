@@ -1,7 +1,11 @@
 package eu.kanade.presentation.library.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +31,7 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,9 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -113,6 +124,28 @@ fun MangaCompactGridItem(
     // KMK <--
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val rawTitle = title ?: manga?.title ?: ""
+    val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
+    val cleanTitle = parsed.cleanTitle
+    val artistAuthorText = remember(parsed) {
+        val parts = mutableListOf<String>()
+        if (parsed.artist != null) parts.add(parsed.artist)
+        if (parsed.author != null) parts.add(parsed.author)
+        if (parts.isNotEmpty()) parts.joinToString(" • ") else null
+    }
+
+    val finalBadgeEnd: @Composable RowScope.() -> Unit = {
+        if (coverBadgeEnd != null) {
+            coverBadgeEnd()
+        } else if (parsed.languageCode != null) {
+            LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode)
+        }
+        if (parsed.isColorized) {
+            ColorizedBadge()
+        }
+    }
+
     GridItemSelectable(
         isSelected = isSelected,
         onClick = onClick,
@@ -153,11 +186,12 @@ fun MangaCompactGridItem(
                 }
             },
             badgesStart = coverBadgeStart,
-            badgesEnd = coverBadgeEnd,
+            badgesEnd = finalBadgeEnd,
             content = {
                 if (title != null) {
                     CoverTextOverlay(
-                        title = title,
+                        title = cleanTitle,
+                        artistAuthorText = artistAuthorText,
                         onClickContinueReading = onClickContinueReading,
                     )
                 } else if (onClickContinueReading != null) {
@@ -170,6 +204,24 @@ fun MangaCompactGridItem(
                             .align(Alignment.BottomEnd),
                     )
                 }
+                if (parsed.isUncensored) {
+                    Box(
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .align(Alignment.BottomEnd)
+                            .then(
+                                if (onClickContinueReading != null) {
+                                    Modifier.padding(bottom = 32.dp)
+                                } else if (title != null) {
+                                    Modifier.padding(bottom = 48.dp)
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    ) {
+                        UncensoredBadge()
+                    }
+                }
             },
         )
     }
@@ -181,18 +233,24 @@ fun MangaCompactGridItem(
 @Composable
 private fun BoxScope.CoverTextOverlay(
     title: String,
+    artistAuthorText: String? = null,
     onClickContinueReading: (() -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp))
+            .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
             .background(
                 Brush.verticalGradient(
-                    0f to Color.Transparent,
-                    1f to Color(0xAA000000),
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.05f),
+                        Color.Black.copy(alpha = 0.35f),
+                        Color.Black.copy(alpha = 0.70f),
+                        Color.Black.copy(alpha = 0.85f),
+                    ),
                 ),
             )
-            .fillMaxHeight(0.33f)
+            .fillMaxHeight(0.45f)
             .fillMaxWidth()
             .align(Alignment.BottomCenter),
     )
@@ -200,20 +258,39 @@ private fun BoxScope.CoverTextOverlay(
         modifier = Modifier.align(Alignment.BottomStart),
         verticalAlignment = Alignment.Bottom,
     ) {
-        GridItemTitle(
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .padding(8.dp),
-            title = title,
-            style = MaterialTheme.typography.titleSmall.copy(
-                color = Color.White,
-                shadow = Shadow(
-                    color = Color.Black,
-                    blurRadius = 4f,
+        ) {
+            if (artistAuthorText != null) {
+                Text(
+                    text = artistAuthorText,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    color = Color.White.copy(alpha = 0.75f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        shadow = Shadow(
+                            color = Color.Black,
+                            blurRadius = 4f,
+                        ),
+                    ),
+                )
+            }
+            GridItemTitle(
+                title = title,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    color = Color.White,
+                    shadow = Shadow(
+                        color = Color.Black,
+                        blurRadius = 4f,
+                    ),
                 ),
-            ),
-            minLines = 1,
-        )
+                minLines = 1,
+            )
+        }
         if (onClickContinueReading != null) {
             ContinueReadingButton(
                 size = ContinueReadingButtonSizeSmall,
@@ -258,6 +335,28 @@ fun MangaComfortableGridItem(
     // KMK <--
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val rawTitle = title
+    val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
+    val cleanTitle = parsed.cleanTitle
+    val artistAuthorText = remember(parsed) {
+        val parts = mutableListOf<String>()
+        if (parsed.artist != null) parts.add(parsed.artist)
+        if (parsed.author != null) parts.add(parsed.author)
+        if (parts.isNotEmpty()) parts.joinToString(" • ") else null
+    }
+
+    val finalBadgeEnd: @Composable RowScope.() -> Unit = {
+        if (coverBadgeEnd != null) {
+            coverBadgeEnd()
+        } else if (parsed.languageCode != null) {
+            LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode)
+        }
+        if (parsed.isColorized) {
+            ColorizedBadge()
+        }
+    }
+
     GridItemSelectable(
         isSelected = isSelected,
         onClick = onClick,
@@ -335,7 +434,7 @@ fun MangaComfortableGridItem(
                 },
                 // KMK <--
                 badgesStart = coverBadgeStart,
-                badgesEnd = coverBadgeEnd,
+                badgesEnd = finalBadgeEnd,
                 content = {
                     if (onClickContinueReading != null) {
                         ContinueReadingButton(
@@ -347,15 +446,41 @@ fun MangaComfortableGridItem(
                                 .align(Alignment.BottomEnd),
                         )
                     }
+                    if (parsed.isUncensored) {
+                        Box(
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .align(Alignment.BottomEnd)
+                                .then(
+                                    if (onClickContinueReading != null) {
+                                        Modifier.padding(bottom = 32.dp)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                        ) {
+                            UncensoredBadge()
+                        }
+                    }
                 },
             )
-            GridItemTitle(
-                modifier = Modifier.padding(4.dp),
-                title = title,
-                style = MaterialTheme.typography.titleSmall,
-                minLines = 2,
-                maxLines = titleMaxLines,
-            )
+            Column(modifier = Modifier.padding(4.dp)) {
+                if (artistAuthorText != null) {
+                    Text(
+                        text = artistAuthorText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                GridItemTitle(
+                    title = cleanTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    minLines = 2,
+                    maxLines = titleMaxLines,
+                )
+            }
         }
     }
 }
@@ -433,15 +558,26 @@ private fun GridItemSelectable(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
+
     Box(
         modifier = modifier
-            .clip(MaterialTheme.shapes.small)
+            .graphicsLayer(scaleX = scale, scaleY = scale)
+            .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
                 onClick = onClick,
                 onLongClick = onLongClick,
                 onDoubleClick = onDoubleClick,
             )
-            .selectedOutline(isSelected = isSelected, color = MaterialTheme.colorScheme.secondary)
+            .selectedOutline(
+                isSelected = isSelected,
+                color = MaterialTheme.colorScheme.secondary,
+                cornerRadius = 16.dp,
+            )
             .padding(4.dp),
     ) {
         val contentColor = if (isSelected) {
@@ -461,7 +597,20 @@ private fun GridItemSelectable(
 private fun Modifier.selectedOutline(
     isSelected: Boolean,
     color: Color,
-) = drawBehind { if (isSelected) drawRect(color = color) }
+    cornerRadius: Dp = 16.dp,
+) = drawBehind {
+    if (isSelected) {
+        val strokeWidth = 2.dp.toPx()
+        val radius = cornerRadius.toPx() - (strokeWidth / 2f)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f),
+            size = Size(size.width - strokeWidth, size.height - strokeWidth),
+            cornerRadius = CornerRadius(radius, radius),
+            style = Stroke(width = strokeWidth),
+        )
+    }
+}
 
 /**
  * Layout of list item.
@@ -487,10 +636,31 @@ fun MangaListItem(
     // KMK <--
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val rawTitle = title
+    val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
+    val cleanTitle = parsed.cleanTitle
+    val artistAuthorText = remember(parsed) {
+        val parts = mutableListOf<String>()
+        if (parsed.artist != null) parts.add(parsed.artist)
+        if (parsed.author != null) parts.add(parsed.author)
+        if (parts.isNotEmpty()) parts.joinToString(" • ") else null
+    }
+
+    val finalBadge: @Composable RowScope.() -> Unit = {
+        badge()
+        if (parsed.isColorized) {
+            ColorizedBadge()
+        }
+        if (parsed.isUncensored) {
+            UncensoredBadge()
+        }
+    }
+
     Row(
         modifier = Modifier
             .selectedBackground(isSelected)
-            .height(56.dp)
+            .heightIn(min = 56.dp)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
@@ -509,7 +679,7 @@ fun MangaListItem(
         if (DebugToggles.HIDE_COVER_IMAGE_ONLY_SHOW_COLOR.enabled) {
             MangaCoverHide.Square(
                 modifier = Modifier
-                    .fillMaxHeight(),
+                    .height(40.dp),
                 bgColor = bgColor ?: MaterialTheme.colorScheme.surface.takeIf { isSelected },
                 tint = onBgColor,
             )
@@ -520,7 +690,7 @@ fun MangaListItem(
                     // KMK -->
                     // .alpha(coverAlpha)
                     // KMK <--
-                    .fillMaxHeight(),
+                    .height(40.dp),
                 data = coverData,
                 // KMK -->
                 alpha = coverAlpha,
@@ -530,16 +700,28 @@ fun MangaListItem(
                 // KMK <--
             )
         }
-        Text(
-            text = title,
+        Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .weight(1f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        BadgeGroup(content = badge)
+        ) {
+            if (artistAuthorText != null) {
+                Text(
+                    text = artistAuthorText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = cleanTitle,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        BadgeGroup(content = finalBadge)
         if (onClickContinueReading != null) {
             ContinueReadingButton(
                 size = ContinueReadingButtonSizeSmall,

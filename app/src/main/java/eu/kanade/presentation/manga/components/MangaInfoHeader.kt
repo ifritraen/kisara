@@ -694,6 +694,11 @@ private fun ColumnScope.MangaContentInfo(
     // KMK <--
 ) {
     val context = LocalContext.current
+    val parsed = remember(title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(title) }
+    val cleanTitle = parsed.cleanTitle
+    val finalAuthor = author.takeIf { !it.isNullOrBlank() } ?: parsed.author
+    val finalArtist = artist.takeIf { !it.isNullOrBlank() } ?: parsed.artist
+
     // KMK -->
     var showMenu by remember { mutableStateOf(false) }
     var tagSelected by remember { mutableStateOf("") }
@@ -728,18 +733,18 @@ private fun ColumnScope.MangaContentInfo(
     }
     // KMK <--
     Text(
-        text = title.ifBlank { stringResource(MR.strings.unknown_title) },
+        text = cleanTitle.ifBlank { stringResource(MR.strings.unknown_title) },
         style = MaterialTheme.typography.titleLarge,
         modifier = Modifier.clickableNoIndication(
             onLongClick = {
-                if (title.isNotBlank()) {
+                if (cleanTitle.isNotBlank()) {
                     // KMK -->
-                    tagSelected = title
+                    tagSelected = cleanTitle
                     showMenu = true
                     // KMK <--
                 }
             },
-            onClick = { if (title.isNotBlank()) doSearch(title, true) },
+            onClick = { if (cleanTitle.isNotBlank()) doSearch(cleanTitle, true) },
         ),
         textAlign = textAlign,
     )
@@ -757,26 +762,26 @@ private fun ColumnScope.MangaContentInfo(
             modifier = Modifier.size(16.dp),
         )
         Text(
-            text = author?.takeIf { it.isNotBlank() }
+            text = finalAuthor?.takeIf { it.isNotBlank() }
                 ?: stringResource(MR.strings.unknown_author),
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier
                 .clickableNoIndication(
                     onLongClick = {
-                        if (!author.isNullOrBlank()) {
+                        if (!finalAuthor.isNullOrBlank()) {
                             // KMK -->
-                            tagSelected = author
+                            tagSelected = finalAuthor
                             showMenu = true
                             // KMK <--
                         }
                     },
-                    onClick = { if (!author.isNullOrBlank()) doSearch(author, true) },
+                    onClick = { if (!finalAuthor.isNullOrBlank()) doSearch(finalAuthor, true) },
                 ),
             textAlign = textAlign,
         )
     }
 
-    if (!artist.isNullOrBlank() && author != artist) {
+    if (!finalArtist.isNullOrBlank() && finalAuthor != finalArtist) {
         Row(
             modifier = Modifier.secondaryItemAlpha(),
             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
@@ -788,17 +793,17 @@ private fun ColumnScope.MangaContentInfo(
                 modifier = Modifier.size(16.dp),
             )
             Text(
-                text = artist,
+                text = finalArtist,
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier
                     .clickableNoIndication(
                         onLongClick = {
                             // KMK -->
-                            tagSelected = artist
+                            tagSelected = finalArtist
                             showMenu = true
                             // KMK <--
                         },
-                        onClick = { doSearch(artist, true) },
+                        onClick = { doSearch(finalArtist, true) },
                     ),
                 textAlign = textAlign,
             )

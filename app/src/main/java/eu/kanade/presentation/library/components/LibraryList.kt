@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.library.LibraryItem
@@ -40,9 +41,17 @@ internal fun LibraryList(
 
         items(
             items = items,
+            key = {
+                try {
+                    it.libraryManga.manga.id
+                } catch (e: Throwable) {
+                    it.hashCode()
+                }
+            },
             contentType = { "library_list_item" },
         ) { libraryItem ->
             val manga = libraryItem.libraryManga.manga
+            val parsed = remember(manga.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga.title) }
             MangaListItem(
                 isSelected = manga.id in selection,
                 title = manga.title,
@@ -58,7 +67,7 @@ internal fun LibraryList(
                     UnreadBadge(count = libraryItem.unreadCount)
                     LanguageBadge(
                         isLocal = libraryItem.isLocal,
-                        sourceLanguage = libraryItem.sourceLanguage,
+                        sourceLanguage = parsed.languageCode ?: libraryItem.sourceLanguage,
                         // KMK -->
                         useLangIcon = libraryItem.useLangIcon,
                         // KMK <--
@@ -74,6 +83,7 @@ internal fun LibraryList(
                 } else {
                     null
                 },
+                manga = manga,
             )
         }
     }
