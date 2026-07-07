@@ -29,10 +29,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -116,6 +118,9 @@ import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
+import eu.kanade.translation.model.PageTranslation
+import eu.kanade.translation.model.TranslationBlock
+import eu.kanade.translation.model.deepCopy
 import exh.source.isEhBasedSource
 import exh.util.defaultReaderType
 import exh.util.mangaType
@@ -341,6 +346,20 @@ class ReaderActivity : BaseActivity() {
         ) {
             val context = LocalContext.current
             // KMK <--
+            val editState = editingPageTranslationState
+            if (editState != null) {
+                eu.kanade.translation.presentation.TranslationEditView(
+                    editState = editState,
+                    onSave = { finalTranslation ->
+                        exitTranslationEditMode(save = true, updatedTranslation = finalTranslation)
+                    },
+                    onCancel = {
+                        exitTranslationEditMode(save = false)
+                    },
+                )
+                return@TachiyomiTheme
+            }
+
             val state by viewModel.state.collectAsState()
             val showPageNumber by readerPreferences.showPageNumber().collectAsState()
             val settingsScreenModel = remember {
@@ -376,13 +395,16 @@ class ReaderActivity : BaseActivity() {
 
                     if (isDraggingForSpeed) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding()
+                                .padding(top = 96.dp),
+                            contentAlignment = Alignment.TopCenter,
                         ) {
                             Box(
                                 modifier = Modifier
                                     .background(
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                         shape = CircleShape,
                                     )
                                     .padding(horizontal = 24.dp, vertical = 12.dp),
@@ -400,6 +422,29 @@ class ReaderActivity : BaseActivity() {
                     }
 
                     AppBars(state = state)
+
+                    if (state.dialog is ReaderViewModel.Dialog.Loading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(ComposeColor.Black.copy(alpha = 0.7f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = stringResource(MR.strings.loading),
+                                    color = ComposeColor.White,
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -418,23 +463,6 @@ class ReaderActivity : BaseActivity() {
             val onDismissRequest = viewModel::closeDialog
             when (state.dialog) {
                 is ReaderViewModel.Dialog.Loading -> {
-                    AlertDialog(
-                        onDismissRequest = {},
-                        confirmButton = {},
-                        text = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                CircularProgressIndicator(
-                                    // KMK -->
-                                    color = MaterialTheme.colorScheme.primary,
-                                    // KMK <--
-                                )
-                                Text(stringResource(MR.strings.loading))
-                            }
-                        },
-                    )
                 }
 
                 is ReaderViewModel.Dialog.Settings -> {
@@ -735,6 +763,7 @@ class ReaderActivity : BaseActivity() {
                         }
                         if (isDraggingForSpeed) {
                             isDraggingForSpeed = false
+                            autoScrollTrigger.tryEmit(Unit)
                             return true
                         }
                     }
@@ -1313,8 +1342,21 @@ class ReaderActivity : BaseActivity() {
      * Called from the viewer whenever a [page] is long clicked. A bottom sheet with a list of
      * actions to perform is shown.
      */
-    fun onPageLongTap(page: ReaderPage, /* SY --> */ extraPage: ReaderPage? = null /* SY <-- */) {
+    fun onPageLongTap(page: ReaderPage, /* SY --> */ extraPage: ReaderPage? = null, event: android.view.MotionEvent? = null /* SY <-- */) {
         if (tempDisabledTranslations) return
+        val height = binding.root.height
+        val isTopTap = event != null && height > 0 && event.y < height * 0.20f
+        val targetPage = if (page.translation != null) {
+            page
+        } else if (extraPage?.translation != null) {
+            extraPage
+        } else {
+            null
+        }
+        if (isTopTap && targetPage != null) {
+            startTranslationEditMode(targetPage)
+            return
+        }
         viewModel.openPageDialog(page, /* SY --> */ extraPage /* SY <-- */)
     }
 
@@ -1694,4 +1736,53 @@ class ReaderActivity : BaseActivity() {
         }
     }
     // KMK <--
+
+    // KMK -->
+    var editingPageTranslationState by mutableStateOf<TranslationEditState?>(null)
+        private set
+
+    fun startTranslationEditMode(page: ReaderPage) {
+        val trans = page.translation ?: return
+        editingPageTranslationState = TranslationEditState(page, trans.deepCopy())
+        hideMenu()
+    }
+
+    fun exitTranslationEditMode(save: Boolean, updatedTranslation: PageTranslation? = null) {
+        val state = editingPageTranslationState ?: return
+        if (save && updatedTranslation != null) {
+            val chapter = state.page.chapter.chapter
+            val manga = viewModel.manga ?: return
+            val translationKey = state.page.translationKey ?: return
+
+            val sourceManager: tachiyomi.domain.source.service.SourceManager = uy.kohesive.injekt.Injekt.get()
+            val source = manga.source.let { sourceManager.getOrStub(it) }
+
+            val translationManager: eu.kanade.translation.TranslationManager = uy.kohesive.injekt.Injekt.get()
+            translationManager.saveChapterTranslation(
+                chapterName = chapter.name,
+                scanlator = chapter.scanlator,
+                mangaTitle = manga.title,
+                source = source,
+                key = translationKey,
+                pageTranslation = updatedTranslation,
+            )
+
+            state.page.translation = updatedTranslation
+
+            viewModel.state.value.viewer?.let { viewer ->
+                if (viewer is eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer) {
+                    viewer.refreshAdapter()
+                } else if (viewer is eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer) {
+                    viewer.refreshAdapter()
+                }
+            }
+        }
+        editingPageTranslationState = null
+    }
+    // KMK <--
 }
+
+data class TranslationEditState(
+    val page: ReaderPage,
+    val translation: PageTranslation,
+)

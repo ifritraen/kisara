@@ -984,12 +984,12 @@ private fun MangaScreenSmallImpl(
                                     // Resume Button
                                     IconButton(
                                         onClick = onContinueReading,
-                                        modifier = Modifier.size(36.dp),
+                                        modifier = Modifier.size(48.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.PlayArrow,
                                             contentDescription = "Resume",
-                                            modifier = Modifier.size(20.dp),
+                                            modifier = Modifier.size(28.dp),
                                         )
                                     }
                                 }
