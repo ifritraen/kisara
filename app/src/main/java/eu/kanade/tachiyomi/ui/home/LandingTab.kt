@@ -1114,20 +1114,29 @@ fun FeedItemCard(
                         }
                     }
                 } else {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                        modifier = Modifier.align(Alignment.Start),
-                    ) {
-                        Text(
-                            text = item.sourceName,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 8.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    val sourceManager = remember { Injekt.get<SourceManager>() }
+                    val source = remember(item.sourceId) { sourceManager.get(item.sourceId) }
+                    val domainSource = remember(source, item.sourceId) {
+                        if (source != null) {
+                            tachiyomi.domain.source.model.Source(
+                                id = source.id,
+                                lang = source.lang,
+                                name = source.name,
+                                supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
+                                isStub = false,
+                            )
+                        } else {
+                            tachiyomi.domain.source.model.Source(
+                                id = item.sourceId,
+                                lang = "",
+                                name = item.sourceName,
+                                supportsLatest = false,
+                                isStub = true,
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.align(Alignment.Start)) {
+                        SourceIconBadge(source = domainSource)
                     }
                 }
 
