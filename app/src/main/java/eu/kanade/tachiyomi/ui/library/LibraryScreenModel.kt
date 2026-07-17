@@ -780,12 +780,20 @@ class LibraryScreenModel(
     }
 
     private fun getFavoritesFlow(): Flow<List<LibraryItem>> {
+        val sourcePreferences = Injekt.get<eu.kanade.domain.source.service.SourcePreferences>()
         return combine(
             getLibraryManga.subscribe(),
             getLibraryItemPreferencesFlow(),
             downloadCache.changes,
-        ) { libraryManga, preferences, _ ->
-            libraryManga.map { manga ->
+            sourcePreferences.blockedTags().changes(),
+        ) { libraryManga, preferences, _, blockedTags ->
+            val blockedSet = blockedTags.map { it.lowercase().trim() }.toSet()
+            val filteredManga = libraryManga.filter { manga ->
+                manga.manga.genre.orEmpty().none { genre ->
+                    blockedSet.contains(genre.lowercase().trim())
+                }
+            }
+            filteredManga.map { manga ->
                 // Display mode based on user preference: take it from global library setting or category
                 // KMK -->
                 val source = sourceManager.getOrStub(manga.manga.source)

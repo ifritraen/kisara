@@ -18,4 +18,8 @@ data class Backup(
     // Global Popular/Latest feeds
     @ProtoNumber(610) var backupFeeds: List<BackupFeed> = emptyList(),
     // KMK <--
+    // Kisara specific values
+    @ProtoNumber(620) var backupJarExtensions: List<BackupJarExtension> = emptyList(),
+    @ProtoNumber(630) var backupWireguardConfigs: List<BackupWireguardConfig> = emptyList(),
+    @ProtoNumber(631) var backupWireguardPrefs: BackupWireguardPreferences? = null,
 )

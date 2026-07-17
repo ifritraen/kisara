@@ -167,7 +167,7 @@ class WebtoonViewer(
                     val position = recycler.getChildAdapterPosition(child)
                     val item = adapter.items.getOrNull(position)
                     if (item is ReaderPage) {
-                        activity.onPageLongTap(item)
+                        activity.onPageLongTap(item, event = event)
                         return@f true
                     }
                 }
@@ -453,7 +453,7 @@ class WebtoonViewer(
      * Notifies adapter of changes around the current page to trigger a relayout in the recycler.
      * Used when an image configuration is changed.
      */
-    private fun refreshAdapter() {
+    fun refreshAdapter() {
         val position = layoutManager.findLastEndVisibleItemPosition()
         adapter.refresh()
         adapter.notifyItemRangeChanged(

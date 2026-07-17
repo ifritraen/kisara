@@ -112,6 +112,7 @@ data object HomeTab : Tab {
         val navigator = LocalNavigator.currentOrThrow
         val context = androidx.compose.ui.platform.LocalContext.current
 
+        val landingScreenModel = rememberScreenModel { LandingScreenModel() }
         val feedScreenModel = rememberScreenModel { FeedScreenModel() }
         val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
 
@@ -125,6 +126,7 @@ data object HomeTab : Tab {
         val historyState by historyScreenModel.state.collectAsState()
 
         val tabs = persistentListOf(
+            landingTab(landingScreenModel),
             feedTab(feedScreenModel, bulkFavoriteScreenModel),
             suggestionsTab(suggestionsScreenModel),
             updatesTab(updatesScreenModel, updatesSettingsScreenModel),
@@ -237,9 +239,9 @@ data object HomeTab : Tab {
                 titleRes = KMR.strings.label_home,
                 tabs = tabs,
                 state = state,
-                searchQuery = if (state.currentPage == 2) historyState.searchQuery else null,
+                searchQuery = if (state.currentPage == 4) historyState.searchQuery else null,
                 onChangeSearchQuery = { query ->
-                    if (state.currentPage == 2) {
+                    if (state.currentPage == 4) {
                         historyScreenModel.updateSearchQuery(query)
                     }
                 },

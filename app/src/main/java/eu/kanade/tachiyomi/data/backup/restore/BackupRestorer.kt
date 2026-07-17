@@ -7,10 +7,14 @@ import eu.kanade.tachiyomi.data.backup.BackupNotifier
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos
 import eu.kanade.tachiyomi.data.backup.models.BackupFeed
+import eu.kanade.tachiyomi.data.backup.models.BackupJarExtension
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSavedSearch
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+import eu.kanade.tachiyomi.data.backup.models.BackupWireguardAssociation
+import eu.kanade.tachiyomi.data.backup.models.BackupWireguardConfig
+import eu.kanade.tachiyomi.data.backup.models.BackupWireguardPreferences
 import eu.kanade.tachiyomi.data.backup.restore.restorers.CategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.FeedRestorer
@@ -31,6 +35,8 @@ import kotlinx.coroutines.withContext
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Collections
@@ -120,6 +126,12 @@ class BackupRestorer(
         if (options.sourceSettings) {
             restoreAmount += 1
         }
+        if (options.sideloadedExtensions && backup.backupJarExtensions.isNotEmpty()) {
+            restoreAmount += 1
+        }
+        if (options.vpnSettings && (backup.backupWireguardConfigs.isNotEmpty() || backup.backupWireguardPrefs != null)) {
+            restoreAmount += 1
+        }
 
         coroutineScope {
             if (options.categories) {
@@ -146,6 +158,12 @@ class BackupRestorer(
             }
             if (options.extensionRepoSettings) {
                 restoreExtensionRepos(backup.backupExtensionRepo)
+            }
+            if (options.sideloadedExtensions && backup.backupJarExtensions.isNotEmpty()) {
+                restoreJarExtensions(backup.backupJarExtensions)
+            }
+            if (options.vpnSettings && (backup.backupWireguardConfigs.isNotEmpty() || backup.backupWireguardPrefs != null)) {
+                restoreWireguard(backup.backupWireguardConfigs, backup.backupWireguardPrefs)
             }
 
             // TODO: optionally trigger online library + tracker update
@@ -306,6 +324,83 @@ class BackupRestorer(
                     // KMK <--
                 }
             }
+    }
+
+    private suspend fun restoreJarExtensions(backupJars: List<BackupJarExtension>) {
+        try {
+            val extensionDir = File(context.filesDir, "jar_extensions")
+            if (!extensionDir.exists()) {
+                extensionDir.mkdirs()
+            }
+            val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
+            val repoMap = uiPreferences.jarExtensionRepoMap().get().toMutableSet()
+
+            for (backupJar in backupJars) {
+                try {
+                    val file = File(extensionDir, backupJar.filename)
+                    file.writeBytes(backupJar.data)
+                    backupJar.repoName?.let { repo ->
+                        repoMap.removeAll { it.startsWith("${backupJar.filename}:") }
+                        repoMap.add("${backupJar.filename}:$repo")
+                    }
+                } catch (e: Exception) {
+                    errors.add(Date() to "Failed to restore jar ${backupJar.filename}: ${e.message}")
+                }
+            }
+            uiPreferences.jarExtensionRepoMap().set(repoMap)
+            eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(context)
+
+            restoreProgress.incrementAndGet()
+            with(notifier) {
+                showRestoreProgress(
+                    context.stringResource(KMR.strings.sideloaded_extensions),
+                    restoreProgress.get(),
+                    restoreAmount,
+                    isSync,
+                ).show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        } catch (e: Exception) {
+            errors.add(Date() to "Failed to restore sideloaded extensions: ${e.message}")
+        }
+    }
+
+    private suspend fun restoreWireguard(backupConfigs: List<BackupWireguardConfig>, backupPrefs: BackupWireguardPreferences?) {
+        try {
+            val vpnDir = File(context.filesDir, "wireguard")
+            if (!vpnDir.exists()) {
+                vpnDir.mkdirs()
+            }
+            for (config in backupConfigs) {
+                try {
+                    val file = File(vpnDir, config.filename)
+                    file.writeText(config.data)
+                } catch (e: Exception) {
+                    errors.add(Date() to "Failed to restore Wireguard profile ${config.filename}: ${e.message}")
+                }
+            }
+
+            if (backupPrefs != null) {
+                val vpnPrefs = context.getSharedPreferences("wireguard_prefs", Context.MODE_PRIVATE)
+                val editor = vpnPrefs.edit()
+                backupPrefs.defaultProfile?.let { editor.putString("default_profile", it) }
+                for (assoc in backupPrefs.sourceAssociations) {
+                    editor.putString(assoc.key, assoc.value)
+                }
+                editor.apply()
+            }
+
+            restoreProgress.incrementAndGet()
+            with(notifier) {
+                showRestoreProgress(
+                    context.stringResource(KMR.strings.vpn_settings),
+                    restoreProgress.get(),
+                    restoreAmount,
+                    isSync,
+                ).show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        } catch (e: Exception) {
+            errors.add(Date() to "Failed to restore Wireguard settings: ${e.message}")
+        }
     }
 
     private fun writeErrorLog(): File {

@@ -186,6 +186,7 @@ private fun HistoryScreenContent(
                     ListGroupHeader(
                         modifier = Modifier.animateItemFastScroll(),
                         text = relativeDateText(item.date),
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 is HistoryUiModel.Item -> {

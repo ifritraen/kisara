@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ElevatedButton
@@ -31,6 +32,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -40,6 +42,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import tachiyomi.presentation.core.util.animateElevation
 import androidx.compose.material3.ButtonDefaults as M3ButtonDefaults
+
+enum class DialogButtonRole {
+    None,
+    Confirm,
+    Dismiss,
+}
+
+val LocalDialogButtonRole = staticCompositionLocalOf { DialogButtonRole.None }
 
 /**
  * TextButton with additional onLongClick functionality.
@@ -64,19 +74,40 @@ fun TextButton(
     ),
     contentPadding: PaddingValues = M3ButtonDefaults.TextButtonContentPadding,
     content: @Composable RowScope.() -> Unit,
-) = Button(
-    onClick = onClick,
-    modifier = modifier,
-    onLongClick = onLongClick,
-    enabled = enabled,
-    interactionSource = interactionSource,
-    elevation = elevation,
-    shape = shape,
-    border = border,
-    colors = colors,
-    contentPadding = contentPadding,
-    content = content,
-)
+) {
+    val buttonRole = LocalDialogButtonRole.current
+    val finalColors = when (buttonRole) {
+        DialogButtonRole.Confirm -> ButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+            contentColor = MaterialTheme.colorScheme.primary,
+            disabledContainerColor = Color.Transparent,
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA),
+        )
+        DialogButtonRole.Dismiss -> ButtonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            disabledContainerColor = Color.Transparent,
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA),
+        )
+        else -> colors
+    }
+    val finalShape = if (buttonRole != DialogButtonRole.None) RoundedCornerShape(20.dp) else shape
+    val finalPadding = if (buttonRole != DialogButtonRole.None) PaddingValues(horizontal = 16.dp, vertical = 8.dp) else contentPadding
+
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        onLongClick = onLongClick,
+        enabled = enabled,
+        interactionSource = interactionSource,
+        elevation = elevation,
+        shape = finalShape,
+        border = border,
+        colors = finalColors,
+        contentPadding = finalPadding,
+        content = content,
+    )
+}
 
 /**
  * Button with additional onLongClick functionality.

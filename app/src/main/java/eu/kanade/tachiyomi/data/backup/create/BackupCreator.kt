@@ -16,11 +16,15 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos
 import eu.kanade.tachiyomi.data.backup.models.BackupFeed
+import eu.kanade.tachiyomi.data.backup.models.BackupJarExtension
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSavedSearch
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+import eu.kanade.tachiyomi.data.backup.models.BackupWireguardAssociation
+import eu.kanade.tachiyomi.data.backup.models.BackupWireguardConfig
+import eu.kanade.tachiyomi.data.backup.models.BackupWireguardPreferences
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
 import okio.buffer
@@ -36,6 +40,7 @@ import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -110,6 +115,9 @@ class BackupCreator(
 
                 // KMK -->
                 backupFeeds = backupFeeds(options),
+                backupJarExtensions = backupJarExtensions(options),
+                backupWireguardConfigs = backupWireguardConfigs(options),
+                backupWireguardPrefs = backupWireguardPrefs(options),
                 // KMK <--
             )
 
@@ -193,6 +201,56 @@ class BackupCreator(
         if (!options.savedSearchesFeeds) return emptyList()
 
         return feedBackupCreator()
+    }
+
+    private fun backupJarExtensions(options: BackupOptions): List<BackupJarExtension> {
+        if (!options.sideloadedExtensions) return emptyList()
+        val extensionDir = File(context.filesDir, "jar_extensions")
+        if (!extensionDir.exists() || !extensionDir.isDirectory) return emptyList()
+
+        val list = mutableListOf<BackupJarExtension>()
+        val files = extensionDir.listFiles { file -> file.extension == "jar" }.orEmpty()
+        for (file in files) {
+            try {
+                val data = file.readBytes()
+                val repoName = eu.kanade.tachiyomi.extension.JarExtensionManager.getRepoNameForJar(context, file.name)
+                list.add(BackupJarExtension(filename = file.name, data = data, repoName = repoName))
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to backup jar: ${file.name}" }
+            }
+        }
+        return list
+    }
+
+    private fun backupWireguardConfigs(options: BackupOptions): List<BackupWireguardConfig> {
+        if (!options.vpnSettings) return emptyList()
+        val vpnDir = File(context.filesDir, "wireguard")
+        if (!vpnDir.exists() || !vpnDir.isDirectory) return emptyList()
+
+        val list = mutableListOf<BackupWireguardConfig>()
+        val files = vpnDir.listFiles { file -> file.extension == "conf" }.orEmpty()
+        for (file in files) {
+            try {
+                val content = file.readText()
+                list.add(BackupWireguardConfig(filename = file.name, data = content))
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to backup Wireguard config: ${file.name}" }
+            }
+        }
+        return list
+    }
+
+    private fun backupWireguardPrefs(options: BackupOptions): BackupWireguardPreferences? {
+        if (!options.vpnSettings) return null
+        val vpnPrefs = context.getSharedPreferences("wireguard_prefs", Context.MODE_PRIVATE)
+        val all = vpnPrefs.all
+        val defaultProfile = all["default_profile"] as? String
+        val associations = all.filterKeys { it.startsWith("source_") }
+            .mapNotNull { (key, value) ->
+                val strVal = value as? String ?: return@mapNotNull null
+                BackupWireguardAssociation(key = key, value = strVal)
+            }
+        return BackupWireguardPreferences(defaultProfile = defaultProfile, sourceAssociations = associations)
     }
     // KMK <--
 

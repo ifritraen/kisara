@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -31,12 +33,14 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -74,6 +78,7 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.selectedBackground
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -138,11 +143,23 @@ fun MangaCompactGridItem(
     val finalBadgeEnd: @Composable RowScope.() -> Unit = {
         if (coverBadgeEnd != null) {
             coverBadgeEnd()
-        } else if (parsed.languageCode != null) {
-            LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode)
+        } else {
+            val lang = parsed.languageCode ?: eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, rawTitle)
+            if (lang != null) {
+                LanguageBadge(isLocal = false, sourceLanguage = lang)
+            }
         }
-        if (parsed.isColorized) {
+        val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
+        if (hasColor) {
             ColorizedBadge()
+        }
+        val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
+        if (hasUncensored) {
+            tachiyomi.presentation.core.components.Badge(
+                text = "UNCENSORED",
+                color = MaterialTheme.colorScheme.tertiary,
+                textColor = MaterialTheme.colorScheme.onTertiary,
+            )
         }
     }
 
@@ -339,6 +356,10 @@ fun MangaComfortableGridItem(
     val rawTitle = title
     val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
     val cleanTitle = parsed.cleanTitle
+    val isNsfw = remember(manga, cleanTitle) { eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(manga, cleanTitle) }
+    val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+    val blurNsfwCovers by uiPreferences.kisaraBlurNsfwCovers().collectAsState()
+    val shouldBlur = isNsfw && blurNsfwCovers
     val artistAuthorText = remember(parsed) {
         val parts = mutableListOf<String>()
         if (parsed.artist != null) parts.add(parsed.artist)
@@ -349,11 +370,23 @@ fun MangaComfortableGridItem(
     val finalBadgeEnd: @Composable RowScope.() -> Unit = {
         if (coverBadgeEnd != null) {
             coverBadgeEnd()
-        } else if (parsed.languageCode != null) {
-            LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode)
+        } else {
+            val lang = parsed.languageCode ?: eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, rawTitle)
+            if (lang != null) {
+                LanguageBadge(isLocal = false, sourceLanguage = lang)
+            }
         }
-        if (parsed.isColorized) {
+        val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
+        if (hasColor) {
             ColorizedBadge()
+        }
+        val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
+        if (hasUncensored) {
+            tachiyomi.presentation.core.components.Badge(
+                text = "UNCENSORED",
+                color = MaterialTheme.colorScheme.tertiary,
+                textColor = MaterialTheme.colorScheme.onTertiary,
+            )
         }
     }
 
@@ -387,7 +420,8 @@ fun MangaComfortableGridItem(
                                     // KMK -->
                                     // .alpha(if (isSelected) GridSelectedCoverAlpha else coverAlpha)
                                     // KMK <--
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .then(if (shouldBlur) Modifier.blur(16.dp) else Modifier),
                                 data = coverData,
                                 // KMK -->
                                 alpha = if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha,
@@ -406,7 +440,8 @@ fun MangaComfortableGridItem(
                                     // KMK -->
                                     // .alpha(if (isSelected) GridSelectedCoverAlpha else coverAlpha)
                                     // KMK <--
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .then(if (shouldBlur) Modifier.blur(16.dp) else Modifier),
                                 data = coverData,
                                 // KMK -->
                                 alpha = if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha,
@@ -436,6 +471,21 @@ fun MangaComfortableGridItem(
                 badgesStart = coverBadgeStart,
                 badgesEnd = finalBadgeEnd,
                 content = {
+                    if (shouldBlur) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.VisibilityOff,
+                                contentDescription = "NSFW Content hidden",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
                     if (onClickContinueReading != null) {
                         ContinueReadingButton(
                             size = ContinueReadingButtonSizeLarge,
@@ -446,7 +496,7 @@ fun MangaComfortableGridItem(
                                 .align(Alignment.BottomEnd),
                         )
                     }
-                    if (parsed.isUncensored) {
+                    if (isNsfw) {
                         Box(
                             modifier = Modifier
                                 .padding(4.dp)
@@ -640,6 +690,10 @@ fun MangaListItem(
     val rawTitle = title
     val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
     val cleanTitle = parsed.cleanTitle
+    val isNsfw = remember(manga, cleanTitle) { eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(manga, cleanTitle) }
+    val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+    val blurNsfwCovers by uiPreferences.kisaraBlurNsfwCovers().collectAsState()
+    val shouldBlur = isNsfw && blurNsfwCovers
     val artistAuthorText = remember(parsed) {
         val parts = mutableListOf<String>()
         if (parsed.artist != null) parts.add(parsed.artist)
@@ -652,7 +706,7 @@ fun MangaListItem(
         if (parsed.isColorized) {
             ColorizedBadge()
         }
-        if (parsed.isUncensored) {
+        if (isNsfw) {
             UncensoredBadge()
         }
     }
@@ -685,20 +739,41 @@ fun MangaListItem(
             )
         } else {
             // KMK <--
-            MangaCover.Square(
-                modifier = Modifier
+            Box(
+                modifier = Modifier.height(40.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                MangaCover.Square(
+                    modifier = Modifier
+                        // KMK -->
+                        // .alpha(coverAlpha)
+                        // KMK <--
+                        .height(40.dp)
+                        .then(if (shouldBlur) Modifier.blur(8.dp) else Modifier),
+                    data = coverData,
                     // KMK -->
-                    // .alpha(coverAlpha)
+                    alpha = coverAlpha,
+                    bgColor = bgColor ?: MaterialTheme.colorScheme.surface.takeIf { isSelected },
+                    tint = onBgColor,
+                    size = MangaCover.Size.Big,
                     // KMK <--
-                    .height(40.dp),
-                data = coverData,
-                // KMK -->
-                alpha = coverAlpha,
-                bgColor = bgColor ?: MaterialTheme.colorScheme.surface.takeIf { isSelected },
-                tint = onBgColor,
-                size = MangaCover.Size.Big,
-                // KMK <--
-            )
+                )
+                if (shouldBlur) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.VisibilityOff,
+                            contentDescription = "NSFW Content hidden",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
         }
         Column(
             modifier = Modifier

@@ -245,6 +245,7 @@ open class BrowseSourceScreenModel(
     val mangaPagerFlowFlow = state.map { it.listing }
         .distinctUntilChanged()
         .map { listing ->
+            val blockedSet = sourcePreferences.blockedTags().get().map { it.lowercase().trim() }.toSet()
             Pager(PagingConfig(pageSize = 25)) {
                 // SY -->
                 createSourcePagingSource(listing.query ?: "", listing.filters)
@@ -258,7 +259,12 @@ open class BrowseSourceScreenModel(
                         // SY <--
                         .stateIn(ioCoroutineScope)
                 }
-                    .filter { !hideInLibraryItems || !it.value.first.favorite }
+                    .filter {
+                        (!hideInLibraryItems || !it.value.first.favorite) &&
+                            it.value.first.genre.orEmpty().none { genre ->
+                                blockedSet.contains(genre.lowercase().trim())
+                            }
+                    }
             }
                 .cachedIn(ioCoroutineScope)
         }

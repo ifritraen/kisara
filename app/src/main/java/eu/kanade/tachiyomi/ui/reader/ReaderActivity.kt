@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -89,8 +90,12 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.connections.discord.DiscordRPCService
 import eu.kanade.tachiyomi.data.connections.discord.ReaderData
+import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker
+import eu.kanade.tachiyomi.data.sync.SyncDataJob
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -153,6 +158,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.manga.model.MangaCover
 import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.domain.suggestions.service.SuggestionsPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
@@ -223,6 +229,8 @@ class ReaderActivity : BaseActivity() {
     var isScrollingThroughPages = false
         private set
 
+    private var wasDownloaderRunning = false
+
     /**
      * Called when the activity is created. Initializes the presenter and configuration.
      */
@@ -250,6 +258,21 @@ class ReaderActivity : BaseActivity() {
         binding = ReaderActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.setComposeOverlay()
+
+        // Pause background processes when entering reader
+        lifecycleScope.launchNonCancellable {
+            LibraryUpdateJob.stop(this@ReaderActivity)
+            SyncDataJob.stop(this@ReaderActivity)
+            val suggestionsPreferences = Injekt.get<SuggestionsPreferences>()
+            if (suggestionsPreferences.isSuggestionsEnabled().get()) {
+                SuggestionsWorker.cancelBackground(this@ReaderActivity)
+            }
+        }
+        val downloadManager = Injekt.get<DownloadManager>()
+        if (downloadManager.isRunning) {
+            wasDownloaderRunning = true
+            downloadManager.pauseDownloads()
+        }
 
         if (viewModel.needsInit()) {
             val manga = intent.extras?.getLong("manga", -1) ?: -1L
@@ -360,6 +383,9 @@ class ReaderActivity : BaseActivity() {
                 return@TachiyomiTheme
             }
 
+            val uiPreferences = remember { Injekt.get<UiPreferences>() }
+            val readerLoadingStyle by uiPreferences.readerLoadingStyle().collectAsState()
+
             val state by viewModel.state.collectAsState()
             val showPageNumber by readerPreferences.showPageNumber().collectAsState()
             val settingsScreenModel = remember {
@@ -424,10 +450,34 @@ class ReaderActivity : BaseActivity() {
                     AppBars(state = state)
 
                     if (state.dialog is ReaderViewModel.Dialog.Loading) {
+                        val backgroundModifier = when (readerLoadingStyle) {
+                            UiPreferences.ReaderLoadingStyle.CLASSIC_DARK -> Modifier.background(ComposeColor.Black.copy(alpha = 0.7f))
+                            UiPreferences.ReaderLoadingStyle.AMOLED_BLACK -> Modifier.background(ComposeColor.Black)
+                            UiPreferences.ReaderLoadingStyle.SUNSET -> Modifier.background(
+                                Brush.linearGradient(
+                                    colors = listOf(ComposeColor(0xFFFF416C), ComposeColor(0xFFFF4B2B)),
+                                ),
+                            )
+                            UiPreferences.ReaderLoadingStyle.OCEAN -> Modifier.background(
+                                Brush.linearGradient(
+                                    colors = listOf(ComposeColor(0xFF0072FF), ComposeColor(0xFF00C6FF)),
+                                ),
+                            )
+                            UiPreferences.ReaderLoadingStyle.CYBERPUNK -> Modifier.background(
+                                Brush.linearGradient(
+                                    colors = listOf(ComposeColor(0xFFF107A3), ComposeColor(0xFF07D8F1)),
+                                ),
+                            )
+                            UiPreferences.ReaderLoadingStyle.AURORA -> Modifier.background(
+                                Brush.linearGradient(
+                                    colors = listOf(ComposeColor(0xFF0575E6), ComposeColor(0xFF00F260)),
+                                ),
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(ComposeColor.Black.copy(alpha = 0.7f)),
+                                .then(backgroundModifier),
                             contentAlignment = Alignment.Center,
                         ) {
                             Column(
@@ -435,7 +485,11 @@ class ReaderActivity : BaseActivity() {
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = if (readerLoadingStyle == UiPreferences.ReaderLoadingStyle.CLASSIC_DARK || readerLoadingStyle == UiPreferences.ReaderLoadingStyle.AMOLED_BLACK) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        ComposeColor.White
+                                    },
                                 )
                                 Text(
                                     text = stringResource(MR.strings.loading),
@@ -616,6 +670,19 @@ class ReaderActivity : BaseActivity() {
         config = null
         menuToggleToast?.cancel()
         readingModeToast?.cancel()
+
+        if (wasDownloaderRunning) {
+            Injekt.get<DownloadManager>().startDownloads()
+            wasDownloaderRunning = false
+        }
+        val suggestionsPreferences = Injekt.get<SuggestionsPreferences>()
+        if (suggestionsPreferences.isSuggestionsEnabled().get()) {
+            SuggestionsWorker.scheduleBackground(this, true)
+        }
+        lifecycleScope.launchNonCancellable {
+            LibraryUpdateJob.setupTask(this@ReaderActivity)
+            SyncDataJob.setupTask(this@ReaderActivity)
+        }
     }
 
     override fun onPause() {

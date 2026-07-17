@@ -74,6 +74,7 @@ internal class ArchivePageLoader(
             pages.forEachIndexed { i, page ->
                 list.getOrNull(i)?.name?.let { entryName ->
                     page.translation = translations[entryName]
+                    page.translationKey = entryName
                 }
             }
             return pages
@@ -107,6 +108,7 @@ internal class ArchivePageLoader(
                     status = Page.State.Ready
                     // KMK -->
                     translation = translations[entry.name]
+                    translationKey = entry.name
                     // KMK <--
                 }
             }

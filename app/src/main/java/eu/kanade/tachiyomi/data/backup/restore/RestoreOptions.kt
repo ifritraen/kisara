@@ -14,6 +14,10 @@ data class RestoreOptions(
     // SY -->
     val savedSearchesFeeds: Boolean = true,
     // SY <--
+    // KMK -->
+    val sideloadedExtensions: Boolean = true,
+    val vpnSettings: Boolean = true,
+    // KMK <--
 ) {
 
     fun asBooleanArray() = booleanArrayOf(
@@ -25,6 +29,10 @@ data class RestoreOptions(
         // SY -->
         savedSearchesFeeds,
         // SY <--
+        // KMK -->
+        sideloadedExtensions,
+        vpnSettings,
+        // KMK <--
     )
 
     fun canRestore() =
@@ -32,8 +40,10 @@ data class RestoreOptions(
             categories ||
             appSettings ||
             extensionRepoSettings ||
-            sourceSettings /* SY --> */ ||
-            savedSearchesFeeds /* SY <-- */
+            sourceSettings ||
+            savedSearchesFeeds ||
+            sideloadedExtensions ||
+            vpnSettings
 
     companion object {
         val options = persistentListOf(
@@ -71,6 +81,18 @@ data class RestoreOptions(
                 setter = { options, enabled -> options.copy(savedSearchesFeeds = enabled) },
             ),
             // SY <--
+            // KMK -->
+            Entry(
+                label = KMR.strings.sideloaded_extensions,
+                getter = RestoreOptions::sideloadedExtensions,
+                setter = { options, enabled -> options.copy(sideloadedExtensions = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.vpn_settings,
+                getter = RestoreOptions::vpnSettings,
+                setter = { options, enabled -> options.copy(vpnSettings = enabled) },
+            ),
+            // KMK <--
         )
 
         fun fromBooleanArray(array: BooleanArray) = RestoreOptions(
@@ -82,6 +104,10 @@ data class RestoreOptions(
             // SY -->
             savedSearchesFeeds = array[5],
             // SY <--
+            // KMK -->
+            sideloadedExtensions = array.getOrElse(6) { true },
+            vpnSettings = array.getOrElse(7) { true },
+            // KMK <--
         )
     }
 

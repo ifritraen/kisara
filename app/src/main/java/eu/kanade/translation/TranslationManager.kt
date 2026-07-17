@@ -16,7 +16,10 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
+import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
@@ -164,6 +167,43 @@ class TranslationManager(
             } else if (queueState.value.isNotEmpty()) {
                 translator.start()
             }
+        }
+    }
+
+    fun saveChapterTranslation(
+        chapterName: String,
+        scanlator: String?,
+        mangaTitle: String,
+        source: Source,
+        key: String,
+        pageTranslation: PageTranslation,
+    ) {
+        try {
+            val mangaDir = provider.getMangaDir(mangaTitle, source)
+            val fileName = provider.getTranslationFileName(chapterName, scanlator)
+            val file = mangaDir.findFile(fileName) ?: mangaDir.createFile(fileName)
+            if (file != null) {
+                val existingMap = try {
+                    if (file.exists()) {
+                        file.openInputStream().use { input ->
+                            Json.decodeFromStream<Map<String, PageTranslation>>(input)
+                        }
+                    } else {
+                        emptyMap()
+                    }
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+
+                val mutableMap = existingMap.toMutableMap()
+                mutableMap[key] = pageTranslation
+
+                file.openOutputStream().use { output ->
+                    Json.encodeToStream(mutableMap, output)
+                }
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to save edited translation" }
         }
     }
 

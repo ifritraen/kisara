@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.util
 
+import tachiyomi.domain.manga.model.Manga
+
 object MangaTitleParser {
 
     private val LANGUAGE_TO_CODE = mapOf(
@@ -35,8 +37,8 @@ object MangaTitleParser {
         var isUncensored = false
         var isColorized = false
 
-        // 1. Parse leading bracket: [Author] or [Artist (Author)]
-        val leadingBracketRegex = Regex("""^\[([^\]\()]+)\s*(?:\(([^\]\)]+)\))?\]""")
+        // 1. Parse leading bracket: [Author] or [Artist (Author)] or (Author) or {Author}
+        val leadingBracketRegex = Regex("""^[\[({]([^\]\(){}]+)\s*(?:\(([^\]\){}]+)\))?[\])}]""")
         val match = leadingBracketRegex.find(title)
         if (match != null) {
             val part1 = match.groupValues[1].trim()
@@ -51,7 +53,7 @@ object MangaTitleParser {
         }
 
         // 2. Parse and strip all brackets at the end/inside the title
-        val bracketsRegex = Regex("""\[([^\]]+)\]""")
+        val bracketsRegex = Regex("""[\[({]([^\])}]+)[\])}]""")
         val allMatches = bracketsRegex.findAll(title).toList()
 
         for (m in allMatches) {
@@ -70,7 +72,7 @@ object MangaTitleParser {
         title = title.replace(Regex("""\s+[-|/~]\s*$"""), "").trim()
 
         if (title.isEmpty()) {
-            title = rawTitle.replace(Regex("""\[[^\]]+\]"""), "").trim()
+            title = rawTitle.replace(Regex("""[\[({][^\])}]+[\])}]"""), "").trim()
             if (title.isEmpty()) {
                 title = rawTitle
             }
@@ -84,5 +86,48 @@ object MangaTitleParser {
             isUncensored = isUncensored,
             isColorized = isColorized,
         )
+    }
+
+    fun isColorized(manga: Manga?, title: String): Boolean {
+        if (parse(title).isColorized) return true
+        val genres = manga?.genre
+        if (!genres.isNullOrEmpty()) {
+            for (genre in genres) {
+                val clean = genre.lowercase().trim()
+                if (clean == "color" || clean == "full color" || clean == "colored" || clean == "colorized" || clean == "webtoon" || clean == "manhwa") {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    fun isUncensored(manga: Manga?, title: String): Boolean {
+        if (parse(title).isUncensored) return true
+        val genres = manga?.genre
+        if (!genres.isNullOrEmpty()) {
+            for (genre in genres) {
+                val clean = genre.lowercase().trim()
+                if (clean == "uncensored" || clean == "decensored") {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    fun getLanguageCode(manga: Manga?, title: String): String? {
+        val parsed = parse(title)
+        if (parsed.languageCode != null) return parsed.languageCode
+        val genres = manga?.genre
+        if (!genres.isNullOrEmpty()) {
+            for (genre in genres) {
+                val clean = genre.lowercase().trim()
+                if (LANGUAGE_TO_CODE.containsKey(clean)) {
+                    return LANGUAGE_TO_CODE[clean]
+                }
+            }
+        }
+        return null
     }
 }

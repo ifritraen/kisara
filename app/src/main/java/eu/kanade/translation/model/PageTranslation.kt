@@ -26,3 +26,11 @@ data class TranslationBlock(
     val angle: Float,
     var isBubble: Boolean = false,
 )
+
+fun PageTranslation.deepCopy(): PageTranslation {
+    return PageTranslation(
+        blocks = blocks.map { it.copy() }.toMutableList(),
+        imgWidth = imgWidth,
+        imgHeight = imgHeight,
+    )
+}

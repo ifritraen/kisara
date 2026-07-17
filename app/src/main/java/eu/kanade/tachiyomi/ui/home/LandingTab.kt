@@ -70,13 +70,16 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.DisplayOverlaySettingsDialog
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.presentation.library.components.ColorizedBadge
 import eu.kanade.presentation.library.components.CommonMangaItemDefaults
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.SourceIconBadge
+import eu.kanade.presentation.library.components.UncensoredBadge
 import eu.kanade.presentation.library.components.UnreadBadge
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.more.settings.screen.SettingsHomeScreen
@@ -96,6 +99,7 @@ import tachiyomi.domain.manga.interactor.GetLibraryManga
 import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.suggestions.model.Suggestion
+import tachiyomi.domain.updates.model.UpdatesWithRelations
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
@@ -143,6 +147,19 @@ fun landingTab(
         content = { paddingValues, _ ->
             if (showDisplayOverlayDialog) {
                 DisplayOverlaySettingsDialog(onDismissRequest = { showDisplayOverlayDialog = false })
+            }
+
+            val dialog = state.dialog
+            if (dialog is LandingScreenModel.State.Dialog.ChangeCategory) {
+                val changeCategoryManga = dialog.manga
+                ChangeCategoryDialog(
+                    initialSelection = dialog.initialSelection,
+                    onDismissRequest = { screenModel.dismissDialog() },
+                    onEditCategories = { navigator.push(eu.kanade.tachiyomi.ui.category.CategoryScreen()) },
+                    onConfirm = { included, _ ->
+                        screenModel.setMangaCategories(changeCategoryManga, included)
+                    },
+                )
             }
 
             PullRefresh(
@@ -423,7 +440,7 @@ fun SpotlightCarousel(
             ),
     ) {
         Text(
-            text = if (tagName != null) "Recommended: #$tagName" else "Spotlight",
+            text = if (tagName != null) "Recommended: #$tagName" else stringResource(KMR.strings.pref_home_section_names_spotlight),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -441,6 +458,9 @@ fun SpotlightCarousel(
             val suggestion = suggestions[page]
             val manga = suggestion.manga
             val coverData = manga.asMangaCover()
+            val parsed = remember(manga.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga.title) }
+            val cleanTitle = parsed.cleanTitle
+            val authorText = manga.author.orEmpty().ifBlank { parsed.author ?: parsed.artist }.orEmpty().ifBlank { "Unknown Author" }
 
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -482,13 +502,46 @@ fun SpotlightCarousel(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        MangaCover.Book(
-                            data = coverData,
+                        Box(
                             modifier = Modifier
                                 .width(96.dp)
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(8.dp)),
-                        )
+                        ) {
+                            MangaCover.Book(
+                                data = coverData,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            if (parsed.isColorized) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp),
+                                ) {
+                                    ColorizedBadge()
+                                }
+                            }
+                            if (parsed.isUncensored) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(4.dp),
+                                ) {
+                                    UncensoredBadge()
+                                }
+                            }
+                            val targetLang = parsed.languageCode
+                            if (!targetLang.isNullOrEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(4.dp),
+                                ) {
+                                    LanguageBadge(isLocal = false, sourceLanguage = targetLang)
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.width(12.dp))
 
@@ -499,7 +552,7 @@ fun SpotlightCarousel(
                             verticalArrangement = Arrangement.Center,
                         ) {
                             Text(
-                                text = manga.title,
+                                text = cleanTitle,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -508,7 +561,7 @@ fun SpotlightCarousel(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = manga.author.orEmpty().ifBlank { "Unknown Author" },
+                                text = authorText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.7f),
                                 maxLines = 1,
@@ -759,6 +812,9 @@ fun MangaCoverCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val parsed = remember(title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(title) }
+    val cleanTitle = parsed.cleanTitle
+
     val libraryMangaList by remember { Injekt.get<GetLibraryManga>().subscribe() }.collectAsState(initial = emptyList())
     val libraryManga = remember(libraryMangaList, mangaId) { libraryMangaList.firstOrNull { it.id == mangaId } }
 
@@ -796,18 +852,25 @@ fun MangaCoverCard(
             MangaCover.Book(
                 data = coverData,
                 modifier = Modifier.fillMaxSize(),
-                alpha = if (coverData.isMangaFavorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                alpha = 1f,
             )
 
-            if (coverData.isMangaFavorite) {
-                Box(
+            if (coverData.isMangaFavorite || parsed.isColorized) {
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Badge(
-                        imageVector = Icons.Outlined.CollectionsBookmark,
-                    )
+                    if (parsed.isColorized) {
+                        ColorizedBadge()
+                    }
+                    if (coverData.isMangaFavorite) {
+                        Badge(
+                            imageVector = Icons.Outlined.CollectionsBookmark,
+                        )
+                    }
                 }
             }
 
@@ -860,9 +923,21 @@ fun MangaCoverCard(
                 }
             }
 
+            // Uncensored badge overlay
+            if (parsed.isUncensored) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp),
+                ) {
+                    UncensoredBadge()
+                }
+            }
+
             // END Badges (local, language, source icons)
+            val targetLang = source?.lang ?: parsed.languageCode
             val badgeEndVisible = (showLocalBadge && source?.isLocal() == true) ||
-                (showLanguageBadge && source != null && !source.isLocal() && source.lang.isNotEmpty()) ||
+                (showLanguageBadge && !targetLang.isNullOrEmpty() && (source == null || !source.isLocal())) ||
                 (showSourceBadge && source != null)
             if (badgeEndVisible) {
                 BadgeGroup(
@@ -877,10 +952,10 @@ fun MangaCoverCard(
                             iconColor = MaterialTheme.colorScheme.onTertiary,
                         )
                     }
-                    if (showLanguageBadge && source != null && !source.isLocal() && source.lang.isNotEmpty()) {
+                    if (showLanguageBadge && !targetLang.isNullOrEmpty() && (source == null || !source.isLocal())) {
                         LanguageBadge(
                             isLocal = false,
-                            sourceLanguage = source.lang,
+                            sourceLanguage = targetLang,
                             useLangIcon = useLangIcon,
                         )
                     }
@@ -903,7 +978,7 @@ fun MangaCoverCard(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = title,
+            text = cleanTitle,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = 10.sp,
                 lineHeight = 12.sp,
@@ -913,6 +988,19 @@ fun MangaCoverCard(
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        val author = parsed.author ?: parsed.artist
+        if (author != null) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = author,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontSize = 8.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
     }
 }
 
@@ -950,6 +1038,9 @@ fun FeedItemCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val parsed = remember(item.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(item.title) }
+    val cleanTitle = parsed.cleanTitle
+
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -1001,32 +1092,68 @@ fun FeedItemCard(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                // Top Left: Extension Badge
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                    modifier = Modifier.align(Alignment.Start),
-                ) {
-                    Text(
-                        text = item.sourceName,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 8.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                // Top Left: Extension Badge or Title Badges
+                val showLanguage = parsed.languageCode != null
+                val showColorized = parsed.isColorized
+                val showUncensored = parsed.isUncensored
+
+                if (showLanguage || showColorized || showUncensored) {
+                    Row(
+                        modifier = Modifier.align(Alignment.Start),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (showLanguage) {
+                            LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode!!)
+                        }
+                        if (showColorized) {
+                            ColorizedBadge()
+                        }
+                        if (showUncensored) {
+                            UncensoredBadge()
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                        modifier = Modifier.align(Alignment.Start),
+                    ) {
+                        Text(
+                            text = item.sourceName,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 8.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
-                // Bottom: Title
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // Bottom: Title & Author
+                Column {
+                    Text(
+                        text = cleanTitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val author = parsed.author ?: parsed.artist
+                    if (author != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = author,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }

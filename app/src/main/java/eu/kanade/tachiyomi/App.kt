@@ -24,6 +24,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.allowHardware
 import coil3.request.allowRgb565
 import coil3.request.crossfade
 import coil3.util.DebugLogger
@@ -318,6 +319,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
             crossfade((300 * this@App.animatorDurationScale).toInt())
             allowRgb565(DeviceUtil.isLowRamDevice(this@App))
+            try {
+                allowHardware(true)
+            } catch (e: Throwable) {
+                allowHardware(false)
+            }
             if (networkPreferences.verboseLogging().get()) logger(DebugLogger())
 
             // Coil spawns a new thread for every image load by default

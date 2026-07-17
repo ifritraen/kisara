@@ -5,6 +5,8 @@ import tachiyomi.data.DatabaseHandler
 import tachiyomi.data.manga.MangaMapper
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.suggestions.model.Suggestion
+import tachiyomi.domain.suggestions.model.SuggestionSource
+import tachiyomi.domain.suggestions.model.SuggestionTag
 import tachiyomi.domain.suggestions.repository.SuggestionRepository
 
 class SuggestionRepositoryImpl(
@@ -77,6 +79,148 @@ class SuggestionRepositoryImpl(
                     createdAt = now,
                 )
             }
+        }
+    }
+
+    override fun observeTags(): Flow<List<SuggestionTag>> {
+        return handler.subscribeToList {
+            suggestionsQueries.getSuggestionTags { tag, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionTag(
+                    tag = tag,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun getTags(): List<SuggestionTag> {
+        return handler.awaitList {
+            suggestionsQueries.getSuggestionTags { tag, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionTag(
+                    tag = tag,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun insertTag(tag: SuggestionTag) {
+        handler.await {
+            suggestionsQueries.insertSuggestionTag(
+                tag = tag.tag,
+                count = tag.count,
+                isBlocked = if (tag.isBlocked) 1L else 0L,
+                isUserAdded = if (tag.isUserAdded) 1L else 0L,
+                sortOrder = tag.sortOrder,
+            )
+        }
+    }
+
+    override suspend fun deleteTag(tag: String) {
+        handler.await {
+            suggestionsQueries.deleteSuggestionTag(tag)
+        }
+    }
+
+    override suspend fun clearTags() {
+        handler.await {
+            suggestionsQueries.deleteAllSuggestionTags()
+        }
+    }
+
+    override fun observeSources(): Flow<List<SuggestionSource>> {
+        return handler.subscribeToList {
+            suggestionsQueries.getSuggestionSources { sourceId, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionSource(
+                    sourceId = sourceId,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun getSources(): List<SuggestionSource> {
+        return handler.awaitList {
+            suggestionsQueries.getSuggestionSources { sourceId, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionSource(
+                    sourceId = sourceId,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun insertSource(source: SuggestionSource) {
+        handler.await {
+            suggestionsQueries.insertSuggestionSource(
+                sourceId = source.sourceId,
+                count = source.count,
+                isBlocked = if (source.isBlocked) 1L else 0L,
+                isUserAdded = if (source.isUserAdded) 1L else 0L,
+                sortOrder = source.sortOrder,
+            )
+        }
+    }
+
+    override suspend fun deleteSource(sourceId: Long) {
+        handler.await {
+            suggestionsQueries.deleteSuggestionSource(sourceId)
+        }
+    }
+
+    override suspend fun clearSources() {
+        handler.await {
+            suggestionsQueries.deleteAllSuggestionSources()
+        }
+    }
+
+    override fun observeDismissed(): Flow<List<String>> {
+        return handler.subscribeToList {
+            suggestionsQueries.getDismissedSuggestions { mangaUrl, _, _ ->
+                mangaUrl
+            }
+        }
+    }
+
+    override suspend fun dismiss(mangaUrl: String, title: String) {
+        handler.await {
+            suggestionsQueries.insertDismissedSuggestion(
+                mangaUrl = mangaUrl,
+                title = title,
+                createdAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    override suspend fun getDismissed(): List<Pair<String, String>> {
+        return handler.awaitList {
+            suggestionsQueries.getDismissedSuggestions { mangaUrl, title, _ ->
+                Pair(mangaUrl, title)
+            }
+        }
+    }
+
+    override suspend fun deleteDismissed(mangaUrl: String) {
+        handler.await {
+            suggestionsQueries.deleteDismissedSuggestion(mangaUrl)
+        }
+    }
+
+    override suspend fun clearDismissed() {
+        handler.await {
+            suggestionsQueries.deleteAllDismissedSuggestions()
         }
     }
 }

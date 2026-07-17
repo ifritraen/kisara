@@ -18,6 +18,7 @@
 
 package tachiyomi.presentation.core.components.material
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.MutableWindowInsets
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -41,6 +42,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -101,6 +104,34 @@ import kotlin.math.max
  * properly offset top and bottom bars. If using [Modifier.verticalScroll], apply this modifier to
  * the child of the scroll, and not on the scroll itself.
  */
+@Composable
+fun Modifier.acrylicBackground(containerColor: Color): Modifier {
+    val isDark = isSystemInDarkTheme()
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val backgroundColor = MaterialTheme.colorScheme.background
+
+    return this.drawBehind {
+        drawRect(color = containerColor)
+
+        if (containerColor == backgroundColor) {
+            val brush = Brush.verticalGradient(
+                colors = listOf(
+                    primaryColor.copy(alpha = if (isDark) 0.08f else 0.06f),
+                    secondaryColor.copy(alpha = if (isDark) 0.04f else 0.03f),
+                    Color.Transparent,
+                ),
+                startY = 0f,
+                endY = size.height * 0.6f,
+            )
+            drawRect(brush = brush)
+        }
+    }
+}
+
+/**
+ * Layout for a [Scaffold]'s content.
+ */
 @ExperimentalMaterial3Api
 @Composable
 fun Scaffold(
@@ -129,8 +160,9 @@ fun Scaffold(
                     it,
                 )
             }
+            .acrylicBackground(containerColor)
             .then(modifier),
-        color = containerColor,
+        color = Color.Transparent,
         contentColor = contentColor,
     ) {
         ScaffoldLayout(

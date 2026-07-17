@@ -560,6 +560,7 @@ private fun MangaAndSourceTitlesLarge(
         }
         Spacer(modifier = Modifier.height(16.dp))
         MangaContentInfo(
+            manga = manga,
             title = manga.title,
             author = manga.author,
             artist = manga.artist,
@@ -655,6 +656,7 @@ private fun MangaAndSourceTitlesSmall(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             MangaContentInfo(
+                manga = manga,
                 title = manga.title,
                 author = manga.author,
                 artist = manga.artist,
@@ -677,6 +679,7 @@ private fun MangaAndSourceTitlesSmall(
 @Suppress("UnusedReceiverParameter")
 @Composable
 private fun ColumnScope.MangaContentInfo(
+    manga: Manga,
     title: String,
     author: String?,
     artist: String?,
@@ -807,6 +810,45 @@ private fun ColumnScope.MangaContentInfo(
                     ),
                 textAlign = textAlign,
             )
+        }
+    }
+
+    val isColorized = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, title) }
+    val isUncensored = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, title) }
+    val isNsfw = remember(manga) { eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(manga, title) }
+    val langCode = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, title) }
+
+    if (isColorized || isUncensored || isNsfw || langCode != null) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (textAlign == TextAlign.Center) Arrangement.Center else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isNsfw) {
+                    eu.kanade.presentation.library.components.UncensoredBadge()
+                }
+                if (isUncensored) {
+                    tachiyomi.presentation.core.components.Badge(
+                        text = "UNCENSORED",
+                        color = MaterialTheme.colorScheme.tertiary,
+                        textColor = MaterialTheme.colorScheme.onTertiary,
+                    )
+                }
+                if (langCode != null) {
+                    eu.kanade.presentation.library.components.LanguageBadge(
+                        isLocal = false,
+                        sourceLanguage = langCode,
+                    )
+                }
+                if (isColorized) {
+                    eu.kanade.presentation.library.components.ColorizedBadge()
+                }
+            }
         }
     }
 

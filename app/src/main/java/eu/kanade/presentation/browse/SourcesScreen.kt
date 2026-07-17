@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -29,6 +32,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +50,8 @@ import eu.kanade.tachiyomi.util.system.LocaleHelper
 import exh.source.EH_SOURCE_ID
 import exh.source.EXH_SOURCE_ID
 import kotlinx.collections.immutable.ImmutableList
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.domain.source.model.Pin
 import tachiyomi.domain.source.model.Source
 import tachiyomi.i18n.MR
@@ -71,6 +77,7 @@ fun SourcesScreen(
     onClickItem: (Source, Listing) -> Unit,
     onClickPin: (Source) -> Unit,
     onLongClickItem: (Source) -> Unit,
+    onClickReorderPin: (List<Source>, Int, Int) -> Unit,
     // KMK -->
     @Suppress("UNUSED_PARAMETER") modifier: Modifier = Modifier,
     onChangeSearchQuery: (String?) -> Unit,
@@ -83,6 +90,34 @@ fun SourcesScreen(
         onChangeSearchQuery("")
     }
     // KMK <--
+
+    val items = remember(state.items) { state.items.toMutableStateList() }
+
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val fromItemKey = from.key as? String ?: return@rememberReorderableLazyListState
+        val toItemKey = to.key as? String ?: return@rememberReorderableLazyListState
+        if (!fromItemKey.startsWith("source-") || !toItemKey.startsWith("source-")) return@rememberReorderableLazyListState
+
+        val fromId = fromItemKey.removePrefix("source-").toLongOrNull() ?: return@rememberReorderableLazyListState
+        val toId = toItemKey.removePrefix("source-").toLongOrNull() ?: return@rememberReorderableLazyListState
+
+        val fromIdx = items.indexOfFirst { it is SourceUiModel.Item && it.source.id == fromId }
+        val toIdx = items.indexOfFirst { it is SourceUiModel.Item && it.source.id == toId }
+
+        if (fromIdx != -1 && toIdx != -1) {
+            val item = items.removeAt(fromIdx)
+            items.add(toIdx, item)
+
+            val pinnedList = items.filterIsInstance<SourceUiModel.Item>()
+                .map { it.source }
+                .filter { Pin.Pinned in it.pin }
+            val newFromIdx = pinnedList.indexOfFirst { it.id == fromId }
+            val newToIdx = pinnedList.indexOfFirst { it.id == toId }
+            if (newFromIdx != -1 && newToIdx != -1) {
+                onClickReorderPin(pinnedList, newFromIdx, newToIdx)
+            }
+        }
+    }
 
     when {
         state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))
@@ -108,7 +143,7 @@ fun SourcesScreen(
                     contentPadding = PaddingValues(top = searchBoxHeight) + PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                     // KMK <--
                 ) {
-                    state.items.forEach { model ->
+                    items.forEach { model ->
                         when (model) {
                             is SourceUiModel.Header -> {
                                 stickyHeader(
@@ -128,21 +163,43 @@ fun SourcesScreen(
                                 }
                             }
                             is SourceUiModel.Item -> {
+                                val isPinned = Pin.Pinned in model.source.pin
                                 item(
                                     key = "source-${model.source.key()}",
                                     contentType = "item",
                                 ) {
-                                    SourceItem(
-                                        modifier = Modifier.animateItemFastScroll(),
-                                        source = model.source,
-                                        // SY -->
-                                        showLatest = state.showLatest,
-                                        showPin = state.showPin,
-                                        // SY <--
-                                        onClickItem = onClickItem,
-                                        onLongClickItem = onLongClickItem,
-                                        onClickPin = onClickPin,
-                                    )
+                                    if (isPinned) {
+                                        ReorderableItem(reorderableState, key = "source-${model.source.key()}") {
+                                            SourceItem(
+                                                modifier = Modifier.animateItemFastScroll(),
+                                                dragHandle = {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.DragHandle,
+                                                        contentDescription = "Drag to reorder",
+                                                        modifier = Modifier
+                                                            .padding(horizontal = 4.dp)
+                                                            .draggableHandle(),
+                                                    )
+                                                },
+                                                source = model.source,
+                                                showLatest = state.showLatest,
+                                                showPin = state.showPin,
+                                                onClickItem = onClickItem,
+                                                onLongClickItem = onLongClickItem,
+                                                onClickPin = onClickPin,
+                                            )
+                                        }
+                                    } else {
+                                        SourceItem(
+                                            modifier = Modifier.animateItemFastScroll(),
+                                            source = model.source,
+                                            showLatest = state.showLatest,
+                                            showPin = state.showPin,
+                                            onClickItem = onClickItem,
+                                            onLongClickItem = onLongClickItem,
+                                            onClickPin = onClickPin,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -206,12 +263,14 @@ private fun SourceItem(
     onLongClickItem: (Source) -> Unit,
     onClickPin: (Source) -> Unit,
     modifier: Modifier = Modifier,
+    dragHandle: @Composable (RowScope.() -> Unit)? = null,
 ) {
     BaseSourceItem(
         modifier = modifier,
         source = source,
         onClickItem = { onClickItem(source, Listing.Popular) },
         onLongClickItem = { onLongClickItem(source) },
+        dragHandle = dragHandle,
         action = {
             if (source.supportsLatest /* SY --> */ && showLatest /* SY <-- */) {
                 TextButton(onClick = { onClickItem(source, Listing.Latest) }) {

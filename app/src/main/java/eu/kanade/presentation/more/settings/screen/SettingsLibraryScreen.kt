@@ -295,6 +295,48 @@ object SettingsLibraryScreen : SearchableSettings {
             },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    // Always ask row (-1)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = -1 }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selected == -1,
+                            onClick = { selected = -1 },
+                        )
+                        Text(
+                            text = stringResource(MR.strings.default_category_summary),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 8.dp),
+                        )
+                    }
+
+                    // Default/Uncategorized row (0)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = 0 }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selected == 0,
+                            onClick = { selected = 0 },
+                        )
+                        Text(
+                            text = stringResource(MR.strings.label_default),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 8.dp),
+                        )
+                    }
+
+                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
                     hierarchy.forEach { entry ->
                         val cat = entry.category
                         val isParent = cat.parentId == null

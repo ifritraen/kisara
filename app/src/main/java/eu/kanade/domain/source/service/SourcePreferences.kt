@@ -46,6 +46,8 @@ class SourcePreferences(
 
     fun showNsfwSource() = preferenceStore.getBoolean("show_nsfw_source", true)
 
+    fun blockedTags() = preferenceStore.getStringSet("system_blocked_tags", emptySet())
+
     fun migrationSortingMode() = preferenceStore.getEnum("pref_migration_sorting", SetMigrateSorting.Mode.ALPHABETICAL)
 
     fun migrationSortingDirection() = preferenceStore.getEnum(

@@ -60,6 +60,7 @@ import exh.util.mangaType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -423,7 +424,18 @@ class ReaderViewModel @JvmOverloads constructor(
                 if (manga != null) {
                     // SY -->
                     sourceManager.isInitialized.first { it }
-                    val source = sourceManager.getOrStub(manga.source)
+                    var source = sourceManager.get(manga.source)
+                    if (source == null || source is tachiyomi.domain.source.model.StubSource) {
+                        var retries = 10
+                        while ((source == null || source is tachiyomi.domain.source.model.StubSource) && retries > 0) {
+                            delay(500)
+                            source = sourceManager.get(manga.source)
+                            retries--
+                        }
+                    }
+                    if (source == null) {
+                        source = sourceManager.getOrStub(manga.source)
+                    }
                     val metadataSource = source.getMainSource<MetadataSource<*, *>>()
                     val metadata = if (metadataSource != null) {
                         getFlatMetadataById.await(mangaId)?.raise(metadataSource.metaClass)
@@ -619,7 +631,19 @@ class ReaderViewModel @JvmOverloads constructor(
      * that the user doesn't have to wait too long to continue reading.
      */
     suspend fun preload(chapter: ReaderChapter) {
-        if (chapter.state is ReaderChapter.State.Loaded || chapter.state == ReaderChapter.State.Loading) {
+        if (chapter.state == ReaderChapter.State.Loading) {
+            return
+        }
+
+        if (chapter.state is ReaderChapter.State.Loaded) {
+            val pages = chapter.pages
+            val pageLoader = chapter.pageLoader
+            if (pages != null && pageLoader is eu.kanade.tachiyomi.ui.reader.loader.HttpPageLoader) {
+                val amount = readerPreferences.preloadSize().get()
+                pages.take(amount).forEach { page ->
+                    pageLoader.boostPage(page)
+                }
+            }
             return
         }
 

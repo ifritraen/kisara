@@ -82,6 +82,8 @@ object SettingsKisaraScreen : SearchableSettings {
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val downloadPreferences = remember { Injekt.get<DownloadPreferences>() }
         val parallelChapterLimit by downloadPreferences.parallelChapterLimit().collectAsState()
+        val parallelSourceLimit by downloadPreferences.parallelSourceLimit().collectAsState()
+        val parallelPageLimit by downloadPreferences.parallelPageLimit().collectAsState()
 
         val chooseBackup = rememberLauncherForActivityResult(
             object : ActivityResultContracts.GetContent() {
@@ -648,6 +650,41 @@ object SettingsKisaraScreen : SearchableSettings {
                         ),
                     )
                     add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.performanceMode(),
+                            title = "Performance Mode / Battery Saver",
+                            subtitle = "Globally disables all dynamic glass blur effects across the app",
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.bypassBlurOnTransitions(),
+                            title = "Bypass Glass Blur during Transitions",
+                            subtitle = "Disables blur during tab and category transition animations to prevent lag",
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.disableGlassInBottomBar(),
+                            title = "Disable Bottom Bar Glass Blur",
+                            subtitle = "Disables frosted glass blur specifically on the bottom navigation bar",
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.disableGlassInCategoryBar(),
+                            title = "Disable Category Bar Glass Blur",
+                            subtitle = "Disables frosted glass blur specifically on the library category tabs",
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.disableTabTransitions(),
+                            title = "Instant Tab Transitions",
+                            subtitle = "Disables tab sliding and fading transition animations entirely",
+                        ),
+                    )
+                    add(
                         Preference.PreferenceItem.ListPreference(
                             preference = kisaraGlassColorTypePref,
                             entries = mapOf(
@@ -792,6 +829,11 @@ object SettingsKisaraScreen : SearchableSettings {
                         enabled = kisaraGlassColorType != 0,
                         onValueChanged = { readerAppBarColorMixPref.set(it) },
                     ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.disableGlassInReader(),
+                        title = "Disable Glass Blur in Reader",
+                        subtitle = "Falls back to a solid background for reader app bars to save CPU and battery",
+                    ),
                 ),
             ),
             Preference.PreferenceGroup(
@@ -839,6 +881,21 @@ object SettingsKisaraScreen : SearchableSettings {
                         subtitle = "Number of chapters to download concurrently per source",
                         valueString = "$parallelChapterLimit",
                         onValueChanged = { downloadPreferences.parallelChapterLimit().set(it) },
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = parallelSourceLimit,
+                        valueRange = 1..10,
+                        title = stringResource(MR.strings.pref_download_concurrent_sources),
+                        valueString = "$parallelSourceLimit",
+                        onValueChanged = { downloadPreferences.parallelSourceLimit().set(it) },
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = parallelPageLimit,
+                        valueRange = 1..15,
+                        title = stringResource(MR.strings.pref_download_concurrent_pages),
+                        subtitle = stringResource(MR.strings.pref_download_concurrent_pages_summary),
+                        valueString = "$parallelPageLimit",
+                        onValueChanged = { downloadPreferences.parallelPageLimit().set(it) },
                     ),
                 ),
             ),
@@ -904,6 +961,24 @@ object SettingsKisaraScreen : SearchableSettings {
                 ),
             ),
             Preference.PreferenceGroup(
+                title = "Reader Loading Screen Style",
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.readerLoadingStyle(),
+                        entries = mapOf(
+                            UiPreferences.ReaderLoadingStyle.CLASSIC_DARK to "Classic Dark",
+                            UiPreferences.ReaderLoadingStyle.AMOLED_BLACK to "Amoled Black",
+                            UiPreferences.ReaderLoadingStyle.SUNSET to "Sunset Glow (Orange/Red)",
+                            UiPreferences.ReaderLoadingStyle.OCEAN to "Deep Ocean (Blue/Cyan)",
+                            UiPreferences.ReaderLoadingStyle.CYBERPUNK to "Cyberpunk (Purple/Magenta)",
+                            UiPreferences.ReaderLoadingStyle.AURORA to "Aurora (Green/Blue)",
+                        ).toImmutableMap(),
+                        title = "Loading Background Theme",
+                        subtitle = "%s",
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
                 title = "Suggestions & Content Filtering",
                 preferenceItems = persistentListOf(
                     Preference.PreferenceItem.SwitchPreference(
@@ -929,6 +1004,23 @@ object SettingsKisaraScreen : SearchableSettings {
                         onClick = {
                             navigator.push(SettingsBlockedTagsScreen())
                         },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Custom NSFW Tags",
+                        subtitle = "Configure tags (genres) to automatically mark manga as NSFW (18+)",
+                        onClick = {
+                            navigator.push(SettingsCustomNsfwTagsScreen())
+                        },
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.kisaraHideNsfwSuggestions(),
+                        title = "Hide NSFW in Suggestions",
+                        subtitle = "Exclude NSFW recommendations from Suggestions and Home Feed",
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.kisaraBlurNsfwCovers(),
+                        title = "Blur NSFW Covers",
+                        subtitle = "Apply a blur filter on cover images identified as NSFW",
                     ),
                 ),
             ),

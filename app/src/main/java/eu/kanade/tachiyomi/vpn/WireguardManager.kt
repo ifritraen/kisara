@@ -90,9 +90,27 @@ class WireguardManager(private val context: Context) {
         val configText = getProfileConfig(name) ?: return@withContext false
         try {
             val config = Config.parse(ByteArrayInputStream(configText.toByteArray()))
-            backend.setState(KmkTunnel(name), State.UP, config)
+            val currentInterface = config.`interface`
+            val builder = com.wireguard.config.Interface.Builder()
+                .addAddresses(currentInterface.addresses)
+                .addDnsServers(currentInterface.dnsServers)
+                .addDnsSearchDomains(currentInterface.dnsSearchDomains)
+                .setKeyPair(currentInterface.keyPair)
+            currentInterface.listenPort.ifPresent { builder.setListenPort(it) }
+            currentInterface.mtu.ifPresent { builder.setMtu(it) }
+            builder.includeApplication(context.packageName)
+            val appConfig = Config.Builder()
+                .setInterface(builder.build())
+                .addPeers(config.peers)
+                .build()
+            backend.setState(KmkTunnel(name), State.UP, appConfig)
             _activeTunnel.value = name
             showVpnNotification(name)
+            try {
+                context.startService(Intent(context, VpnCleanupService::class.java))
+            } catch (e: Exception) {
+                android.util.Log.e("WireguardManager", "Failed to start VpnCleanupService: ${e.message}", e)
+            }
             true
         } catch (e: Exception) {
             android.util.Log.e("WireguardManager", "Failed to start tunnel $name: ${e.message}", e)
@@ -109,6 +127,11 @@ class WireguardManager(private val context: Context) {
             _activeTunnel.value = null
             autoStartedSourceId = null
             dismissVpnNotification()
+            try {
+                context.stopService(Intent(context, VpnCleanupService::class.java))
+            } catch (e: Exception) {
+                // Ignore
+            }
         } catch (e: Exception) {
             android.util.Log.e("WireguardManager", "Failed to stop tunnel: ${e.message}", e)
         }

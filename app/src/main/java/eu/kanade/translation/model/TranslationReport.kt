@@ -3,6 +3,8 @@ package eu.kanade.translation.model
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 object TranslationReport {
     data class LogEntry(
@@ -17,6 +19,14 @@ object TranslationReport {
     val logs = _logs.asStateFlow()
 
     fun log(level: String, component: String, message: String, exception: Throwable? = null) {
+        val prefs = try {
+            uy.kohesive.injekt.Injekt.get<tachiyomi.domain.translation.TranslationPreferences>()
+        } catch (e: Exception) {
+            null
+        }
+        if (prefs != null && !prefs.translationLoggingEnabled().get()) {
+            return
+        }
         val entry = LogEntry(
             level = level,
             component = component,

@@ -92,17 +92,22 @@ object LocalApkExtensionSupport {
         if (internalCache.exists() && internalCache.isDirectory && internalCache != cacheRoot) {
             migrateDir(internalCache, cacheRoot)
         }
-        val targetFile = File(cacheRoot, "$pkgName.apk")
+        val uniqueName = "${pkgName}_${sourceFile.lastModified()}_${sourceFile.length()}.apk"
+        val targetFile = File(cacheRoot, uniqueName)
 
-        if (
-            targetFile.exists() &&
-            targetFile.length() == sourceFile.length() &&
-            targetFile.lastModified() == sourceFile.lastModified()
-        ) {
+        if (targetFile.exists()) {
             return targetFile.absolutePath
         }
 
-        val tempFile = File(cacheRoot, "$pkgName.apk.tmp")
+        // Clean up old cached versions of this package
+        cacheRoot.listFiles()?.forEach { file ->
+            if (file.isFile && file.name.startsWith("${pkgName}_") && file.name.endsWith(".apk") && file.name != uniqueName) {
+                file.setWritable(true)
+                file.delete()
+            }
+        }
+
+        val tempFile = File(cacheRoot, "$uniqueName.tmp")
         if (tempFile.exists()) {
             tempFile.delete()
         }

@@ -4,13 +4,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import eu.kanade.domain.source.model.installedExtension
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.source.model.Source
@@ -29,6 +32,7 @@ fun BaseSourceItem(
     onLongClickItem: () -> Unit = {},
     icon: @Composable RowScope.(Source) -> Unit = defaultIcon,
     action: @Composable RowScope.(Source) -> Unit = {},
+    dragHandle: @Composable (RowScope.() -> Unit)? = null,
     content: @Composable RowScope.(Source, String?, /* KMK --> */ String /* KMK <-- */) -> Unit = defaultContent,
 ) {
     val sourceLangString = LocaleHelper.getSourceDisplayName(source.lang, LocalContext.current).takeIf {
@@ -38,7 +42,13 @@ fun BaseSourceItem(
         modifier = modifier,
         onClickItem = onClickItem,
         onLongClickItem = onLongClickItem,
-        icon = { icon.invoke(this, source) },
+        icon = {
+            if (dragHandle != null) {
+                dragHandle()
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            icon.invoke(this, source)
+        },
         action = { action.invoke(this, source) },
         content = { content.invoke(this, source, sourceLangString, /* KMK --> */ source.lang /* KMK <-- */) },
     )
@@ -100,10 +110,10 @@ private val defaultContent: @Composable RowScope.(
                 )
             }
 
-            val repoName = source.installedExtension?.repoName ?: if (eu.kanade.tachiyomi.extension.JarExtensionManager.sources.value.any { it.id == source.id }) {
-                "Kotatsu"
-            } else {
-                null
+            val repoName = source.installedExtension?.repoName ?: run {
+                val jarSource = eu.kanade.tachiyomi.extension.JarExtensionManager.sources.value
+                    .find { it.id == source.id }
+                jarSource?.repoName ?: if (jarSource != null) "Local" else null
             }
             if (repoName != null) {
                 Text(

@@ -45,6 +45,7 @@ class AndroidBitmapWrapper(val bitmap: android.graphics.Bitmap) : KotatsuBitmap 
 
 class JarCatalogueSource(
     val originalSource: MangaSource,
+    val repoName: String?,
     private val parserFactory: () -> MangaParser,
 ) : HttpSource() {
 
@@ -183,7 +184,9 @@ class JarCatalogueSource(
         url = this@toSManga.url
         title = this@toSManga.title
         thumbnail_url = this@toSManga.coverUrl ?: this@toSManga.largeCoverUrl
-        author = this@toSManga.authors.joinToString(", ")
+        val creators = this@toSManga.authors.joinToString(", ")
+        author = creators
+        artist = creators
         description = this@toSManga.description
         status = when (this@toSManga.state) {
             MangaState.ONGOING -> SManga.ONGOING

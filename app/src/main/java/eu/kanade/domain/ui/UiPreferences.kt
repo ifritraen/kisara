@@ -150,6 +150,35 @@ class UiPreferences(
     fun homeFeedUsePinnedSources() = preferenceStore.getBoolean("kisara_home_feed_use_pinned_sources", false)
     fun homeFeedPinnedSources() = preferenceStore.getStringSet("kisara_home_feed_pinned_sources", emptySet())
     fun homeFeedBackgroundPrefetch() = preferenceStore.getBoolean("kisara_home_feed_background_prefetch", false)
+
+    enum class ReaderLoadingStyle {
+        SUNSET,
+        OCEAN,
+        CYBERPUNK,
+        AURORA,
+        CLASSIC_DARK,
+        AMOLED_BLACK,
+    }
+
+    fun readerLoadingStyle() = preferenceStore.getEnum("pref_reader_loading_style", ReaderLoadingStyle.CLASSIC_DARK)
+
+    fun kisaraCustomNsfwTags() = preferenceStore.getStringSet("kisara_custom_nsfw_tags", emptySet())
+
+    fun kisaraHideNsfwSuggestions() = preferenceStore.getBoolean("kisara_hide_nsfw_suggestions", false)
+
+    fun kisaraBlurNsfwCovers() = preferenceStore.getBoolean("kisara_blur_nsfw_covers", false)
+
+    fun disableGlassInReader() = preferenceStore.getBoolean("kisara_disable_glass_in_reader", false)
+
+    fun performanceMode() = preferenceStore.getBoolean("kisara_performance_mode", false)
+
+    fun bypassBlurOnTransitions() = preferenceStore.getBoolean("kisara_bypass_blur_on_transitions", true)
+
+    fun disableGlassInBottomBar() = preferenceStore.getBoolean("kisara_disable_glass_in_bottom_bar", false)
+
+    fun disableGlassInCategoryBar() = preferenceStore.getBoolean("kisara_disable_glass_in_category_bar", false)
+
+    fun disableTabTransitions() = preferenceStore.getBoolean("kisara_disable_tab_transitions", false)
     // KMK <--
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)

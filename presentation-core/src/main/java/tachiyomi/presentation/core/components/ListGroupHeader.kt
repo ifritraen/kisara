@@ -22,6 +22,7 @@ fun ListGroupHeader(
     // KMK -->
     tonalElevation: Dp = 0.dp,
     count: Int? = null,
+    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
     // KMK <--
 ) {
     // KMK -->
@@ -42,7 +43,7 @@ fun ListGroupHeader(
                         horizontal = MaterialTheme.padding.medium,
                         vertical = MaterialTheme.padding.small,
                     ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = color,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium,
             )

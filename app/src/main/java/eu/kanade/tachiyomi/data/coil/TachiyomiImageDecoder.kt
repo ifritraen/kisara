@@ -66,14 +66,20 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
 
         check(bitmap != null) { "Failed to decode image" }
 
-        if (
-            options.bitmapConfig == Bitmap.Config.HARDWARE &&
-            ImageUtil.canUseHardwareBitmap(bitmap)
-        ) {
+        val lowMem = isLowMemoryCached(context)
+        val useHardware = (options.bitmapConfig == Bitmap.Config.HARDWARE || lowMem) && ImageUtil.canUseHardwareBitmap(bitmap)
+
+        if (useHardware) {
             val hwBitmap = bitmap.copy(Bitmap.Config.HARDWARE, false)
             if (hwBitmap != null) {
                 bitmap.recycle()
                 bitmap = hwBitmap
+            }
+        } else if (lowMem && bitmap.config != Bitmap.Config.RGB_565) {
+            val rgb565Bitmap = bitmap.copy(Bitmap.Config.RGB_565, false)
+            if (rgb565Bitmap != null) {
+                bitmap.recycle()
+                bitmap = rgb565Bitmap
             }
         }
 
@@ -115,5 +121,29 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
 
     companion object {
         var displayProfile: ByteArray? = null
+
+        private var lastLowMemoryCheckTime = 0L
+        private var cachedIsLowMemory = false
+
+        @Synchronized
+        fun isLowMemoryCached(context: android.content.Context): Boolean {
+            val now = System.currentTimeMillis()
+            if (now - lastLowMemoryCheckTime > 5000) {
+                lastLowMemoryCheckTime = now
+                cachedIsLowMemory = try {
+                    val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                    val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                    if (activityManager != null) {
+                        activityManager.getMemoryInfo(memoryInfo)
+                        memoryInfo.lowMemory || (memoryInfo.availMem < memoryInfo.totalMem * 0.15)
+                    } else {
+                        false
+                    }
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            return cachedIsLowMemory
+        }
     }
 }

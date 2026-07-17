@@ -217,6 +217,10 @@ class DomainModule : InjektModule {
         addFactory { tachiyomi.domain.suggestions.interactor.GetSuggestions(get()) }
         addFactory { tachiyomi.domain.suggestions.interactor.ClearSuggestions(get()) }
         addFactory { tachiyomi.domain.suggestions.interactor.ReplaceSuggestions(get()) }
+        addFactory { tachiyomi.domain.suggestions.interactor.GetSuggestionTags(get()) }
+        addFactory { tachiyomi.domain.suggestions.interactor.GetSuggestionSources(get()) }
+        addFactory { tachiyomi.domain.suggestions.interactor.ModifySuggestionTag(get()) }
+        addFactory { tachiyomi.domain.suggestions.interactor.ModifySuggestionSource(get()) }
         // KMK <--
     }
 }

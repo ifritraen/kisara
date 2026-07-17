@@ -164,6 +164,14 @@ object SettingsBrowseScreen : SearchableSettings {
                             true
                         },
                     ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Suggestions Settings",
+                        subtitle = "Configure, drag-and-drop reorder, or block tags and extensions",
+                        onClick = {
+                            navigator.push(SettingsSuggestionsScreen())
+                        },
+                        enabled = suggestionsPreferences.isSuggestionsEnabled().get(),
+                    ),
                 ),
             ),
             // KMK <--

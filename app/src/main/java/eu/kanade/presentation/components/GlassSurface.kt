@@ -33,6 +33,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 val LocalHazeState = staticCompositionLocalOf { HazeState() }
+val LocalHazeBypass = staticCompositionLocalOf { false }
 
 @Immutable
 data class GlassStyle(
@@ -77,16 +78,26 @@ fun GlassSurface(
     shape: Shape = GlassDefaults.shape,
     dialogSurface: Boolean = false,
     isReaderSurface: Boolean = false,
+    isStandardSurface: Boolean = false,
+    isCategoryBar: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val disableGlassInReader by uiPreferences.disableGlassInReader().collectAsState()
+    val performanceMode by uiPreferences.performanceMode().collectAsState()
+    val disableGlassInBottomBar by uiPreferences.disableGlassInBottomBar().collectAsState()
+    val disableGlassInCategoryBar by uiPreferences.disableGlassInCategoryBar().collectAsState()
     val isGlassEnabled by uiPreferences.kisaraFrostedGlass().collectAsState()
-    val hazeOpacity by if (isReaderSurface) {
-        uiPreferences.readerAppBarOpacity().collectAsState()
-    } else {
-        uiPreferences.bottomBarOpacity().collectAsState()
+    val hazeOpacity by when {
+        isReaderSurface -> uiPreferences.readerAppBarOpacity().collectAsState()
+        isStandardSurface -> uiPreferences.standardBottomBarOpacity().collectAsState()
+        else -> uiPreferences.bottomBarOpacity().collectAsState()
     }
-    val hazeBlur by uiPreferences.bottomBarBlur().collectAsState()
+    val hazeBlur by if (isStandardSurface) {
+        uiPreferences.standardBottomBarBlur().collectAsState()
+    } else {
+        uiPreferences.bottomBarBlur().collectAsState()
+    }
     val mixColorType by uiPreferences.kisaraGlassColorType().collectAsState()
     val mixColorRatioVal by if (isReaderSurface) {
         uiPreferences.readerAppBarColorMix().collectAsState()
@@ -158,7 +169,11 @@ fun GlassSurface(
         ),
     )
 
-    val useRuntimeHaze = isGlassEnabled
+    val hazeBypass = LocalHazeBypass.current
+    val useRuntimeHaze = isGlassEnabled && !performanceMode && !hazeBypass &&
+        !(isReaderSurface && disableGlassInReader) &&
+        !(isStandardSurface && disableGlassInBottomBar) &&
+        !(isCategoryBar && disableGlassInCategoryBar)
 
     val hazeStyle = remember(blurRadius, baseTintColor, containerColor, dialogSurface) {
         HazeStyle(
@@ -182,7 +197,7 @@ fun GlassSurface(
                         blurredEdgeTreatment = BlurredEdgeTreatment(shape)
                         clipToAreasBounds = false
                         expandLayerBounds = false
-                        forceInvalidateOnPreDraw = true
+                        forceInvalidateOnPreDraw = false
                     }
             } else {
                 modifier

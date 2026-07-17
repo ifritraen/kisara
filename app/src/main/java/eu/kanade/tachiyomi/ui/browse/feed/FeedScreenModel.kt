@@ -101,7 +101,11 @@ open class FeedScreenModel(
                         // KMK <--
                     )
                 }
-                getFeed(items)
+                val forceFetch = !hasAutoFetched
+                if (forceFetch) {
+                    hasAutoFetched = true
+                }
+                getFeed(items, force = forceFetch)
             }
             .catch { _events.send(Event.FailedFetchingSources) }
             .launchIn(screenModelScope)
@@ -122,7 +126,11 @@ open class FeedScreenModel(
                     // KMK <--
                 )
             }
-            getFeed(newItems)
+            val forceFetch = !hasAutoFetched
+            if (forceFetch) {
+                hasAutoFetched = true
+            }
+            getFeed(newItems, force = forceFetch)
         }
     }
 
@@ -139,7 +147,8 @@ open class FeedScreenModel(
                     // KMK <--
                 )
             }
-            getFeed(newItems)
+            hasAutoFetched = true
+            getFeed(newItems, force = true)
         }
     }
 
@@ -289,11 +298,11 @@ open class FeedScreenModel(
     /**
      * Initiates get manga per feed.
      */
-    private fun getFeed(feedSavedSearch: List<FeedItemUI>) {
+    private fun getFeed(feedSavedSearch: List<FeedItemUI>, force: Boolean = false) {
         screenModelScope.launch {
             feedSavedSearch.map { itemUI ->
                 async {
-                    if (itemUI.results != null) return@async
+                    if (!force && itemUI.results != null) return@async
 
                     val page = try {
                         if (itemUI.source != null) {
@@ -431,6 +440,8 @@ open class FeedScreenModel(
     companion object {
         @Volatile
         private var cachedResults: Map<Long, List<DomainManga>>? = null
+
+        var hasAutoFetched = false
 
         fun clearCache() {
             synchronized(this) {

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
@@ -115,6 +116,8 @@ fun ExtensionScreen(
     onUninstallJar: (Extension.Jar) -> Unit = {},
     onInstallAvailableJar: (Extension.AvailableJar) -> Unit = {},
     onUpdateJar: (Extension.Jar) -> Unit = {},
+    onBrowseAvailableJar: (Extension.AvailableJar) -> Unit = {},
+    onBrowseAvailableExtension: (Extension.Available) -> Unit = {},
 ) {
     val navigator = LocalNavigator.currentOrThrow
 
@@ -162,6 +165,8 @@ fun ExtensionScreen(
                     onUninstallJar = onUninstallJar,
                     onInstallAvailableJar = onInstallAvailableJar,
                     onUpdateJar = onUpdateJar,
+                    onBrowseAvailableJar = onBrowseAvailableJar,
+                    onBrowseAvailableExtension = onBrowseAvailableExtension,
                 )
             }
         }
@@ -187,6 +192,8 @@ private fun ExtensionContent(
     onUninstallJar: (Extension.Jar) -> Unit = {},
     onInstallAvailableJar: (Extension.AvailableJar) -> Unit = {},
     onUpdateJar: (Extension.Jar) -> Unit = {},
+    onBrowseAvailableJar: (Extension.AvailableJar) -> Unit = {},
+    onBrowseAvailableExtension: (Extension.Available) -> Unit = {},
 ) {
     val context = LocalContext.current
     var trustState by remember { mutableStateOf<Extension.Untrusted?>(null) }
@@ -332,6 +339,8 @@ private fun ExtensionContent(
                         onClickItemSideload = {
                             onSideloadExtension(it)
                         },
+                        onClickItemBrowseAvailableJar = onBrowseAvailableJar,
+                        onClickItemBrowseAvailableExtension = onBrowseAvailableExtension,
                     )
                 }
             }
@@ -363,6 +372,8 @@ private fun ExtensionItem(
     onClickItemAction: (Extension) -> Unit,
     onClickItemSecondaryAction: (Extension) -> Unit,
     onClickItemSideload: (Extension) -> Unit,
+    onClickItemBrowseAvailableJar: (Extension.AvailableJar) -> Unit,
+    onClickItemBrowseAvailableExtension: (Extension.Available) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val (extension, installStep) = item
@@ -405,6 +416,8 @@ private fun ExtensionItem(
                 onClickItemAction = onClickItemAction,
                 onClickItemSecondaryAction = onClickItemSecondaryAction,
                 onClickItemSideload = onClickItemSideload,
+                onClickItemBrowseAvailableJar = onClickItemBrowseAvailableJar,
+                onClickItemBrowseAvailableExtension = onClickItemBrowseAvailableExtension,
             )
         },
     ) {
@@ -515,6 +528,8 @@ private fun ExtensionItemActions(
     onClickItemAction: (Extension) -> Unit = {},
     onClickItemSecondaryAction: (Extension) -> Unit = {},
     onClickItemSideload: (Extension) -> Unit = {},
+    onClickItemBrowseAvailableJar: (Extension.AvailableJar) -> Unit = {},
+    onClickItemBrowseAvailableExtension: (Extension.Available) -> Unit = {},
 ) {
     val isIdle = installStep.isCompleted()
 
@@ -567,6 +582,12 @@ private fun ExtensionItemActions(
                     }
                     is Extension.Jar -> {}
                     is Extension.AvailableJar -> {
+                        IconButton(onClick = { onClickItemBrowseAvailableJar(extension) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Explore,
+                                contentDescription = "Browse",
+                            )
+                        }
                         IconButton(onClick = { onClickItemAction(extension) }) {
                             Icon(
                                 imageVector = Icons.Outlined.GetApp,
@@ -583,6 +604,13 @@ private fun ExtensionItemActions(
                         }
                     }
                     is Extension.Available -> {
+                        IconButton(onClick = { onClickItemBrowseAvailableExtension(extension) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Explore,
+                                contentDescription = "Browse",
+                            )
+                        }
+
                         if (extension.sources.isNotEmpty()) {
                             IconButton(
                                 onClick = { onClickItemSecondaryAction(extension) },

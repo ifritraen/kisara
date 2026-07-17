@@ -223,6 +223,15 @@ class SourcesScreenModel(
         }
     }
 
+    fun reorderPinnedSources(pinnedSources: List<Source>, fromIdx: Int, toIdx: Int) {
+        val currentOrdered = pinnedSources.map { it.id.toString() }.toMutableList()
+        if (fromIdx in currentOrdered.indices && toIdx in currentOrdered.indices) {
+            val item = currentOrdered.removeAt(fromIdx)
+            currentOrdered.add(toIdx, item)
+            sourcePreferences.pinnedSourcesOrdered().set(currentOrdered.joinToString(","))
+        }
+    }
+
     // SY -->
     fun toggleExcludeFromDataSaver(source: Source) {
         toggleExcludeFromDataSaver.await(source)

@@ -145,13 +145,13 @@ abstract class PagerViewer(
                 NavigationRegion.LEFT -> moveLeft()
             }
         }
-        pager.longTapListener = f@{
+        pager.longTapListener = f@{ ev ->
             if (activity.viewModel.state.value.menuVisible || config.longTapEnabled) {
                 val item = adapter.joinedItems.getOrNull(pager.currentItem)
                 val firstPage = item?.first as? ReaderPage
                 val secondPage = item?.second as? ReaderPage
                 if (firstPage is ReaderPage) {
-                    activity.onPageLongTap(firstPage, secondPage)
+                    activity.onPageLongTap(firstPage, secondPage, ev)
                     return@f true
                 }
             }
@@ -431,7 +431,7 @@ abstract class PagerViewer(
      * Resets the adapter in order to recreate all the views. Used when a image configuration is
      * changed.
      */
-    private fun refreshAdapter() {
+    fun refreshAdapter() {
         val currentItem = pager.currentItem
         adapter.refresh()
         pager.adapter = adapter

@@ -108,12 +108,22 @@ class HistoryScreenModel(
                         .flowOn(Dispatchers.IO)
                 }
                 .collect { newList ->
+                    val mangaRepository = Injekt.get<tachiyomi.domain.manga.repository.MangaRepository>()
+                    val sourcePreferences = Injekt.get<eu.kanade.domain.source.service.SourcePreferences>()
+                    val blockedTags = sourcePreferences.blockedTags().get().map { it.lowercase().trim() }.toSet()
+                    val localMangasMap = (mangaRepository.getFavorites() + mangaRepository.getReadMangaNotInLibrary())
+                        .associateBy { it.id }
+
+                    val filteredList = newList.filter { historyItem ->
+                        val manga = localMangasMap[historyItem.mangaId]
+                        manga == null || manga.genre.orEmpty().none { genre ->
+                            blockedTags.contains(genre.lowercase().trim())
+                        }
+                    }
                     mutableState.update {
                         it.copy(
-                            // KMK -->
                             isLoading = false,
-                            list = newList.toImmutableList(),
-                            // KMK <--
+                            list = filteredList.toImmutableList(),
                         )
                     }
                 }

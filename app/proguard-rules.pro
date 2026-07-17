@@ -1,8 +1,8 @@
 -dontobfuscate
 
--keep,allowoptimization class eu.kanade.**
--keep,allowoptimization class tachiyomi.**
--keep,allowoptimization class mihon.**
+-keep class eu.kanade.** { *; }
+-keep class tachiyomi.** { *; }
+-keep class mihon.** { *; }
 
 # Keep Kotatsu Parsers package intact for sideloaded jars
 -keep class org.koitharu.kotatsu.parsers.** { *; }

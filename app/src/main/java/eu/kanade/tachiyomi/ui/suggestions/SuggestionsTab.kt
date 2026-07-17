@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -187,183 +189,248 @@ fun suggestionsTab(
             }
 
             PullRefresh(
-                refreshing = isRefreshing,
+                refreshing = state.isLoading,
                 enabled = true,
                 onRefresh = {
-                    scope.launch {
-                        isRefreshing = true
-                        screenModel.triggerRefresh(context)
-                        isRefreshing = false
-                    }
+                    screenModel.triggerRefresh(context)
                 },
             ) {
-                if (state.isLoading) {
-                    LoadingScreen(modifier = Modifier.padding(paddingValues))
-                } else if (dynamicSuggestions.isEmpty()) {
-                    EmptyScreen(
-                        modifier = Modifier.padding(paddingValues),
-                        message = stringResource(KMR.strings.pref_suggestions_summary) + "\n\nPull down or tap Refresh to search sources.",
-                    )
-                } else {
-                    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
-                    val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
-                    val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
-                    val showLocalBadge by libraryPreferences.localBadge().collectAsState()
-                    val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
-                    val useLangIcon by libraryPreferences.useLangIcon().collectAsState()
-                    val showSourceBadge by libraryPreferences.sourceBadge().collectAsState()
-
-                    val downloadManager = remember { Injekt.get<DownloadManager>() }
-                    val sourceManager = remember { Injekt.get<SourceManager>() }
-                    val libraryMangaList by remember { Injekt.get<GetLibraryManga>().subscribe() }.collectAsState(initial = emptyList())
-
-                    val orientation = LocalConfiguration.current.orientation
-                    val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
-                    val columnsCount = if (isLandscape) {
-                        libraryPreferences.landscapeColumns()
-                    } else {
-                        libraryPreferences.portraitColumns()
-                    }.collectAsState().value
-                    val columns = if (columnsCount == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columnsCount)
-
-                    val gridState = rememberLazyGridState()
-                    val shouldLoadMore = remember {
-                        derivedStateOf {
-                            val lastVisibleItem = gridState.layoutInfo.visibleItemsInfo.lastOrNull()
-                                ?: return@derivedStateOf false
-                            lastVisibleItem.index >= gridState.layoutInfo.totalItemsCount - 4
-                        }
-                    }
-
-                    androidx.compose.runtime.LaunchedEffect(shouldLoadMore.value) {
-                        if (shouldLoadMore.value && !state.isLoadingNext) {
-                            screenModel.loadNextRank(context)
-                        }
-                    }
-
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = columns,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            top = paddingValues.calculateTopPadding() + 8.dp,
-                            bottom = paddingValues.calculateBottomPadding() + 8.dp,
-                            start = 8.dp,
-                            end = 8.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridVerticalSpacer),
-                        horizontalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridHorizontalSpacer),
-                    ) {
-                        items(
-                            items = dynamicSuggestions,
-                            key = { "suggestion-${it.manga.id}" },
-                        ) { suggestion ->
-                            val manga = suggestion.manga
-                            MangaCompactGridItem(
-                                title = manga.title,
-                                coverData = MangaCover(
-                                    mangaId = manga.id,
-                                    sourceId = manga.source,
-                                    isMangaFavorite = manga.favorite,
-                                    ogUrl = manga.thumbnailUrl,
-                                    lastModified = manga.coverLastModified,
-                                ),
-                                onClick = { navigator.push(MangaScreen(manga.id)) },
-                                onLongClick = { screenModel.toggleFavorite(manga) },
-                                manga = manga,
-                                coverAlpha = if (manga.favorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
-                                coverBadgeStart = {
-                                    val downloadCount = remember(manga.id) { downloadManager.getDownloadCount(manga).toLong() }
-                                    val libraryManga = remember(libraryMangaList, manga.id) { libraryMangaList.firstOrNull { it.id == manga.id } }
-
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (showDownloadBadge && downloadCount > 0) {
-                                            DownloadsBadge(count = downloadCount)
-                                        }
-                                        if (showUnreadBadge && (libraryManga?.unreadCount ?: 0L) > 0) {
-                                            UnreadBadge(count = libraryManga?.unreadCount ?: 0L)
-                                        }
-                                        if (manga.favorite) {
-                                            InLibraryBadge(enabled = true)
-                                        } else {
-                                            IconButton(
-                                                onClick = { screenModel.dismissSuggestion(manga.url, manga.title) },
-                                                modifier = Modifier
-                                                    .padding(4.dp)
-                                                    .size(24.dp)
-                                                    .background(
-                                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                                        shape = CircleShape,
-                                                    ),
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.Close,
-                                                    contentDescription = "Dismiss",
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurface,
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                coverBadgeEnd = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        val isLocal = sourceManager.get(manga.source)?.isLocal() == true
-                                        val lang = sourceManager.get(manga.source)?.lang.orEmpty()
-                                        val source = sourceManager.get(manga.source)
-
-                                        if (showLocalBadge && isLocal) {
-                                            Badge(
-                                                imageVector = Icons.Outlined.Folder,
-                                                color = MaterialTheme.colorScheme.tertiary,
-                                                iconColor = MaterialTheme.colorScheme.onTertiary,
-                                            )
-                                        }
-                                        if (showLanguageBadge && source != null && !isLocal && lang.isNotEmpty()) {
-                                            LanguageBadge(
-                                                isLocal = false,
-                                                sourceLanguage = lang,
-                                                useLangIcon = useLangIcon,
-                                            )
-                                        }
-                                        if (showSourceBadge && source != null) {
-                                            val domainSource = remember(source) {
-                                                tachiyomi.domain.source.model.Source(
-                                                    id = source.id,
-                                                    lang = source.lang,
-                                                    name = source.name,
-                                                    supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
-                                                    isStub = false,
-                                                )
-                                            }
-                                            SourceIconBadge(source = domainSource)
-                                        }
-
-                                        IconButton(
-                                            onClick = { explainingSuggestion = suggestion },
-                                            modifier = Modifier
-                                                .padding(4.dp)
-                                                .size(24.dp)
-                                                .background(
-                                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                                    shape = CircleShape,
-                                                ),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Info,
-                                                contentDescription = "Explain Score",
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                        }
-                                    }
-                                },
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = paddingValues.calculateTopPadding())
+                ) {
+                    // 1. Progress line at the very top
+                    if (state.isLoading) {
+                        val progress = state.fetchProgress
+                        val total = state.fetchTotal
+                        if (total > 0) {
+                            LinearProgressIndicator(
+                                progress = { progress.toFloat() / total.toFloat() },
+                                modifier = Modifier.fillMaxWidth().height(2.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth().height(2.dp),
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
+                    }
 
-                        if (state.isLoadingNext) {
-                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                BrowseSourceLoadingItem()
+                    // 2. Info Row in the same line
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { screenModel.triggerRefresh(context) },
+                                enabled = !state.isLoading,
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Refresh,
+                                    contentDescription = "Refresh Suggestions",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (state.isLoading) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Total: ${dynamicSuggestions.size}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (state.isLoading && state.fetchProgress > 0) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                val newCount = dynamicSuggestions.size - screenModel.initialCount
+                                val displayedNew = if (newCount > 0) newCount else 0
+                                Text(
+                                    text = "New: $displayedNew",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        if (state.isLoading && state.fetchTotal > 0) {
+                            Text(
+                                text = "Progress: ${state.fetchProgress}/${state.fetchTotal}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // 3. Content area
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        if (state.isLoading && dynamicSuggestions.isEmpty()) {
+                            LoadingScreen(modifier = Modifier.fillMaxSize())
+                        } else if (dynamicSuggestions.isEmpty() && !state.isLoading) {
+                            EmptyScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                message = stringResource(KMR.strings.pref_suggestions_summary) + "\n\nPull down or tap Refresh to search sources.",
+                            )
+                        } else {
+                            val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+                            val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
+                            val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
+                            val showLocalBadge by libraryPreferences.localBadge().collectAsState()
+                            val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
+                            val useLangIcon by libraryPreferences.useLangIcon().collectAsState()
+                            val showSourceBadge by libraryPreferences.sourceBadge().collectAsState()
+
+                            val downloadManager = remember { Injekt.get<DownloadManager>() }
+                            val sourceManager = remember { Injekt.get<SourceManager>() }
+                            val libraryMangaList by remember { Injekt.get<GetLibraryManga>().subscribe() }.collectAsState(initial = emptyList())
+
+                            val orientation = LocalConfiguration.current.orientation
+                            val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
+                            val columnsCount = if (isLandscape) {
+                                libraryPreferences.landscapeColumns()
+                            } else {
+                                libraryPreferences.portraitColumns()
+                            }.collectAsState().value
+                            val columns = if (columnsCount == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columnsCount)
+
+                            val gridState = rememberLazyGridState()
+                            val shouldLoadMore = remember {
+                                derivedStateOf {
+                                    val lastVisibleItem = gridState.layoutInfo.visibleItemsInfo.lastOrNull()
+                                        ?: return@derivedStateOf false
+                                    lastVisibleItem.index >= gridState.layoutInfo.totalItemsCount - 4
+                                }
+                            }
+
+                            androidx.compose.runtime.LaunchedEffect(shouldLoadMore.value) {
+                                if (shouldLoadMore.value && !state.isLoadingNext) {
+                                    screenModel.loadNextRank(context)
+                                }
+                            }
+
+                            LazyVerticalGrid(
+                                state = gridState,
+                                columns = columns,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    top = 8.dp,
+                                    bottom = paddingValues.calculateBottomPadding() + 8.dp,
+                                    start = 8.dp,
+                                    end = 8.dp,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridVerticalSpacer),
+                                horizontalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridHorizontalSpacer),
+                            ) {
+                                items(
+                                    items = dynamicSuggestions,
+                                    key = { "suggestion-${it.manga.id}" },
+                                ) { suggestion ->
+                                    val manga = suggestion.manga
+                                    MangaCompactGridItem(
+                                        title = manga.title,
+                                        coverData = MangaCover(
+                                            mangaId = manga.id,
+                                            sourceId = manga.source,
+                                            isMangaFavorite = manga.favorite,
+                                            ogUrl = manga.thumbnailUrl,
+                                            lastModified = manga.coverLastModified,
+                                        ),
+                                        onClick = { navigator.push(MangaScreen(manga.id)) },
+                                        onLongClick = { screenModel.toggleFavorite(manga) },
+                                        manga = manga,
+                                        coverAlpha = if (manga.favorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                                        coverBadgeStart = {
+                                            val downloadCount = remember(manga.id) { downloadManager.getDownloadCount(manga).toLong() }
+                                            val libraryManga = remember(libraryMangaList, manga.id) { libraryMangaList.firstOrNull { it.id == manga.id } }
+
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (showDownloadBadge && downloadCount > 0) {
+                                                    DownloadsBadge(count = downloadCount)
+                                                }
+                                                if (showUnreadBadge && (libraryManga?.unreadCount ?: 0L) > 0) {
+                                                    UnreadBadge(count = libraryManga?.unreadCount ?: 0L)
+                                                }
+                                                if (manga.favorite) {
+                                                    InLibraryBadge(enabled = true)
+                                                } else {
+                                                    IconButton(
+                                                        onClick = { screenModel.dismissSuggestion(manga.url, manga.title) },
+                                                        modifier = Modifier
+                                                            .padding(4.dp)
+                                                            .size(24.dp)
+                                                            .background(
+                                                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                                                shape = CircleShape,
+                                                            ),
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Outlined.Close,
+                                                            contentDescription = "Dismiss",
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = MaterialTheme.colorScheme.onSurface,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        coverBadgeEnd = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                val isLocal = sourceManager.get(manga.source)?.isLocal() == true
+                                                val lang = sourceManager.get(manga.source)?.lang.orEmpty()
+                                                val source = sourceManager.get(manga.source)
+
+                                                if (showLocalBadge && isLocal) {
+                                                    Badge(
+                                                        imageVector = Icons.Outlined.Folder,
+                                                        color = MaterialTheme.colorScheme.tertiary,
+                                                        iconColor = MaterialTheme.colorScheme.onTertiary,
+                                                    )
+                                                }
+                                                if (showLanguageBadge && source != null && !isLocal && lang.isNotEmpty()) {
+                                                    LanguageBadge(
+                                                        isLocal = false,
+                                                        sourceLanguage = lang,
+                                                        useLangIcon = useLangIcon,
+                                                    )
+                                                }
+                                                if (showSourceBadge && source != null) {
+                                                    val domainSource = remember(source) {
+                                                        tachiyomi.domain.source.model.Source(
+                                                            id = source.id,
+                                                            lang = source.lang,
+                                                            name = source.name,
+                                                            supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
+                                                            isStub = false,
+                                                        )
+                                                    }
+                                                    SourceIconBadge(source = domainSource)
+                                                }
+
+                                                IconButton(
+                                                    onClick = { explainingSuggestion = suggestion },
+                                                    modifier = Modifier
+                                                        .padding(4.dp)
+                                                        .size(24.dp)
+                                                        .background(
+                                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                                            shape = CircleShape,
+                                                        ),
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Info,
+                                                        contentDescription = "Explain relevance score",
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.onSurface,
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

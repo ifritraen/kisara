@@ -120,6 +120,7 @@ fun Screen.sourcesTab(
                 },
                 onClickPin = screenModel::togglePin,
                 onLongClickItem = screenModel::showSourceDialog,
+                onClickReorderPin = screenModel::reorderPinnedSources,
                 // KMK -->
                 onChangeSearchQuery = screenModel::search,
                 // KMK <--

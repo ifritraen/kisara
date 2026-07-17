@@ -25,8 +25,13 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import mihon.domain.manga.model.toDomainManga
+import tachiyomi.core.common.preference.CheckboxState
+import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.category.interactor.GetCategories
+import tachiyomi.domain.category.interactor.SetMangaCategories
+import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.history.interactor.GetHistory
 import tachiyomi.domain.history.model.HistoryWithRelations
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -91,18 +96,8 @@ class LandingScreenModel(
                 val activeTags = nonBlockedTags.filter { top10Tags.contains(it.tag) || it.isUserAdded }
                     .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
 
-                val top1Tag = activeTags.firstOrNull()?.tag
-                val filtered = if (top1Tag != null) {
-                    suggestions.filter { suggestion ->
-                        suggestion.manga.genre.orEmpty().any { g ->
-                            g.lowercase().trim() == top1Tag.lowercase().trim()
-                        }
-                    }
-                } else {
-                    emptyList()
-                }
-                val finalSuggestions = if (filtered.isNotEmpty()) filtered else suggestions
-                finalSuggestions.take(15) to top1Tag
+                val finalSuggestions = suggestions.take(15)
+                finalSuggestions to null
             }.collectLatest { (suggestions, tag) ->
                 mutableState.update { it.copy(suggestions = suggestions.toImmutableList(), suggestionsTagName = tag) }
             }
@@ -179,19 +174,81 @@ class LandingScreenModel(
 
     fun toggleFavorite(mangaId: Long, isFavorite: Boolean) {
         screenModelScope.launchIO {
-            updateManga.awaitUpdateFavorite(mangaId, !isFavorite)
+            val getManga = Injekt.get<tachiyomi.domain.manga.interactor.GetManga>()
+            val dbManga = getManga.await(mangaId) ?: return@launchIO
 
-            // Also update feed cache state if the manga is in the feed
-            mutableState.update { currentState ->
-                val updatedFeed = currentState.feed.map { item ->
-                    if (item.id == mangaId) {
-                        item.copy(favorite = !isFavorite)
-                    } else {
-                        item
+            val isFavoriteNow = !isFavorite
+            if (isFavoriteNow) {
+                val getCategories = Injekt.get<GetCategories>()
+                val categories = getCategories.await().filterNot { it.isSystemCategory }
+                val libraryPreferences = Injekt.get<LibraryPreferences>()
+                val defaultCategoryId = libraryPreferences.defaultCategory().get()
+                val defaultCategory = categories.find { it.id == defaultCategoryId.toLong() }
+
+                when {
+                    defaultCategoryId == -1 && categories.isNotEmpty() -> {
+                        val initialSelection = categories.mapAsCheckboxState { false }.toImmutableList()
+                        mutableState.update { state ->
+                            state.copy(
+                                dialog = State.Dialog.ChangeCategory(
+                                    manga = dbManga,
+                                    initialSelection = initialSelection,
+                                ),
+                            )
+                        }
+                    }
+                    defaultCategory != null -> {
+                        updateManga.awaitUpdateFavorite(mangaId, true)
+                        val setMangaCategories = Injekt.get<SetMangaCategories>()
+                        setMangaCategories.await(mangaId, listOf(defaultCategory.id))
+                        updateLocalFavoriteState(mangaId, true)
+                    }
+                    else -> {
+                        updateManga.awaitUpdateFavorite(mangaId, true)
+                        updateLocalFavoriteState(mangaId, true)
                     }
                 }
-                currentState.copy(feed = updatedFeed.toImmutableList())
+            } else {
+                updateManga.awaitUpdateFavorite(mangaId, false)
+                updateLocalFavoriteState(mangaId, false)
             }
+        }
+    }
+
+    fun setMangaCategories(manga: Manga, categories: List<Long>) {
+        screenModelScope.launchIO {
+            updateManga.awaitUpdateFavorite(manga.id, true)
+            val setMangaCategories = Injekt.get<SetMangaCategories>()
+            setMangaCategories.await(manga.id, categories)
+            updateLocalFavoriteState(manga.id, true)
+            dismissDialog()
+        }
+    }
+
+    fun dismissDialog() {
+        mutableState.update { it.copy(dialog = null) }
+    }
+
+    private fun updateLocalFavoriteState(mangaId: Long, favorite: Boolean) {
+        mutableState.update { currentState ->
+            val updatedFeed = currentState.feed.map { item ->
+                if (item.id == mangaId) item.copy(favorite = favorite) else item
+            }
+            val updatedSuggestions = currentState.suggestions.map { suggestion ->
+                if (suggestion.manga.id == mangaId) {
+                    suggestion.copy(manga = suggestion.manga.copy(favorite = favorite))
+                } else {
+                    suggestion
+                }
+            }
+            val updatedLibraryRandom = currentState.libraryRandom.map { manga ->
+                if (manga.id == mangaId) manga.copy(favorite = favorite) else manga
+            }
+            currentState.copy(
+                feed = updatedFeed.toImmutableList(),
+                suggestions = updatedSuggestions.toImmutableList(),
+                libraryRandom = updatedLibraryRandom.toImmutableList(),
+            )
         }
     }
 
@@ -292,10 +349,14 @@ class LandingScreenModel(
 
                 // Interleave/Mix results together
                 val mixedList = mutableListOf<CachedFeedManga>()
+                val seenIds = mutableSetOf<Long>()
                 for (i in 0 until feedItemLimit) {
                     for (sourceList in results) {
                         if (i < sourceList.size) {
-                            mixedList.add(sourceList[i])
+                            val item = sourceList[i]
+                            if (seenIds.add(item.id)) {
+                                mixedList.add(item)
+                            }
                         }
                     }
                 }
@@ -326,5 +387,13 @@ class LandingScreenModel(
         val feed: ImmutableList<CachedFeedManga> = emptyList<CachedFeedManga>().toImmutableList(),
         val isFeedRefreshing: Boolean = false,
         val isLoading: Boolean = true,
-    )
+        val dialog: Dialog? = null,
+    ) {
+        sealed interface Dialog {
+            data class ChangeCategory(
+                val manga: Manga,
+                val initialSelection: ImmutableList<CheckboxState<Category>>,
+            ) : Dialog
+        }
+    }
 }

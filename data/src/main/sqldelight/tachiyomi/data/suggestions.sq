@@ -6,6 +6,28 @@ CREATE TABLE suggestions(
 
 CREATE INDEX idx_suggestions_relevance ON suggestions(relevance);
 
+CREATE TABLE suggestion_tags (
+    tag TEXT NOT NULL PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_user_added INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE suggestion_sources (
+    source_id INTEGER NOT NULL PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_user_added INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE suggestion_dismissed (
+    manga_url TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
 getSuggestions:
 SELECT
     mangas.*,
@@ -23,7 +45,7 @@ deleteAllSuggestions:
 DELETE FROM suggestions;
 
 insertSuggestion:
-INSERT INTO suggestions(manga_id, relevance, created_at)
+INSERT OR REPLACE INTO suggestions(manga_id, relevance, created_at)
 VALUES (:mangaId, :relevance, :createdAt);
 
 updateSuggestion:
@@ -34,3 +56,57 @@ WHERE manga_id = :mangaId;
 deleteSuggestion:
 DELETE FROM suggestions
 WHERE manga_id = :mangaId;
+
+-- Tag queries
+getSuggestionTags:
+SELECT * FROM suggestion_tags ORDER BY sort_order ASC, count DESC;
+
+insertSuggestionTag:
+INSERT OR REPLACE INTO suggestion_tags(tag, count, is_blocked, is_user_added, sort_order)
+VALUES (:tag, :count, :isBlocked, :isUserAdded, :sortOrder);
+
+updateSuggestionTag:
+UPDATE suggestion_tags
+SET count = :count, is_blocked = :isBlocked, is_user_added = :isUserAdded, sort_order = :sortOrder
+WHERE tag = :tag;
+
+deleteSuggestionTag:
+DELETE FROM suggestion_tags WHERE tag = :tag;
+
+deleteAllSuggestionTags:
+DELETE FROM suggestion_tags;
+
+-- Source/Extension queries
+getSuggestionSources:
+SELECT * FROM suggestion_sources ORDER BY sort_order ASC, count DESC;
+
+insertSuggestionSource:
+INSERT OR REPLACE INTO suggestion_sources(source_id, count, is_blocked, is_user_added, sort_order)
+VALUES (:sourceId, :count, :isBlocked, :isUserAdded, :sortOrder);
+
+updateSuggestionSource:
+UPDATE suggestion_sources
+SET count = :count, is_blocked = :isBlocked, is_user_added = :isUserAdded, sort_order = :sortOrder
+WHERE source_id = :sourceId;
+
+deleteSuggestionSource:
+DELETE FROM suggestion_sources WHERE source_id = :sourceId;
+
+deleteAllSuggestionSources:
+DELETE FROM suggestion_sources;
+
+-- Dismissed queries
+getDismissedSuggestions:
+SELECT * FROM suggestion_dismissed;
+
+insertDismissedSuggestion:
+INSERT OR REPLACE INTO suggestion_dismissed(manga_url, title, created_at)
+VALUES (:mangaUrl, :title, :createdAt);
+
+deleteDismissedSuggestion:
+DELETE FROM suggestion_dismissed WHERE manga_url = :mangaUrl;
+
+deleteAllDismissedSuggestions:
+DELETE FROM suggestion_dismissed;
+
+

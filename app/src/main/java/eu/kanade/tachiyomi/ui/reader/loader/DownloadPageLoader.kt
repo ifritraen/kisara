@@ -79,6 +79,7 @@ internal class DownloadPageLoader(
                 val fileName = page.uri?.path?.substringAfterLast("/")
                 if (fileName != null) {
                     translation = translations[fileName]
+                    translationKey = fileName
                 }
                 // KMK <--
             }

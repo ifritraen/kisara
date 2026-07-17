@@ -129,20 +129,20 @@ fun LibraryContent(
         val scope = rememberCoroutineScope()
         var isRefreshing by remember(pagerState.currentPage) { mutableStateOf(false) }
 
+        LaunchedEffect(tabCategories, activeCategoryIndex) {
+            val targetPage = when {
+                tabCategories.isEmpty() -> 0
+                activeCategoryIndex != pagerState.currentPage && activeCategoryIndex in tabCategories.indices -> activeCategoryIndex
+                pagerState.currentPage >= tabCategories.size -> tabCategories.size - 1
+                else -> pagerState.currentPage
+            }
+            if (targetPage != pagerState.currentPage) {
+                pagerState.scrollToPage(targetPage)
+            }
+        }
+
         // Show tabs if needed
         if (showPageTabs && tabCategories.isNotEmpty() && (tabCategories.size > 1 || !tabCategories.first().isSystemCategory)) {
-            LaunchedEffect(tabCategories, activeCategoryIndex) {
-                val targetPage = when {
-                    tabCategories.isEmpty() -> 0
-                    activeCategoryIndex != pagerState.currentPage && activeCategoryIndex in tabCategories.indices -> activeCategoryIndex
-                    pagerState.currentPage >= tabCategories.size -> tabCategories.size - 1
-                    else -> pagerState.currentPage
-                }
-                if (targetPage != pagerState.currentPage) {
-                    pagerState.scrollToPage(targetPage)
-                }
-            }
-
             LibraryTabs(
                 categories = tabCategories,
                 pagerState = pagerState,

@@ -1,11 +1,18 @@
 package eu.kanade.presentation.more.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
@@ -76,11 +83,32 @@ fun PreferenceScreen(
                         }
                     }
                     if (isExpanded) {
-                        items(preference.preferenceItems) { item ->
-                            PreferenceItem(
-                                item = item,
-                                highlightKey = highlightKey,
-                            )
+                        item {
+                            Surface(
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                                    .fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f),
+                                ),
+                            ) {
+                                Column {
+                                    preference.preferenceItems.forEachIndexed { index, item ->
+                                        PreferenceItem(
+                                            item = item,
+                                            highlightKey = highlightKey,
+                                        )
+                                        if (index < preference.preferenceItems.lastIndex) {
+                                            HorizontalDivider(
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.08f),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     item {
@@ -92,10 +120,22 @@ fun PreferenceScreen(
 
                 // Create Preference Item
                 is Preference.PreferenceItem<*, *> -> item {
-                    PreferenceItem(
-                        item = preference,
-                        highlightKey = highlightKey,
-                    )
+                    Surface(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f),
+                        ),
+                    ) {
+                        PreferenceItem(
+                            item = preference,
+                            highlightKey = highlightKey,
+                        )
+                    }
                 }
             }
         }

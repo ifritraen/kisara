@@ -96,6 +96,12 @@ object JarExtensionManager {
 
     fun getInstalledJars(): List<LoadedJarPlugin> = plugins.values.toList()
 
+    fun getSourcesForJar(jarName: String): List<Long> {
+        val plugin = plugins[jarName] ?: return emptyList()
+        val sourceNames = plugin.sources.map { it.name }.toSet()
+        return sources.value.filter { it.originalSource.name in sourceNames }.map { it.id }
+    }
+
     fun initialize(context: Context) {
         val extensionDir = File(context.filesDir, "jar_extensions")
         if (!extensionDir.exists()) {

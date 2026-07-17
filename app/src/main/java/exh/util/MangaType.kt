@@ -54,7 +54,8 @@ fun Manga.mangaType(sourceName: String? = Injekt.get<SourceManager>().get(source
  * read types
  */
 fun Manga.defaultReaderType(type: MangaType = mangaType()): Int? {
-    return if (type in setOf(MangaType.TYPE_MANHUA, MangaType.TYPE_MANHWA, MangaType.TYPE_WEBTOON)) {
+    val isColorized = eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(this, title)
+    return if (type in setOf(MangaType.TYPE_MANHUA, MangaType.TYPE_MANHWA, MangaType.TYPE_WEBTOON) || isColorized) {
         ReadingMode.WEBTOON.flagValue
     } else {
         null

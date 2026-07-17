@@ -21,6 +21,10 @@ data class BackupOptions(
     val customInfo: Boolean = true,
     val savedSearchesFeeds: Boolean = true,
     // SY <--
+    // KMK -->
+    val sideloadedExtensions: Boolean = true,
+    val vpnSettings: Boolean = true,
+    // KMK <--
 ) {
 
     fun asBooleanArray() = booleanArrayOf(
@@ -38,10 +42,14 @@ data class BackupOptions(
         customInfo,
         savedSearchesFeeds,
         // SY <--
+        // KMK -->
+        sideloadedExtensions,
+        vpnSettings,
+        // KMK <--
     )
 
     fun canCreate() =
-        libraryEntries || categories || appSettings || extensionRepoSettings || sourceSettings || savedSearchesFeeds
+        libraryEntries || categories || appSettings || extensionRepoSettings || sourceSettings || savedSearchesFeeds || sideloadedExtensions || vpnSettings
 
     companion object {
         val libraryOptions = persistentListOf(
@@ -118,6 +126,18 @@ data class BackupOptions(
                 setter = { options, enabled -> options.copy(privateSettings = enabled) },
                 enabled = { it.appSettings || it.sourceSettings },
             ),
+            // KMK -->
+            Entry(
+                label = KMR.strings.sideloaded_extensions,
+                getter = BackupOptions::sideloadedExtensions,
+                setter = { options, enabled -> options.copy(sideloadedExtensions = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.vpn_settings,
+                getter = BackupOptions::vpnSettings,
+                setter = { options, enabled -> options.copy(vpnSettings = enabled) },
+            ),
+            // KMK <--
         )
 
         fun fromBooleanArray(array: BooleanArray) = BackupOptions(
@@ -135,6 +155,10 @@ data class BackupOptions(
             customInfo = array[10],
             savedSearchesFeeds = array[11],
             // SY <--
+            // KMK -->
+            sideloadedExtensions = array.getOrElse(12) { true },
+            vpnSettings = array.getOrElse(13) { true },
+            // KMK <--
         )
     }
 

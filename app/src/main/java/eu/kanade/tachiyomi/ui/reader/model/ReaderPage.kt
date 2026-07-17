@@ -29,5 +29,6 @@ open class ReaderPage(
 
     // KMK -->
     var translation: PageTranslation? = null
+    var translationKey: String? = null
     // KMK <--
 }

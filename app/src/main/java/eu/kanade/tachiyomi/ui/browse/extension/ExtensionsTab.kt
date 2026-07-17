@@ -77,6 +77,7 @@ fun extensionsTab(
     var sideloadErrorExtName by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
+        extensionsScreenModel.cleanupTemporaryExtensions()
         launch {
             BrowseTab.extensionsSearchEvent.receiveAsFlow().collectLatest {
                 extensionsScreenModel.search("")
@@ -214,6 +215,30 @@ fun extensionsTab(
                 onUninstallJar = extensionsScreenModel::uninstallJarExtension,
                 onInstallAvailableJar = extensionsScreenModel::installAvailableJar,
                 onUpdateJar = extensionsScreenModel::updateJarExtension,
+                onBrowseAvailableJar = { extension ->
+                    extensionsScreenModel.browseAvailableJar(context, extension) { sourceId ->
+                        val uiPreferences = Injekt.get<UiPreferences>()
+                        val useNewSourceNavigation = uiPreferences.useNewSourceNavigation().get()
+                        val screen = if (useNewSourceNavigation) {
+                            SourceFeedScreen(sourceId)
+                        } else {
+                            BrowseSourceScreen(sourceId, GetRemoteManga.QUERY_POPULAR)
+                        }
+                        navigator.push(screen)
+                    }
+                },
+                onBrowseAvailableExtension = { extension ->
+                    extensionsScreenModel.browseAvailableExtension(extension) { sourceId ->
+                        val uiPreferences = Injekt.get<UiPreferences>()
+                        val useNewSourceNavigation = uiPreferences.useNewSourceNavigation().get()
+                        val screen = if (useNewSourceNavigation) {
+                            SourceFeedScreen(sourceId)
+                        } else {
+                            BrowseSourceScreen(sourceId, GetRemoteManga.QUERY_POPULAR)
+                        }
+                        navigator.push(screen)
+                    }
+                },
             )
 
             privateExtensionToUninstall?.let { extension ->

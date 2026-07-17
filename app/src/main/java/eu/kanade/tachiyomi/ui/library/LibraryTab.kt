@@ -700,6 +700,7 @@ data object LibraryTab : Tab {
                         GlassSurface(
                             shape = RoundedCornerShape(24.dp),
                             style = GlassDefaults.prominentStyle(),
+                            isCategoryBar = true,
                         ) {
                             Column(
                                 modifier = Modifier
@@ -853,6 +854,7 @@ data object LibraryTab : Tab {
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(24.dp),
                                 style = GlassDefaults.prominentStyle(),
+                                isCategoryBar = true,
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -971,7 +973,12 @@ data object LibraryTab : Tab {
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             itemsIndexed(tabCategories) { idx, cat ->
-                                                val isSelected = state.activeCategoryIndex == idx
+                                                val targetIndex = remember(cat, state.categories) {
+                                                    state.categories.indexOfFirst { it.id == cat.id }.coerceAtLeast(0)
+                                                }
+                                                val isSelected = remember(state.activeCategoryIndex, targetIndex) {
+                                                    state.activeCategoryIndex == targetIndex
+                                                }
                                                 val scale by animateFloatAsState(
                                                     targetValue = if (categoryBarCarouselStyle && isSelected) 1.2f else 1.0f,
                                                     label = "scaleAnimation",
@@ -998,7 +1005,7 @@ data object LibraryTab : Tab {
                                                 FilterChip(
                                                     selected = isSelected,
                                                     onClick = {
-                                                        screenModel.updateActiveCategoryIndex(idx)
+                                                        screenModel.updateActiveCategoryIndex(targetIndex)
                                                         if (showParentFilters) {
                                                             activeSubcategoryId = null
                                                         }

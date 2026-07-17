@@ -200,11 +200,6 @@ class MainActivity : BaseActivity() {
     private val connectionsPreferences: ConnectionsPreferences by injectLazy()
     // <-- AM (CONNECTIONS)
 
-    private val vpnCleanupConnection = object : android.content.ServiceConnection {
-        override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {}
-        override fun onServiceDisconnected(name: android.content.ComponentName?) {}
-    }
-
     init {
         registerSecureActivity(this)
     }
@@ -272,13 +267,7 @@ class MainActivity : BaseActivity() {
             }
         }
 
-        try {
-            val intent = Intent(this, eu.kanade.tachiyomi.vpn.VpnCleanupService::class.java)
-            startService(intent)
-            bindService(intent, vpnCleanupConnection, android.content.Context.BIND_AUTO_CREATE)
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed to start/bind VpnCleanupService: ${e.message}", e)
-        }
+
 
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
         if (!isTaskRoot) {
@@ -932,14 +921,7 @@ class MainActivity : BaseActivity() {
         return true
     }
 
-    override fun onDestroy() {
-        try {
-            unbindService(vpnCleanupConnection)
-        } catch (e: Exception) {
-            // Ignore
-        }
-        super.onDestroy()
-    }
+
 
     companion object {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"

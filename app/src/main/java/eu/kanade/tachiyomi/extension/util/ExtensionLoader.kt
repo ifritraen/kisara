@@ -322,11 +322,12 @@ internal object ExtensionLoader {
             return LoadResult.Error
         }
 
+        val isSideloaded = LocalApkExtensionSupport.getLocalApkFiles(context).any { it.nameWithoutExtension == pkgName }
         val signatures = getSignatures(pkgInfo)
         if (signatures.isNullOrEmpty()) {
             logcat(LogPriority.WARN) { "Package $pkgName isn't signed" }
             return LoadResult.Error
-        } else if (!trustExtension.isTrusted(pkgInfo, signatures)) {
+        } else if (!isSideloaded && !trustExtension.isTrusted(pkgInfo, signatures)) {
             val extension = Extension.Untrusted(
                 extName,
                 pkgName,
@@ -351,8 +352,6 @@ internal object ExtensionLoader {
             logcat(LogPriority.WARN) { "NSFW extension $pkgName not allowed" }
             return LoadResult.Error
         }
-
-        val isSideloaded = LocalApkExtensionSupport.getLocalApkFiles(context).any { it.nameWithoutExtension == pkgName }
         val loadPath = if (isSideloaded) {
             LocalApkExtensionSupport.prepareLoadableApkPath(context, pkgName, appInfo.sourceDir)
         } else {
