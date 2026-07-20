@@ -443,7 +443,7 @@ fun ChangeCategoryDialog(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onChange(parentEntry) },
+                                        .clickable { onDirectAdd(parent.id) },
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     when (parentEntry) {
