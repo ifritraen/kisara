@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import mihon.domain.manga.model.toDomainManga
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.QuerySanitizer.sanitize
+import tachiyomi.core.common.util.QueryTransformer
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
@@ -78,8 +79,35 @@ abstract class SearchScreenModel(
                 mutableState.update { it.copy(sourceFilter = state) }
             }
         }
+        screenModelScope.launch {
+            preferences.searchClean().changes().collectLatest { v ->
+                mutableState.update { it.copy(searchClean = v) }
+            }
+        }
+        screenModelScope.launch {
+            preferences.searchFormat().changes().collectLatest { v ->
+                mutableState.update { it.copy(searchFormat = v) }
+            }
+        }
+        screenModelScope.launch {
+            preferences.searchFuzzy().changes().collectLatest { v ->
+                mutableState.update { it.copy(searchFuzzy = v) }
+            }
+        }
         // KMK <--
     }
+
+    // KMK -->
+    fun toggleSearchClean() {
+        preferences.searchClean().set(!state.value.searchClean)
+    }
+    fun toggleSearchFormat() {
+        preferences.searchFormat().set(!state.value.searchFormat)
+    }
+    fun toggleSearchFuzzy() {
+        preferences.searchFuzzy().set(!state.value.searchFuzzy)
+    }
+    // KMK <--
 
     @Composable
     fun getManga(initialManga: Manga): androidx.compose.runtime.State<Manga> {
@@ -184,8 +212,12 @@ abstract class SearchScreenModel(
                     }
 
                     try {
+                        // KMK -->
+                        val s = state.value
+                        val transformedQuery = QueryTransformer.transform(query, s.searchClean, s.searchFormat)
+                        // KMK <--
                         val page = withContext(coroutineDispatcher) {
-                            source.getSearchManga(1, query.sanitize(), source.getFilterList())
+                            source.getSearchManga(1, transformedQuery.sanitize(), source.getFilterList())
                         }
 
                         val titles = page.mangas
@@ -243,6 +275,11 @@ abstract class SearchScreenModel(
         val onlyShowHasResults: Boolean = false,
         val items: PersistentMap<CatalogueSource, SearchItemResult> = persistentMapOf(),
         val dialog: Dialog? = null,
+        // KMK -->
+        val searchClean: Boolean = false,
+        val searchFormat: Boolean = false,
+        val searchFuzzy: Boolean = false,
+        // KMK <--
     ) {
         val progress: Int = items.count { it.value !is SearchItemResult.Loading }
         val total: Int = items.size

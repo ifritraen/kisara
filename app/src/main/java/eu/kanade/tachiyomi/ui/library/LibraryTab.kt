@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,18 +33,24 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +59,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -90,6 +98,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import dev.chrisbanes.haze.hazeSource
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
@@ -413,48 +422,104 @@ data object LibraryTab : Tab {
                                     defaultCategoryTitle = stringResource(MR.strings.label_default),
                                     page = state.activeCategoryIndex,
                                 )
-                                LibraryToolbar(
-                                    hasActiveFilters = state.hasActiveFilters,
-                                    selectedCount = state.selection.size,
-                                    title = title,
-                                    onClickUnselectAll = screenModel::clearSelection,
-                                    onClickSelectAll = screenModel::selectAll,
-                                    onClickInvertSelection = screenModel::invertSelection,
-                                    onClickFilter = screenModel::showSettingsDialog,
-                                    onClickRefresh = { onClickRefresh(state.activeCategory) },
-                                    onClickGlobalUpdate = { onClickRefresh(null) },
-                                    onClickOpenRandomManga = {
-                                        scope.launch {
-                                            val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
-                                            if (randomItem != null) {
-                                                navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
-                                            } else {
-                                                snackbarHostState.showSnackbar(
-                                                    context.stringResource(MR.strings.information_no_entries_found),
-                                                )
+                                // KMK -->
+                                val sourcePrefs = remember { Injekt.get<SourcePreferences>() }
+                                val searchClean by sourcePrefs.searchClean().collectAsState()
+                                val searchFormat by sourcePrefs.searchFormat().collectAsState()
+                                val searchFuzzy by sourcePrefs.searchFuzzy().collectAsState()
+                                Column {
+                                    // KMK <--
+                                    LibraryToolbar(
+                                        hasActiveFilters = state.hasActiveFilters,
+                                        selectedCount = state.selection.size,
+                                        title = title,
+                                        onClickUnselectAll = screenModel::clearSelection,
+                                        onClickSelectAll = screenModel::selectAll,
+                                        onClickInvertSelection = screenModel::invertSelection,
+                                        onClickFilter = screenModel::showSettingsDialog,
+                                        onClickRefresh = { onClickRefresh(state.activeCategory) },
+                                        onClickGlobalUpdate = { onClickRefresh(null) },
+                                        onClickOpenRandomManga = {
+                                            scope.launch {
+                                                val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
+                                                if (randomItem != null) {
+                                                    navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
+                                                } else {
+                                                    snackbarHostState.showSnackbar(
+                                                        context.stringResource(MR.strings.information_no_entries_found),
+                                                    )
+                                                }
                                             }
+                                        },
+                                        onClickSyncNow = {
+                                            if (!SyncDataJob.isRunning(context)) {
+                                                SyncDataJob.startNow(context, manual = true)
+                                            } else {
+                                                context.toast(SYMR.strings.sync_in_progress)
+                                            }
+                                        },
+                                        // SY -->
+                                        onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
+                                        isSyncEnabled = state.isSyncEnabled,
+                                        // SY <--
+                                        searchQuery = state.searchQuery,
+                                        onSearchQueryChange = screenModel::search,
+                                        onInvalidateDownloadCache = { context ->
+                                            Injekt.get<DownloadCache>().invalidateCache()
+                                            context.toast(MR.strings.download_cache_invalidated)
+                                        },
+                                        // For scroll overlay when no tab
+                                        scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
+                                    )
+                                    // KMK -->
+                                    if (state.searchQuery != null) {
+                                        Row(
+                                            modifier = Modifier
+                                                .horizontalScroll(rememberScrollState())
+                                                .padding(horizontal = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            FilterChip(
+                                                selected = searchClean,
+                                                onClick = { sourcePrefs.searchClean().set(!searchClean) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.CleaningServices,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                                    )
+                                                },
+                                                label = { Text("Clean") },
+                                            )
+                                            FilterChip(
+                                                selected = searchFormat,
+                                                onClick = { sourcePrefs.searchFormat().set(!searchFormat) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Outlined.FormatListBulleted,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                                    )
+                                                },
+                                                label = { Text("Format") },
+                                            )
+                                            FilterChip(
+                                                selected = searchFuzzy,
+                                                onClick = { sourcePrefs.searchFuzzy().set(!searchFuzzy) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Shuffle,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                                    )
+                                                },
+                                                label = { Text("Fuzzy") },
+                                            )
                                         }
-                                    },
-                                    onClickSyncNow = {
-                                        if (!SyncDataJob.isRunning(context)) {
-                                            SyncDataJob.startNow(context, manual = true)
-                                        } else {
-                                            context.toast(SYMR.strings.sync_in_progress)
-                                        }
-                                    },
-                                    // SY -->
-                                    onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
-                                    isSyncEnabled = state.isSyncEnabled,
-                                    // SY <--
-                                    searchQuery = state.searchQuery,
-                                    onSearchQueryChange = screenModel::search,
-                                    onInvalidateDownloadCache = { context ->
-                                        Injekt.get<DownloadCache>().invalidateCache()
-                                        context.toast(MR.strings.download_cache_invalidated)
-                                    },
-                                    // For scroll overlay when no tab
-                                    scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
-                                )
+                                        HorizontalDivider()
+                                    }
+                                } // end Column
+                                // KMK <--
                             }
                         },
                         bottomBar = {

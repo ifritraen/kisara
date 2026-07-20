@@ -81,6 +81,11 @@ object SettingsKisaraScreen : SearchableSettings {
         val context = LocalContext.current
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val downloadPreferences = remember { Injekt.get<DownloadPreferences>() }
+        // KMK -->
+        val sourcePrefs = remember { Injekt.get<eu.kanade.domain.source.service.SourcePreferences>() }
+        val fuzzyThresholdPref = sourcePrefs.searchFuzzyThreshold()
+        val fuzzyThreshold by fuzzyThresholdPref.collectAsState()
+        // KMK <--
         val parallelChapterLimit by downloadPreferences.parallelChapterLimit().collectAsState()
         val parallelSourceLimit by downloadPreferences.parallelSourceLimit().collectAsState()
         val parallelPageLimit by downloadPreferences.parallelPageLimit().collectAsState()
@@ -1024,6 +1029,21 @@ object SettingsKisaraScreen : SearchableSettings {
                     ),
                 ),
             ),
+            // KMK -->
+            Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.pref_search_group),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.SliderPreference(
+                        value = fuzzyThreshold,
+                        valueRange = 0..100,
+                        title = stringResource(KMR.strings.pref_search_fuzzy_threshold),
+                        subtitle = stringResource(KMR.strings.pref_search_fuzzy_threshold_summary),
+                        valueString = "$fuzzyThreshold",
+                        onValueChanged = { fuzzyThresholdPref.set(it) },
+                    ),
+                ),
+            ),
+            // KMK <--
         ) + SettingsVpnScreen.getPreferences()
 
         return allPreferences.map { preference ->

@@ -243,6 +243,7 @@
     <!-- Sync -->
     <string name="google_drive_secrets_missing">Google Drive client secrets are missing (client_secrets.json is not bundled). This feature is unavailable in this build.</string>
     <!-- KMK -->
+    <string name="bulk_search">Search</string>
     <string name="label_home">Home</string>
     <string name="pref_floating_bottom_bar">Floating bottom bar</string>
     <string name="pref_floating_bottom_bar_summary">Use a floating bottom navigation bar with rounded corners</string>
@@ -301,6 +302,7 @@
     <string name="manga_translate">Translate</string>
     <string name="error_mlkit_language_unsupported">MLKit doesn\'t support this language</string>
     <string name="pref_show_translations">Show Translations</string>
+    <string name="pref_translation_edit_mode">Translation Edit Mode</string>
     <string name="pref_translate_after_downloading">Translate After Downloading</string>
     <string name="pref_reader_font">Reader Font</string>
     <string name="pref_group_setup">Translation Setup</string>
@@ -374,4 +376,7 @@
     <string name="pref_home_section_names_fresh_releases">Latest Chapters</string>
     <string name="pref_home_section_names_forgotten_favorites">Echo</string>
     <string name="pref_home_section_names_explore_feed">Recent</string>
+    <string name="pref_search_group">Search</string>
+    <string name="pref_search_fuzzy_threshold">Fuzzy Search Threshold</string>
+    <string name="pref_search_fuzzy_threshold_summary">0 = exact, 100 = very loose matching</string>
 </resources>

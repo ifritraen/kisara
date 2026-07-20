@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -52,6 +55,12 @@ fun GlobalSearchToolbar(
     toggleSelectionMode: () -> Unit,
     isRunning: Boolean,
     hasPinnedSources: Boolean,
+    searchClean: Boolean = false,
+    onToggleClean: () -> Unit = {},
+    searchFormat: Boolean = false,
+    onToggleFormat: () -> Unit = {},
+    searchFuzzy: Boolean = false,
+    onToggleFuzzy: () -> Unit = {},
     // KMK <--
 ) {
     Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
@@ -89,6 +98,46 @@ fun GlobalSearchToolbar(
                 .padding(horizontal = MaterialTheme.padding.small),
             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
         ) {
+            // KMK -->
+            FilterChip(
+                selected = searchClean,
+                onClick = onToggleClean,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.CleaningServices,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+                label = { Text("Clean") },
+            )
+            FilterChip(
+                selected = searchFormat,
+                onClick = onToggleFormat,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.FormatListBulleted,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+                label = { Text("Format") },
+            )
+            FilterChip(
+                selected = searchFuzzy,
+                onClick = onToggleFuzzy,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Shuffle,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+                label = { Text("Fuzzy") },
+            )
+            VerticalDivider()
+            // KMK <--
+
             // TODO: make this UX better; it only applies when triggering a new search
             if (!hideSourceFilter) {
                 // KMK -->

@@ -1,6 +1,8 @@
 package eu.kanade.presentation.browse
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -40,6 +42,9 @@ fun GlobalSearchScreen(
     // KMK -->
     bulkFavoriteScreenModel: BulkFavoriteScreenModel,
     hasPinnedSources: Boolean,
+    onToggleClean: () -> Unit = {},
+    onToggleFormat: () -> Unit = {},
+    onToggleFuzzy: () -> Unit = {},
     // KMK <--
 ) {
     // KMK -->
@@ -87,6 +92,12 @@ fun GlobalSearchScreen(
                     toggleSelectionMode = bulkFavoriteScreenModel::toggleSelectionMode,
                     isRunning = bulkFavoriteState.isRunning,
                     hasPinnedSources = hasPinnedSources,
+                    searchClean = state.searchClean,
+                    onToggleClean = onToggleClean,
+                    searchFormat = state.searchFormat,
+                    onToggleFormat = onToggleFormat,
+                    searchFuzzy = state.searchFuzzy,
+                    onToggleFuzzy = onToggleFuzzy,
                     // KMK <--
                 )
             }

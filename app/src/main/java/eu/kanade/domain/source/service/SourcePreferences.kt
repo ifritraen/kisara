@@ -94,6 +94,14 @@ class SourcePreferences(
     fun migrationHideWithoutUpdates() = preferenceStore.getBoolean("migration_hide_without_updates", false)
 
     // KMK -->
+    fun searchClean() = preferenceStore.getBoolean("search_clean", false)
+
+    fun searchFormat() = preferenceStore.getBoolean("search_format", false)
+
+    fun searchFuzzy() = preferenceStore.getBoolean("search_fuzzy", false)
+
+    fun searchFuzzyThreshold() = preferenceStore.getInt("search_fuzzy_threshold", 60)
+
     fun migrationSmartSearchSingleEntry() = preferenceStore.getBoolean("migration_smart_search_single_entry", false)
 
     fun globalSearchPinnedState() = preferenceStore.getEnum(

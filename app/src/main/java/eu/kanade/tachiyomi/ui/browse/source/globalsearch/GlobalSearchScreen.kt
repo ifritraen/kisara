@@ -108,6 +108,9 @@ class GlobalSearchScreen(
                 // KMK -->
                 bulkFavoriteScreenModel = bulkFavoriteScreenModel,
                 hasPinnedSources = screenModel.hasPinnedSources(),
+                onToggleClean = screenModel::toggleSearchClean,
+                onToggleFormat = screenModel::toggleSearchFormat,
+                onToggleFuzzy = screenModel::toggleSearchFuzzy,
                 // KMK <--
             )
         }

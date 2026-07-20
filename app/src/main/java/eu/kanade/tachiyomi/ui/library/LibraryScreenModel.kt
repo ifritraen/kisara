@@ -87,6 +87,7 @@ import mihon.core.common.utils.mutate
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
+import tachiyomi.core.common.util.QueryTransformer
 import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -1206,6 +1207,16 @@ class LibraryScreenModel(
 
     private suspend fun filterLibrary(unfiltered: List<LibraryItem>, query: String?, loggedInTrackServices: Map<Long, TriState>): List<LibraryItem> {
         return if (unfiltered.isNotEmpty() && !query.isNullOrBlank()) {
+            // KMK -->
+            val cleanOn = sourcePreferences.searchClean().get()
+            val formatOn = sourcePreferences.searchFormat().get()
+            val fuzzyOn = sourcePreferences.searchFuzzy().get()
+            val fuzzyThreshold = sourcePreferences.searchFuzzyThreshold().get()
+            val effectiveQuery = when {
+                fuzzyOn -> query // fuzzy handled at match-time below
+                else -> QueryTransformer.transform(query, cleanOn, formatOn)
+            }
+            // KMK <--
             // AZ -->
             if (query.trim().lowercase() == "mangadex-dmca") {
                 // Special easter egg query
@@ -1216,7 +1227,9 @@ class LibraryScreenModel(
             }
             // AZ <--
             // Prepare filter object
-            val parsedQuery = searchEngine.parseQuery(query)
+            // KMK --> use transformed query for SY search engine
+            val parsedQuery = searchEngine.parseQuery(effectiveQuery)
+            // KMK <--
             val mangaWithMetaIds = getIdsOfFavoriteMangaWithMetadata.await()
             val tracks = if (loggedInTrackServices.isNotEmpty()) {
                 getTracks.await().groupBy { it.mangaId }
@@ -1255,14 +1268,28 @@ class LibraryScreenModel(
                         loggedInTrackServices = loggedInTrackServices,
                     )
                 } else {
-                    // No meta? Filter using title
-                    filterManga(
-                        queries = parsedQuery,
-                        libraryManga = item.libraryManga,
-                        tracks = tracks[mangaId],
-                        source = sources[sourceId],
-                        loggedInTrackServices = loggedInTrackServices,
-                    )
+                    // KMK --> fuzzy fallback on title/author when no metadata
+                    if (fuzzyOn) {
+                        val manga = item.libraryManga.manga
+                        val candidate = buildString {
+                            append(manga.title)
+                            manga.author?.let { append(" ").append(it) }
+                            manga.artist?.let { append(" ").append(it) }
+                        }
+                        QueryTransformer.fuzzyContains(query, candidate, fuzzyThreshold)
+                    } else {
+                        // KMK <--
+                        // No meta? Filter using title
+                        filterManga(
+                            queries = parsedQuery,
+                            libraryManga = item.libraryManga,
+                            tracks = tracks[mangaId],
+                            source = sources[sourceId],
+                            loggedInTrackServices = loggedInTrackServices,
+                        )
+                        // KMK -->
+                    }
+                    // KMK <--
                 }
             }.toList()
         } else {
