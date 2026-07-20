@@ -493,8 +493,8 @@ data object LibraryTab : Tab {
                                                 label = { Text("Clean") },
                                             )
                                             FilterChip(
-                                                selected = searchFormat,
-                                                onClick = { sourcePrefs.searchFormat().set(!searchFormat) },
+                                                selected = searchFormat != 0,
+                                                onClick = { sourcePrefs.searchFormat().set((searchFormat + 1) % 3) },
                                                 leadingIcon = {
                                                     Icon(
                                                         imageVector = Icons.AutoMirrored.Outlined.FormatListBulleted,
@@ -502,7 +502,15 @@ data object LibraryTab : Tab {
                                                         modifier = Modifier.size(FilterChipDefaults.IconSize),
                                                     )
                                                 },
-                                                label = { Text("Format") },
+                                                label = {
+                                                    Text(
+                                                        when (searchFormat) {
+                                                            1 -> "Format (Key)"
+                                                            2 -> "Format (Raw)"
+                                                            else -> "Format"
+                                                        },
+                                                    )
+                                                },
                                             )
                                             FilterChip(
                                                 selected = searchFuzzy,

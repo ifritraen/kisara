@@ -96,7 +96,7 @@ class SourcePreferences(
     // KMK -->
     fun searchClean() = preferenceStore.getBoolean("search_clean", false)
 
-    fun searchFormat() = preferenceStore.getBoolean("search_format", false)
+    fun searchFormat() = preferenceStore.getInt("search_format_int", 0)
 
     fun searchFuzzy() = preferenceStore.getBoolean("search_fuzzy", false)
 

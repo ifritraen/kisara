@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -58,13 +59,17 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.source.service.SourcePreferences
 import kotlinx.collections.immutable.ImmutableList
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.clearFocusOnSoftKeyboardHide
+import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.runOnEnterKeyPressed
 import tachiyomi.presentation.core.util.secondaryItemAlpha
 import tachiyomi.presentation.core.util.showSoftKeyboard
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 const val SEARCH_DEBOUNCE_MILLIS = 250L
 
@@ -345,50 +350,72 @@ fun SearchToolbar(
                 focusManager.moveFocus(FocusDirection.Next)
             }
 
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = onChangeSearchQuery,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .runOnEnterKeyPressed(action = searchAndClearFocus)
-                    .showSoftKeyboard(remember { searchQuery.isEmpty() })
-                    .clearFocusOnSoftKeyboardHide(),
-                textStyle = MaterialTheme.typography.titleMedium.copy(
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 18.sp,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { searchAndClearFocus() }),
-                singleLine = true,
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
-                visualTransformation = visualTransformation,
-                interactionSource = interactionSource,
-                decorationBox = { innerTextField ->
-                    TextFieldDefaults.DecorationBox(
-                        value = searchQuery,
-                        innerTextField = innerTextField,
-                        enabled = true,
-                        singleLine = true,
-                        visualTransformation = visualTransformation,
-                        interactionSource = interactionSource,
-                        placeholder = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = onChangeSearchQuery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .runOnEnterKeyPressed(action = searchAndClearFocus)
+                        .showSoftKeyboard(remember { searchQuery.isEmpty() })
+                        .clearFocusOnSoftKeyboardHide(),
+                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 18.sp,
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { searchAndClearFocus() }),
+                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
+                    visualTransformation = visualTransformation,
+                    interactionSource = interactionSource,
+                    decorationBox = { innerTextField ->
+                        TextFieldDefaults.DecorationBox(
+                            value = searchQuery,
+                            innerTextField = innerTextField,
+                            enabled = true,
+                            singleLine = true,
+                            visualTransformation = visualTransformation,
+                            interactionSource = interactionSource,
+                            placeholder = {
+                                Text(
+                                    modifier = Modifier.secondaryItemAlpha(),
+                                    text = (placeholderText ?: stringResource(MR.strings.action_search_hint)),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Normal,
+                                    ),
+                                )
+                            },
+                            container = {},
+                        )
+                    },
+                )
+                if (searchQuery.isNotBlank()) {
+                    val sourcePrefs = remember { Injekt.get<SourcePreferences>() }
+                    val searchClean by sourcePrefs.searchClean().collectAsState()
+                    val searchFormat by sourcePrefs.searchFormat().collectAsState()
+                    if (searchClean || searchFormat != 0) {
+                        val transformed = tachiyomi.core.common.util.QueryTransformer.transform(searchQuery, searchClean, searchFormat)
+                        if (transformed != searchQuery) {
                             Text(
-                                modifier = Modifier.secondaryItemAlpha(),
-                                text = (placeholderText ?: stringResource(MR.strings.action_search_hint)),
+                                text = transformed,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 12.sp,
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Normal,
-                                ),
+                                modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
                             )
-                        },
-                        container = {},
-                    )
-                },
-            )
+                        }
+                    }
+                }
+            }
         },
         navigateUp = if (searchQuery == null) navigateUp else onClickCloseSearch,
         actions = {

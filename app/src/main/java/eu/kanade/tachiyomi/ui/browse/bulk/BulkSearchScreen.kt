@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -519,7 +520,7 @@ fun ResultMangaCard(
                         val numbers = numberMatch.groupValues[1]
                         val lastLineIndex = (textLayoutResult.lineCount - 1).coerceAtMost(1)
                         if (lastLineIndex >= 0) {
-                            val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex, useHyphenated = true)
+                            val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex)
                             val safeCut = (lastLineEndIndex - numbers.length - 3).coerceAtLeast(0)
                             val newTitle = cleaned.title.substring(0, safeCut) + "…" + numbers
                             if (newTitle != displayTitle) {

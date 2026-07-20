@@ -599,7 +599,7 @@ private fun GridItemTitle(
                     val numbers = numberMatch.groupValues[1]
                     val lastLineIndex = (textLayoutResult.lineCount - 1).coerceAtMost(maxLines - 1)
                     if (lastLineIndex >= 0) {
-                        val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex, useHyphenated = true)
+                        val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex)
                         val safeCut = (lastLineEndIndex - numbers.length - 3).coerceAtLeast(0)
                         val newTitle = title.substring(0, safeCut) + "…" + numbers
                         if (newTitle != displayTitle) {

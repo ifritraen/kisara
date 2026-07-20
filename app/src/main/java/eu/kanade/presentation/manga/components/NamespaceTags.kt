@@ -1,6 +1,7 @@
 package eu.kanade.presentation.manga.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -98,6 +99,7 @@ fun NamespaceTags(
     onClick: (item: String) -> Unit,
     // KMK -->
     pureDarkMode: Boolean = false,
+    onLongClick: ((String) -> Unit)? = null,
     // KMK <--
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -123,6 +125,7 @@ fun NamespaceTags(
                             modifier = Modifier.padding(vertical = 4.dp),
                             text = text,
                             onClick = { onClick(search) },
+                            onLongClick = onLongClick?.let { { it(search) } },
                             border = borderDp?.let {
                                 SuggestionChipDefaults.suggestionChipBorder(
                                     borderWidth = it,
@@ -162,6 +165,7 @@ fun TagsChip(
     text: String,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     border: ChipBorder? = SuggestionChipDefaults.suggestionChipBorder(),
     // KMK -->
     // borderM3: BorderStroke? = SuggestionChipDefaultsM3.suggestionChipBorder(enabled = true),
@@ -171,12 +175,25 @@ fun TagsChip(
 ) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
         if (onClick != null) {
+            val chipModifier = if (onLongClick != null) {
+                modifier.combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+            } else {
+                modifier
+            }
+            val chipOnClick: () -> Unit = if (onLongClick != null) {
+                {}
+            } else {
+                onClick
+            }
             // KMK -->
             if (borderM3 != null || pureDarkMode) {
                 // KMK <--
                 SuggestionChip(
-                    modifier = modifier,
-                    onClick = onClick,
+                    modifier = chipModifier,
+                    onClick = chipOnClick,
                     label = {
                         Text(
                             text = text,
@@ -194,8 +211,8 @@ fun TagsChip(
                 )
             } else {
                 ElevatedSuggestionChip(
-                    modifier = modifier,
-                    onClick = onClick,
+                    modifier = chipModifier,
+                    onClick = chipOnClick,
                     label = {
                         Text(
                             text = text,

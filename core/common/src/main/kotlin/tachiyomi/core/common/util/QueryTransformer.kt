@@ -18,11 +18,8 @@ object QueryTransformer {
             .lowercase()
     }
 
-    /**
-     * Format mode: parse metadata hints from a raw title string and append them.
-     * e.g. "[x (y)] Abc dEf - 2? [English] [Uncensored] [DCscan]" → "Abc dEf - 2? author:x artist:y language:english"
-     */
-    fun format(query: String): String {
+    fun format(query: String, mode: Int = 1): String {
+        if (mode == 0) return query
         val normalized = query
             .replace("\u201c", "\"").replace("\u201d", "\"")
             .replace("\u2018", "'").replace("\u2019", "'")
@@ -70,9 +67,15 @@ object QueryTransformer {
 
         return buildString {
             append(cleanTitle)
-            if (detectedAuthor != null) append(" author:${detectedAuthor.lowercase()}")
-            if (detectedArtist != null) append(" artist:${detectedArtist.lowercase()}")
-            if (detectedLanguage != null) append(" language:$detectedLanguage")
+            if (mode == 1) {
+                if (detectedAuthor != null) append(" author:${detectedAuthor.lowercase()}")
+                if (detectedArtist != null) append(" artist:${detectedArtist.lowercase()}")
+                if (detectedLanguage != null) append(" language:$detectedLanguage")
+            } else if (mode == 2) {
+                if (detectedAuthor != null) append(" ${detectedAuthor.lowercase()}")
+                if (detectedArtist != null) append(" ${detectedArtist.lowercase()}")
+                if (detectedLanguage != null) append(" $detectedLanguage")
+            }
         }
     }
 
@@ -80,30 +83,70 @@ object QueryTransformer {
      * Apply transformations.
      * If both are true: clean the title part, but format and append metadata.
      */
-    fun transform(query: String, clean: Boolean, format: Boolean): String {
-        if (!clean && !format) return query
-        if (clean && !format) return clean(query)
-        if (format && !clean) return format(query)
+    fun transform(query: String, clean: Boolean, formatMode: Int): String {
+        if (!clean && formatMode == 0) return query
+        if (clean && formatMode == 0) return clean(query)
+        if (formatMode != 0 && !clean) return format(query, formatMode)
 
         // Both clean and format are active
-        val formatted = format(query)
+        val formatted = format(query, formatMode)
         if (formatted == query) {
             // Nothing formatted, just clean
             return clean(query)
         }
 
-        // Parse title and key-value attributes from the formatted string
-        val parts = formatted.split(" ")
-        val attrPrefixes = listOf("author:", "artist:", "language:")
-        val attrs = parts.filter { part -> attrPrefixes.any { part.startsWith(it) } }
-        val titlePart = parts.filter { part -> attrPrefixes.none { part.startsWith(it) } }.joinToString(" ")
+        if (formatMode == 1) {
+            // Parse title and key-value attributes from the formatted string
+            val parts = formatted.split(" ")
+            val attrPrefixes = listOf("author:", "artist:", "language:")
+            val attrs = parts.filter { part -> attrPrefixes.any { part.startsWith(it) } }
+            val titlePart = parts.filter { part -> attrPrefixes.none { part.startsWith(it) } }.joinToString(" ")
 
-        val cleanedTitle = clean(titlePart)
-        return buildString {
-            append(cleanedTitle)
-            if (attrs.isNotEmpty()) {
-                append(" ")
-                append(attrs.joinToString(" "))
+            val cleanedTitle = clean(titlePart)
+            return buildString {
+                append(cleanedTitle)
+                if (attrs.isNotEmpty()) {
+                    append(" ")
+                    append(attrs.joinToString(" "))
+                }
+            }
+        } else {
+            // formatMode == 2: we appended author, artist, language as raw words at the end.
+            val normalized = query
+                .replace("\u201c", "\"").replace("\u201d", "\"")
+                .replace("\u2018", "'").replace("\u2019", "'")
+            val squareBrackets = Regex("\\[(.*?)]").findAll(normalized).map { it.groupValues[1].trim() }.toList()
+            val parens = Regex("\\((.*?)\\)").findAll(normalized).map { it.groupValues[1].trim() }.toList()
+            val allBrackets = squareBrackets + parens
+            val languageCodes = setOf(
+                "english", "en", "spanish", "es", "korean", "kr", "japanese", "jp", "raw",
+                "chinese", "zh", "french", "fr", "german", "de", "italian", "it",
+                "russian", "ru", "vietnamese", "vi", "portuguese", "pt",
+            )
+            var detectedLanguage: String? = null
+            var detectedAuthor: String? = null
+            var detectedArtist: String? = null
+            val parenInsideBracketRegex = Regex("^([^()]+)\\s*\\(([^()]+)\\)$")
+            for (bracket in allBrackets) {
+                val lower = bracket.lowercase()
+                val parenMatch = parenInsideBracketRegex.matchEntire(bracket)
+                when {
+                    lower in languageCodes -> detectedLanguage = lower
+                    lower.startsWith("author:") -> detectedAuthor = bracket.substring(7).trim()
+                    lower.startsWith("artist:") -> detectedArtist = bracket.substring(7).trim()
+                    lower.startsWith("by:") -> detectedAuthor = bracket.substring(3).trim()
+                    parenMatch != null -> {
+                        detectedAuthor = parenMatch.groupValues[1].trim()
+                        detectedArtist = parenMatch.groupValues[2].trim()
+                    }
+                }
+            }
+            val cleanTitlePart = clean(query)
+            return buildString {
+                append(cleanTitlePart)
+                if (detectedAuthor != null) append(" ${detectedAuthor.lowercase()}")
+                if (detectedArtist != null) append(" ${detectedArtist.lowercase()}")
+                if (detectedLanguage != null) append(" $detectedLanguage")
             }
         }
     }

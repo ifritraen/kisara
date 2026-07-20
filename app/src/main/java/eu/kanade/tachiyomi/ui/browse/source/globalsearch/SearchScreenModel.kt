@@ -102,7 +102,7 @@ abstract class SearchScreenModel(
         preferences.searchClean().set(!state.value.searchClean)
     }
     fun toggleSearchFormat() {
-        preferences.searchFormat().set(!state.value.searchFormat)
+        preferences.searchFormat().set((state.value.searchFormat + 1) % 3)
     }
     fun toggleSearchFuzzy() {
         preferences.searchFuzzy().set(!state.value.searchFuzzy)
@@ -277,7 +277,7 @@ abstract class SearchScreenModel(
         val dialog: Dialog? = null,
         // KMK -->
         val searchClean: Boolean = false,
-        val searchFormat: Boolean = false,
+        val searchFormat: Int = 0,
         val searchFuzzy: Boolean = false,
         // KMK <--
     ) {

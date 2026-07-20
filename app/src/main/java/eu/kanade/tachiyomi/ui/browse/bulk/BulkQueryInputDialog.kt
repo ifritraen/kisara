@@ -40,7 +40,7 @@ fun BulkQueryInputDialog(
     var textInput by remember { mutableStateOf("") }
     // KMK --> local-session toggle state (not persisted)
     var cleanSearch by remember { mutableStateOf(false) }
-    var formatSearch by remember { mutableStateOf(false) }
+    var formatSearch by remember { mutableStateOf(0) }
     var fuzzySearch by remember { mutableStateOf(false) }
     // KMK <--
 
@@ -75,8 +75,8 @@ fun BulkQueryInputDialog(
                         label = { Text("Clean") },
                     )
                     FilterChip(
-                        selected = formatSearch,
-                        onClick = { formatSearch = !formatSearch },
+                        selected = formatSearch != 0,
+                        onClick = { formatSearch = (formatSearch + 1) % 3 },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.FormatListBulleted,
@@ -84,7 +84,15 @@ fun BulkQueryInputDialog(
                                 modifier = Modifier.size(FilterChipDefaults.IconSize),
                             )
                         },
-                        label = { Text("Format") },
+                        label = {
+                            Text(
+                                when (formatSearch) {
+                                    1 -> "Format (Key)"
+                                    2 -> "Format (Raw)"
+                                    else -> "Format"
+                                },
+                            )
+                        },
                     )
                     FilterChip(
                         selected = fuzzySearch,

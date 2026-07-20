@@ -379,4 +379,8 @@
     <string name="pref_search_group">Search</string>
     <string name="pref_search_fuzzy_threshold">Fuzzy Search Threshold</string>
     <string name="pref_search_fuzzy_threshold_summary">0 = exact, 100 = very loose matching</string>
+    <string name="action_add_to_favorites">Add to Favorite</string>
+    <string name="action_remove_from_favorites">Remove from Favorite</string>
+    <string name="added_to_favorite_tags">Added to Favorite Tags</string>
+    <string name="removed_from_favorite_tags">Removed from Favorite Tags</string>
 </resources>

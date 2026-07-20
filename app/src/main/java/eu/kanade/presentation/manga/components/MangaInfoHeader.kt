@@ -380,6 +380,17 @@ fun ExpandableMangaDescription(
     // KMK -->
     val uiPreferences = Injekt.get<UiPreferences>()
     val pureDarkMode = uiPreferences.themeDarkAmoled().get()
+    val favoriteManager = remember { Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val onTagLongClick: (String) -> Unit = { tag ->
+        val added = favoriteManager.toggleFavoriteTag(tag)
+        val msg = if (added) {
+            context.getString(KMR.strings.added_to_favorite_tags.resourceId)
+        } else {
+            context.getString(KMR.strings.removed_from_favorite_tags.resourceId)
+        }
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
     // KMK <--
     Column(modifier = modifier) {
         val (expanded, onExpanded) = rememberSaveable {
@@ -448,6 +459,7 @@ fun ExpandableMangaDescription(
                             },
                             // KMK -->
                             pureDarkMode = pureDarkMode,
+                            onLongClick = onTagLongClick,
                             // KMK <--
                         )
                     } else {
@@ -464,6 +476,7 @@ fun ExpandableMangaDescription(
                                         tagSelected = it
                                         showMenu = true
                                     },
+                                    onLongClick = { onTagLongClick(it) },
                                     // KMK -->
                                     pureDarkMode = pureDarkMode,
                                     // KMK <--
@@ -484,6 +497,7 @@ fun ExpandableMangaDescription(
                                     tagSelected = it
                                     showMenu = true
                                 },
+                                onLongClick = { onTagLongClick(it) },
                                 // KMK -->
                                 pureDarkMode = pureDarkMode,
                                 // KMK <--
@@ -703,6 +717,8 @@ private fun ColumnScope.MangaContentInfo(
     val finalArtist = artist.takeIf { !it.isNullOrBlank() } ?: parsed.artist
 
     // KMK -->
+    val favoriteManager = remember { Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>() }
+    var menuType by remember { mutableStateOf(0) } // 0 = Title, 1 = Author, 2 = Artist
     var showMenu by remember { mutableStateOf(false) }
     var tagSelected by remember { mutableStateOf("") }
     DropdownMenu(
@@ -733,6 +749,36 @@ private fun ColumnScope.MangaContentInfo(
                 showMenu = false
             },
         )
+        if (menuType == 1 || menuType == 2) {
+            val isFav = remember(tagSelected, menuType) {
+                if (menuType == 1) {
+                    favoriteManager.isFavoriteAuthor(tagSelected)
+                } else {
+                    favoriteManager.isFavoriteArtist(tagSelected)
+                }
+            }
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(
+                            if (isFav) {
+                                KMR.strings.action_remove_from_favorites
+                            } else {
+                                KMR.strings.action_add_to_favorites
+                            },
+                        ),
+                    )
+                },
+                onClick = {
+                    if (menuType == 1) {
+                        favoriteManager.toggleFavoriteAuthor(tagSelected)
+                    } else {
+                        favoriteManager.toggleFavoriteArtist(tagSelected)
+                    }
+                    showMenu = false
+                },
+            )
+        }
     }
     // KMK <--
     Text(
@@ -743,6 +789,7 @@ private fun ColumnScope.MangaContentInfo(
                 if (cleanTitle.isNotBlank()) {
                     // KMK -->
                     tagSelected = cleanTitle
+                    menuType = 0
                     showMenu = true
                     // KMK <--
                 }
@@ -774,6 +821,7 @@ private fun ColumnScope.MangaContentInfo(
                         if (!finalAuthor.isNullOrBlank()) {
                             // KMK -->
                             tagSelected = finalAuthor
+                            menuType = 1
                             showMenu = true
                             // KMK <--
                         }
@@ -803,6 +851,7 @@ private fun ColumnScope.MangaContentInfo(
                         onLongClick = {
                             // KMK -->
                             tagSelected = finalArtist
+                            menuType = 2
                             showMenu = true
                             // KMK <--
                         },
