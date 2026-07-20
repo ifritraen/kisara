@@ -482,14 +482,52 @@ fun ResultMangaCard(
                     InLibraryBadge(enabled = true)
                 }
             }
+
+            // Author & Artist overlay
+            if (!cleaned.author.isNullOrBlank() && !cleaned.artist.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "${cleaned.author} / ${cleaned.artist}",
+                        color = androidx.compose.ui.graphics.Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(4.dp))
+        var displayTitle by remember(cleaned.title) { mutableStateOf(cleaned.title) }
         Text(
-            text = cleaned.title,
+            text = displayTitle,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            onTextLayout = { textLayoutResult ->
+                if (textLayoutResult.hasVisualOverflow) {
+                    val numberMatch = Regex("(\\d+)$").find(cleaned.title)
+                    if (numberMatch != null) {
+                        val numbers = numberMatch.groupValues[1]
+                        val lastLineIndex = (textLayoutResult.lineCount - 1).coerceAtMost(1)
+                        if (lastLineIndex >= 0) {
+                            val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex, useHyphenated = true)
+                            val safeCut = (lastLineEndIndex - numbers.length - 3).coerceAtLeast(0)
+                            val newTitle = cleaned.title.substring(0, safeCut) + "…" + numbers
+                            if (newTitle != displayTitle) {
+                                displayTitle = newTitle
+                            }
+                        }
+                    }
+                }
+            },
         )
         Text(
             text = source.name,
@@ -521,6 +559,23 @@ fun cleanMangaTitle(title: String): CleanedTitle {
 
     var language: String? = null
     var sequel: String? = null
+    val titleTrimmed = normalized.trim()
+    val startingParenRegex = Regex("^\\((.*?)\\)")
+    val startingMatch = startingParenRegex.find(titleTrimmed)
+    if (startingMatch != null) {
+        sequel = startingMatch.groupValues[1].trim()
+    }
+
+    var author: String? = null
+    var artist: String? = null
+    val authorArtistRegex = Regex("^([^()]+)\\s*\\(([^()]+)\\)$")
+    for (bracketText in sqMatches) {
+        val match = authorArtistRegex.matchEntire(bracketText)
+        if (match != null) {
+            author = match.groupValues[1].trim()
+            artist = match.groupValues[2].trim()
+        }
+    }
 
     val languagesList = listOf(
         "english", "en", "spanish", "es", "korean", "kr", "japanese", "jp", "raw", "chinese", "zh", "french", "fr", "german", "de", "italian", "it", "russian", "ru", "vietnamese", "vi",
@@ -529,15 +584,17 @@ fun cleanMangaTitle(title: String): CleanedTitle {
     for (bracketText in allBrackets) {
         val lower = bracketText.lowercase()
         if (lower.toIntOrNull() != null || lower.startsWith("vol") || lower.startsWith("ch") || lower.startsWith("part")) {
-            sequel = bracketText
+            if (sequel == null) {
+                sequel = bracketText
+            }
         } else if (languagesList.contains(lower)) {
             language = bracketText
         }
     }
 
     var cleanedTitle = normalized
-        .replace(squareBracketRegex, "")
         .replace(parenthesisRegex, "")
+        .replace(squareBracketRegex, "")
         .replace(Regex("\\s+"), " ")
         .trim()
 
@@ -558,6 +615,8 @@ fun cleanMangaTitle(title: String): CleanedTitle {
         title = cleanedTitle,
         language = language,
         sequel = sequel,
+        author = author,
+        artist = artist,
     )
 }
 
@@ -565,4 +624,6 @@ data class CleanedTitle(
     val title: String,
     val language: String?,
     val sequel: String?,
+    val author: String? = null,
+    val artist: String? = null,
 )

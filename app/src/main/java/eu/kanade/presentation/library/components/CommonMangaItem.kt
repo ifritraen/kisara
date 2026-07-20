@@ -36,8 +36,10 @@ import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -584,15 +586,33 @@ private fun GridItemTitle(
     modifier: Modifier = Modifier,
     maxLines: Int = 2,
 ) {
+    var displayTitle by remember(title) { mutableStateOf(title) }
     Text(
         modifier = modifier,
-        text = title,
+        text = displayTitle,
         fontSize = 12.sp,
         lineHeight = 18.sp,
         minLines = minLines,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         style = style,
+        onTextLayout = { textLayoutResult ->
+            if (textLayoutResult.hasVisualOverflow) {
+                val numberMatch = Regex("(\\d+)$").find(title)
+                if (numberMatch != null) {
+                    val numbers = numberMatch.groupValues[1]
+                    val lastLineIndex = (textLayoutResult.lineCount - 1).coerceAtMost(maxLines - 1)
+                    if (lastLineIndex >= 0) {
+                        val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex, useHyphenated = true)
+                        val safeCut = (lastLineEndIndex - numbers.length - 3).coerceAtLeast(0)
+                        val newTitle = title.substring(0, safeCut) + "…" + numbers
+                        if (newTitle != displayTitle) {
+                            displayTitle = newTitle
+                        }
+                    }
+                }
+            }
+        },
     )
 }
 
