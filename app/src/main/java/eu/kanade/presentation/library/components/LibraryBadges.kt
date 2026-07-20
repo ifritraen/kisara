@@ -3,7 +3,9 @@ package eu.kanade.presentation.library.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
@@ -80,22 +82,11 @@ fun ColorizedBadge() {
         Color(0xFF6A4C93),
     )
     val brush = remember { Brush.horizontalGradient(colors) }
-    Text(
-        text = "COLOR",
+    androidx.compose.foundation.layout.Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(brush)
-            .padding(horizontal = 4.dp, vertical = 1.dp),
-        color = Color.White,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontSize = 10.sp,
-            shadow = Shadow(
-                color = Color.Black.copy(alpha = 0.5f),
-                blurRadius = 2f,
-            ),
-        ),
+            .size(10.dp)
+            .clip(CircleShape)
+            .background(brush),
     )
 }
 

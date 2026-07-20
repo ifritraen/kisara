@@ -503,11 +503,12 @@ fun ResultMangaCard(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         var displayTitle by remember(cleaned.title) { mutableStateOf(cleaned.title) }
         Text(
             text = displayTitle,
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -531,14 +532,16 @@ fun ResultMangaCard(
         )
         Text(
             text = source.name,
-            style = MaterialTheme.typography.bodySmall,
+            fontSize = 10.sp,
+            lineHeight = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = subtitleText,
-            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            lineHeight = 14.sp,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

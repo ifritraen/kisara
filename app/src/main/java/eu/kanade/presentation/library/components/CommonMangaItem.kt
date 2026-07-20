@@ -157,11 +157,7 @@ fun MangaCompactGridItem(
         }
         val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
         if (hasUncensored) {
-            tachiyomi.presentation.core.components.Badge(
-                text = "UNCENSORED",
-                color = MaterialTheme.colorScheme.tertiary,
-                textColor = MaterialTheme.colorScheme.onTertiary,
-            )
+            UncensoredBadge()
         }
     }
 
@@ -516,7 +512,7 @@ fun MangaComfortableGridItem(
                     }
                 },
             )
-            Column(modifier = Modifier.padding(4.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 0.dp, vertical = 2.dp)) {
                 if (artistAuthorText != null) {
                     Text(
                         text = artistAuthorText,
@@ -590,8 +586,8 @@ private fun GridItemTitle(
     Text(
         modifier = modifier,
         text = displayTitle,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
+        fontSize = 11.sp,
+        lineHeight = 16.sp,
         minLines = minLines,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
