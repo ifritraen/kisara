@@ -2,24 +2,28 @@ package eu.kanade.tachiyomi.ui.suggestions
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterList
@@ -30,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -70,8 +76,13 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetLibraryManga
 import tachiyomi.domain.manga.model.MangaCover
+import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.domain.suggestions.interactor.GetSuggestionArtists
+import tachiyomi.domain.suggestions.interactor.GetSuggestionAuthors
 import tachiyomi.domain.suggestions.model.Suggestion
+import tachiyomi.domain.suggestions.model.SuggestionArtist
+import tachiyomi.domain.suggestions.model.SuggestionAuthor
 import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
 import tachiyomi.domain.suggestions.service.SuggestionsPreferences
@@ -94,6 +105,15 @@ fun suggestionsTab(
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
     val state by screenModel.state.collectAsState()
+
+    val fetchedCount by eu.kanade.tachiyomi.data.suggestions.SuggestionsReport.fetchedCount.collectAsState()
+    val failedCount by eu.kanade.tachiyomi.data.suggestions.SuggestionsReport.failedCount.collectAsState()
+    val fetchedBySource by eu.kanade.tachiyomi.data.suggestions.SuggestionsReport.fetchedBySource.collectAsState()
+    val failedBySource by eu.kanade.tachiyomi.data.suggestions.SuggestionsReport.failedBySource.collectAsState()
+    val libraryFilteredCount by eu.kanade.tachiyomi.data.suggestions.SuggestionsReport.libraryFilteredCount.collectAsState()
+    val zeroScoreCount by eu.kanade.tachiyomi.data.suggestions.SuggestionsReport.zeroScoreCount.collectAsState()
+
+    var showReportDialog by remember { mutableStateOf(false) }
 
     val suggestionsPreferences = remember { Injekt.get<SuggestionsPreferences>() }
 
@@ -129,22 +149,28 @@ fun suggestionsTab(
         src.sourceId to ((finalSources.size - index).toDouble() / finalSources.size)
     }.toMap()
 
-    val dynamicSuggestions = remember(state.suggestions, tagWeightsMap, sourceWeightsMap) {
+    val maxSuggestionsToDisplay = suggestionsPreferences.maxSuggestionsToDisplay().get()
+    val dynamicSuggestions = remember(state.suggestions, tagWeightsMap, sourceWeightsMap, maxSuggestionsToDisplay) {
         state.suggestions.map { suggestion ->
             val manga = suggestion.manga
             val extWeight = sourceWeightsMap[manga.source] ?: 0.1
-            var tagSum = 0.0
-            manga.genre.orEmpty().forEach { genre ->
-                val clean = SuggestionsWorker.cleanAndFilterGenre(genre)
-                if (clean != null) {
-                    tagSum += tagWeightsMap[clean] ?: 0.0
+            val score = if (manga.initialized && !manga.genre.orEmpty().isEmpty()) {
+                var tagSum = 0.0
+                manga.genre.orEmpty().forEach { genre ->
+                    val clean = SuggestionsWorker.cleanAndFilterGenre(genre)
+                    if (clean != null) {
+                        tagSum += tagWeightsMap[clean] ?: 0.0
+                    }
                 }
+                extWeight * tagSum
+            } else {
+                suggestion.relevance
             }
-            val score = extWeight * tagSum
             suggestion.copy(relevance = score)
         }
             .filter { it.relevance > 0.0 }
             .sortedByDescending { it.relevance }
+            .take(maxSuggestionsToDisplay)
     }
 
     var showDisplayOverlayDialog by rememberSaveable { mutableStateOf(false) }
@@ -185,6 +211,10 @@ fun suggestionsTab(
                     onConfirm = { included, _ ->
                         screenModel.setMangaCategories(changeCategoryManga, included)
                     },
+                    onDuplicateCheck = {
+                        screenModel.dismissDialog()
+                        navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(changeCategoryManga.id))
+                    },
                 )
             }
 
@@ -198,7 +228,7 @@ fun suggestionsTab(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = paddingValues.calculateTopPadding())
+                        .padding(top = paddingValues.calculateTopPadding()),
                 ) {
                     // 1. Progress line at the very top
                     if (state.isLoading) {
@@ -226,24 +256,27 @@ fun suggestionsTab(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false),
+                        ) {
                             IconButton(
                                 onClick = { screenModel.triggerRefresh(context) },
                                 enabled = !state.isLoading,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Refresh,
                                     contentDescription = "Refresh Suggestions",
                                     modifier = Modifier.size(16.dp),
-                                    tint = if (state.isLoading) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.primary
+                                    tint = if (state.isLoading) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.primary,
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Total: ${dynamicSuggestions.size}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             if (state.isLoading && state.fetchProgress > 0) {
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -252,17 +285,30 @@ fun suggestionsTab(
                                 Text(
                                     text = "New: $displayedNew",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             }
                         }
 
-                        if (state.isLoading && state.fetchTotal > 0) {
-                            Text(
-                                text = "Progress: ${state.fetchProgress}/${state.fetchTotal}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (state.isLoading) {
+                                val left = (state.fetchTotal - state.fetchProgress).coerceAtLeast(0)
+                                Text(
+                                    text = "Left: $left tags",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            androidx.compose.material3.TextButton(
+                                onClick = { showReportDialog = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.heightIn(max = 28.dp),
+                            ) {
+                                Text("Report", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
 
@@ -357,20 +403,22 @@ fun suggestionsTab(
                                                 if (manga.favorite) {
                                                     InLibraryBadge(enabled = true)
                                                 } else {
-                                                    IconButton(
-                                                        onClick = { screenModel.dismissSuggestion(manga.url, manga.title) },
+                                                    Box(
                                                         modifier = Modifier
-                                                            .padding(4.dp)
-                                                            .size(24.dp)
+                                                            .padding(vertical = 4.dp, horizontal = 1.dp)
+                                                            .width(14.dp)
+                                                            .height(24.dp)
                                                             .background(
                                                                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                                                shape = CircleShape,
-                                                            ),
+                                                                shape = RoundedCornerShape(4.dp),
+                                                            )
+                                                            .clickable { screenModel.dismissSuggestion(manga.url, manga.title) },
+                                                        contentAlignment = Alignment.Center,
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.Outlined.Close,
                                                             contentDescription = "Dismiss",
-                                                            modifier = Modifier.size(16.dp),
+                                                            modifier = Modifier.size(10.dp),
                                                             tint = MaterialTheme.colorScheme.onSurface,
                                                         )
                                                     }
@@ -410,20 +458,22 @@ fun suggestionsTab(
                                                     SourceIconBadge(source = domainSource)
                                                 }
 
-                                                IconButton(
-                                                    onClick = { explainingSuggestion = suggestion },
+                                                Box(
                                                     modifier = Modifier
-                                                        .padding(4.dp)
-                                                        .size(24.dp)
+                                                        .padding(vertical = 4.dp, horizontal = 1.dp)
+                                                        .width(14.dp)
+                                                        .height(24.dp)
                                                         .background(
                                                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                                            shape = CircleShape,
-                                                        ),
+                                                            shape = RoundedCornerShape(4.dp),
+                                                        )
+                                                        .clickable { explainingSuggestion = suggestion },
+                                                    contentAlignment = Alignment.Center,
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Outlined.Info,
                                                         contentDescription = "Explain relevance score",
-                                                        modifier = Modifier.size(16.dp),
+                                                        modifier = Modifier.size(10.dp),
                                                         tint = MaterialTheme.colorScheme.onSurface,
                                                     )
                                                 }
@@ -444,6 +494,34 @@ fun suggestionsTab(
                 val suggestionsPreferences = remember { Injekt.get<SuggestionsPreferences>() }
                 val sourceManager = remember { Injekt.get<SourceManager>() }
                 val source = remember(manga.source) { sourceManager.get(manga.source) }
+
+                val getSuggestionAuthors = remember { Injekt.get<GetSuggestionAuthors>() }
+                val getSuggestionArtists = remember { Injekt.get<GetSuggestionArtists>() }
+                val authors by remember { getSuggestionAuthors.subscribe() }.collectAsState(initial = emptyList())
+                val artists by remember { getSuggestionArtists.subscribe() }.collectAsState(initial = emptyList())
+
+                val historyRepository = remember { Injekt.get<tachiyomi.domain.history.repository.HistoryRepository>() }
+                val mangaRepository = remember { Injekt.get<MangaRepository>() }
+                val recentAuthorsAndArtists by produceState<Pair<Set<String>, Set<String>>>(initialValue = Pair(emptySet(), emptySet())) {
+                    val readHistory = mangaRepository.getReadMangaNotInLibrary()
+                    val authorsSet = mutableSetOf<String>()
+                    val artistsSet = mutableSetOf<String>()
+                    val now = System.currentTimeMillis()
+                    readHistory.distinctBy { it.id }.forEach { m ->
+                        val history = historyRepository.getHistoryByMangaId(m.id)
+                        val lastReadTime = history.mapNotNull { it.readAt?.time }.maxOrNull()
+                        if (lastReadTime != null) {
+                            val diffDays = (now - lastReadTime) / (1000 * 60 * 60 * 24)
+                            if (diffDays <= 7) {
+                                m.author?.lowercase()?.trim()?.takeIf { it.isNotBlank() }?.let { authorsSet.add(it) }
+                                m.artist?.lowercase()?.trim()?.takeIf { it.isNotBlank() }?.let { artistsSet.add(it) }
+                            }
+                        }
+                    }
+                    value = Pair(authorsSet, artistsSet)
+                }
+                val recentAuthors = recentAuthorsAndArtists.first
+                val recentArtists = recentAuthorsAndArtists.second
 
                 val nonBlockedTags = state.tags.filter { !it.isBlocked }
                 val top10Tags = nonBlockedTags.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
@@ -467,6 +545,19 @@ fun suggestionsTab(
                     activeSources
                 }
 
+                val nonBlockedAuthors = authors.filter { !it.isBlocked }
+                val top5Authors = nonBlockedAuthors.sortedByDescending { it.count }.take(5).map { it.author }.toSet()
+                val activeAuthors = nonBlockedAuthors.filter { top5Authors.contains(it.author) || it.isUserAdded }
+                    .sortedWith(compareBy<SuggestionAuthor> { it.sortOrder }.thenByDescending { it.count })
+
+                val nonBlockedArtists = artists.filter { !it.isBlocked }
+                val top5Artists = nonBlockedArtists.sortedByDescending { it.count }.take(5).map { it.artist }.toSet()
+                val activeArtists = nonBlockedArtists.filter { top5Artists.contains(it.artist) || it.isUserAdded }
+                    .sortedWith(compareBy<SuggestionArtist> { it.sortOrder }.thenByDescending { it.count })
+
+                val favoriteAuthors = nonBlockedAuthors.map { it.author }.toSet()
+                val favoriteArtists = nonBlockedArtists.map { it.artist }.toSet()
+
                 val maxTagsToMatch = suggestionsPreferences.maxTagsToMatch().get()
                 val topMatchingTags = finalTags.take(maxTagsToMatch)
                 val tagWeightsMap = topMatchingTags.mapIndexed { index, tag ->
@@ -488,6 +579,27 @@ fun suggestionsTab(
                             tagSum += tagWeight
                             matchedTagsInfo.add("• $clean: ${String.format("%.2f", tagWeight)}")
                         }
+                    }
+                }
+
+                val matchedAuthor = manga.author?.lowercase()?.trim()
+                val matchedArtist = manga.artist?.lowercase()?.trim()
+                if (!matchedAuthor.isNullOrBlank()) {
+                    if (recentAuthors.contains(matchedAuthor)) {
+                        tagSum += 2.5
+                        matchedTagsInfo.add("• Recent Author ($matchedAuthor): 2.50")
+                    } else if (favoriteAuthors.contains(matchedAuthor)) {
+                        tagSum += 1.5
+                        matchedTagsInfo.add("• Favorite Author ($matchedAuthor): 1.50")
+                    }
+                }
+                if (!matchedArtist.isNullOrBlank()) {
+                    if (recentArtists.contains(matchedArtist)) {
+                        tagSum += 2.5
+                        matchedTagsInfo.add("• Recent Artist ($matchedArtist): 2.50")
+                    } else if (favoriteArtists.contains(matchedArtist)) {
+                        tagSum += 1.5
+                        matchedTagsInfo.add("• Favorite Artist ($matchedArtist): 1.50")
                     }
                 }
 
@@ -555,6 +667,51 @@ fun suggestionsTab(
                     },
                     confirmButton = {
                         TextButton(onClick = { explainingSuggestion = null }) {
+                            Text("Close")
+                        }
+                    },
+                )
+            }
+
+            // Suggestions Generation Report Popup Dialog
+            if (showReportDialog) {
+                val allSourceNames = (fetchedBySource.keys + failedBySource.keys).sorted()
+                AlertDialog(
+                    onDismissRequest = { showReportDialog = false },
+                    title = { Text("Suggestions Generation Report") },
+                    text = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .heightIn(max = 300.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            Text("Total manga fetched: $fetchedCount", fontWeight = FontWeight.Bold)
+                            Text("Total search failures: $failedCount", fontWeight = FontWeight.Bold)
+                            Text("Excluded (Already in library/history): $libraryFilteredCount")
+                            Text("Excluded (Zero relevance / no matching tags): $zeroScoreCount")
+                            Text("Active suggestions (Displayed): ${dynamicSuggestions.size}")
+                            HorizontalDivider()
+                            if (allSourceNames.isEmpty()) {
+                                Text("No extension queries made yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                allSourceNames.forEach { sourceName ->
+                                    val fetchedVal = fetchedBySource[sourceName] ?: 0
+                                    val failedVal = failedBySource[sourceName] ?: 0
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(text = sourceName, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            text = "Fetched: $fetchedVal | Failed: $failedVal",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showReportDialog = false }) {
                             Text("Close")
                         }
                     },

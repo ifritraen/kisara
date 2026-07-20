@@ -290,6 +290,7 @@ class MangaScreen(
             },
             onDownloadChapter = screenModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslationChapter = screenModel::runChapterTranslationActions.takeIf { !successState.source.isLocalOrStub() },
+            onColorizeChapter = screenModel::runChapterColorizerActions.takeIf { !successState.source.isLocalOrStub() },
             onToggleAutoTranslate = screenModel::toggleAutoTranslate,
             onAddToLibraryClicked = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -377,6 +378,7 @@ class MangaScreen(
             }.takeIf { isHttpSource },
             onDownloadActionClicked = screenModel::runDownloadAction.takeIf { !successState.source.isLocalOrStub() },
             onTranslateActionClicked = screenModel::runTranslateAction.takeIf { !successState.source.isLocalOrStub() },
+            onColorizeActionClicked = screenModel::runColorizerAction.takeIf { !successState.source.isLocalOrStub() },
             onEditCategoryClicked = screenModel::showChangeCategoryDialog.takeIf { successState.manga.favorite },
             onEditFetchIntervalClicked = screenModel::showSetFetchIntervalDialog.takeIf {
                 successState.manga.favorite
@@ -431,6 +433,9 @@ class MangaScreen(
                 }
             }.takeIf { isConfigurableSource },
             onClickTranslationSettingsClicked = {
+                navigator.push(SettingsTranslationScreen)
+            },
+            onClickColorizerSettingsClicked = {
                 navigator.push(SettingsTranslationScreen)
             },
             onClearManga = { screenModel.showClearMangaDialog() },
@@ -506,6 +511,10 @@ class MangaScreen(
                     onEditCategories = { navigator.push(CategoryScreen()) },
                     onConfirm = { include, _ ->
                         screenModel.moveMangaToCategoriesAndAddToLibrary(dialog.manga, include)
+                    },
+                    onDuplicateCheck = {
+                        onDismissRequest()
+                        navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(dialog.manga.id))
                     },
                 )
             }

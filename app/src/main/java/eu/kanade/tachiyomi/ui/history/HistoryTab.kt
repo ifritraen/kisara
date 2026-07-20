@@ -171,6 +171,10 @@ data object HistoryTab : Tab {
                     onConfirm = { include, _ ->
                         screenModel.moveMangaToCategoriesAndAddToLibrary(dialog.manga, include)
                     },
+                    onDuplicateCheck = {
+                        onDismissRequest()
+                        navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(dialog.manga.id))
+                    },
                 )
             }
             is HistoryScreenModel.Dialog.Migrate -> {
@@ -337,6 +341,10 @@ fun Screen.historyTab(
                         onEditCategories = { navigator.push(CategoryScreen()) },
                         onConfirm = { include, _ ->
                             screenModel.moveMangaToCategoriesAndAddToLibrary(dialog.manga, include)
+                        },
+                        onDuplicateCheck = {
+                            onDismissRequest()
+                            navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(dialog.manga.id))
                         },
                     )
                 }

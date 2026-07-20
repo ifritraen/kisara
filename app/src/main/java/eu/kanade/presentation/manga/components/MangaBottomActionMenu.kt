@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkRemove
+import androidx.compose.material.icons.outlined.CopyAll
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
@@ -285,6 +286,9 @@ fun LibraryBottomActionMenu(
     onClickAddToMangaDex: (() -> Unit)?,
     onClickResetInfo: (() -> Unit)?,
     // SY <--
+    // KMK -->
+    onDuplicateCheckClicked: (() -> Unit)? = null,
+    // KMK <--
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -299,7 +303,7 @@ fun LibraryBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false, false) }
             var resetJob by remember { mutableStateOf<Job?>(null) }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -380,6 +384,17 @@ fun LibraryBottomActionMenu(
                         onClick = onMigrateClicked,
                     )
                 }
+                // KMK -->
+                if (onDuplicateCheckClicked != null) {
+                    Button(
+                        title = "Duplicate Check",
+                        icon = Icons.Outlined.CopyAll,
+                        toConfirm = confirm[7],
+                        onLongClick = { onLongClickItem(7) },
+                        onClick = onDuplicateCheckClicked,
+                    )
+                }
+                // KMK <--
                 var overflowMenuOpen by remember { mutableStateOf(false) }
                 Button(
                     title = stringResource(MR.strings.label_more),

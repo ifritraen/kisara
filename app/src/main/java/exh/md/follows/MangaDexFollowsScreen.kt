@@ -24,6 +24,7 @@ import eu.kanade.presentation.components.BulkSelectionToolbar
 import eu.kanade.presentation.manga.DuplicateMangaDialog
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
+import eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreenModel
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
@@ -194,6 +195,10 @@ class MangaDexFollowsScreen(private val sourceId: Long) : Screen() {
                     onConfirm = { include, _ ->
                         screenModel.changeMangaFavorite(dialog.manga)
                         screenModel.moveMangaToCategories(dialog.manga, include)
+                    },
+                    onDuplicateCheck = {
+                        onDismissRequest()
+                        navigator.push(DuplicateMangaScreen(dialog.manga.id))
                     },
                 )
             }

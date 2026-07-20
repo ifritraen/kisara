@@ -121,6 +121,7 @@ import eu.kanade.tachiyomi.data.connections.discord.DiscordScreen
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.data.sync.SyncDataJob
+import eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreen
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
@@ -607,6 +608,13 @@ data object LibraryTab : Tab {
                                 onClickAddToMangaDex = screenModel::syncMangaToDex.takeIf { state.showAddToMangadex },
                                 onClickResetInfo = screenModel::resetInfo.takeIf { state.showResetInfo },
                                 // SY <--
+                                // KMK -->
+                                onDuplicateCheckClicked = {
+                                    val selection = state.selectedManga.map { it.id }
+                                    screenModel.clearSelection()
+                                    navigator.push(DuplicateMangaScreen(selection))
+                                },
+                                // KMK <--
                             )
                         },
                         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -1137,6 +1145,10 @@ data object LibraryTab : Tab {
                         onConfirm = { include, exclude ->
                             screenModel.clearSelection()
                             screenModel.setMangaCategories(dialog.manga, include, exclude)
+                        },
+                        onDuplicateCheck = {
+                            onDismissRequest()
+                            navigator.push(DuplicateMangaScreen(dialog.manga.map { it.id }))
                         },
                     )
                 }

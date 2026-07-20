@@ -159,6 +159,10 @@ fun landingTab(
                     onConfirm = { included, _ ->
                         screenModel.setMangaCategories(changeCategoryManga, included)
                     },
+                    onDuplicateCheck = {
+                        screenModel.dismissDialog()
+                        navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(changeCategoryManga.id))
+                    },
                 )
             }
 

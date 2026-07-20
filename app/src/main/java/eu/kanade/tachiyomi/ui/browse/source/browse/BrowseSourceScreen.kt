@@ -60,6 +60,7 @@ import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
+import eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen
 import eu.kanade.tachiyomi.ui.browse.extension.details.SourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreen
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreenModel.Listing
@@ -497,6 +498,10 @@ data class BrowseSourceScreen(
                         onConfirm = { include, _ ->
                             screenModel.changeMangaFavorite(dialog.manga)
                             screenModel.moveMangaToCategories(dialog.manga, include)
+                        },
+                        onDuplicateCheck = {
+                            onDismissRequest()
+                            navigator.push(DuplicateMangaScreen(dialog.manga.id))
                         },
                     )
                 }

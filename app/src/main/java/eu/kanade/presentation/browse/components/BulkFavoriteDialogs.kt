@@ -17,6 +17,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.manga.DuplicateMangaDialog
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel.Dialog
+import eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import mihon.feature.migration.dialog.MigrateMangaDialog
@@ -179,6 +180,10 @@ private fun ChangeMangasCategoryDialog(
         onDismissRequest = onDismiss,
         onEditCategories = { navigator?.push(CategoryScreen()) },
         onConfirm = onConfirm,
+        onDuplicateCheck = {
+            onDismiss()
+            navigator?.push(DuplicateMangaScreen(dialog.mangas.map { it.id }))
+        },
     )
 }
 

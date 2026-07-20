@@ -121,6 +121,7 @@ data class DuplicateScreenState(
 
 class DuplicateScreenModel(
     val targetMangaId: Long? = null,
+    val targetMangaIds: List<Long>? = null,
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getCategories: GetCategories = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
@@ -206,6 +207,7 @@ class DuplicateScreenModel(
 
             // Collect grouped duplicates
             val groupsMap = filteredLibrary.groupBy { find(it.manga.id) }
+            val searchIds = targetMangaIds ?: targetMangaId?.let { listOf(it) }
             val groupsList = groupsMap.values
                 .filter { it.size > 1 }
                 .map { group ->
@@ -216,9 +218,9 @@ class DuplicateScreenModel(
                     )
                 }
                 .filter { group ->
-                    targetMangaId == null ||
-                        group.main.manga.id == targetMangaId ||
-                        group.duplicates.any { it.manga.id == targetMangaId }
+                    searchIds.isNullOrEmpty() ||
+                        searchIds.contains(group.main.manga.id) ||
+                        group.duplicates.any { searchIds.contains(it.manga.id) }
                 }
                 .take(limit)
 
@@ -710,11 +712,13 @@ fun DuplicateGroupItem(
     }
 }
 
-class DuplicateMangaScreen(val mangaId: Long) : Screen {
+class DuplicateMangaScreen(val mangaIds: List<Long>) : Screen {
+    constructor(mangaId: Long) : this(listOf(mangaId))
+
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val screenModel = rememberScreenModel { DuplicateScreenModel(targetMangaId = mangaId) }
+        val screenModel = rememberScreenModel { DuplicateScreenModel(targetMangaIds = mangaIds) }
         val state by screenModel.state.collectAsState()
         var showWarningDialog by remember { mutableStateOf(false) }
 
