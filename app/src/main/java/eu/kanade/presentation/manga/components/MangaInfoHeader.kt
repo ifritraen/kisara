@@ -416,6 +416,9 @@ fun ExpandableMangaDescription(
         val tags = remember(rawTags, descriptionTags) {
             (rawTags + descriptionTags).distinct()
         }
+        val extractedTagsSet = remember(descriptionTags, rawTags) {
+            descriptionTags.filterNot { rawTags.contains(it) }.toSet()
+        }
         if (tags.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -474,16 +477,18 @@ fun ExpandableMangaDescription(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
                         ) {
-                            tags.forEach {
+                            tags.forEach { tagText ->
+                                val isExtracted = extractedTagsSet.contains(tagText)
                                 TagsChip(
                                     modifier = DefaultTagChipModifier,
-                                    text = it,
+                                    text = tagText,
                                     onClick = {
-                                        tagSelected = it
+                                        tagSelected = tagText
                                         showMenu = true
                                     },
-                                    onLongClick = { onTagLongClick(it) },
+                                    onLongClick = { onTagLongClick(tagText) },
                                     // KMK -->
+                                    borderM3 = if (isExtracted) androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary) else null,
                                     pureDarkMode = pureDarkMode,
                                     // KMK <--
                                 )
@@ -495,16 +500,18 @@ fun ExpandableMangaDescription(
                         contentPadding = PaddingValues(horizontal = MaterialTheme.padding.medium),
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
                     ) {
-                        items(items = tags) {
+                        items(items = tags) { tagText ->
+                            val isExtracted = extractedTagsSet.contains(tagText)
                             TagsChip(
                                 modifier = DefaultTagChipModifier,
-                                text = it,
+                                text = tagText,
                                 onClick = {
-                                    tagSelected = it
+                                    tagSelected = tagText
                                     showMenu = true
                                 },
-                                onLongClick = { onTagLongClick(it) },
+                                onLongClick = { onTagLongClick(tagText) },
                                 // KMK -->
+                                borderM3 = if (isExtracted) androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary) else null,
                                 pureDarkMode = pureDarkMode,
                                 // KMK <--
                             )
