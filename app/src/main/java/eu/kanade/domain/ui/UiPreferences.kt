@@ -90,6 +90,7 @@ class UiPreferences(
     fun readerAppBarColorMix() = preferenceStore.getInt("reader_app_bar_color_mix", 0)
 
     // Kisara Settings
+    fun kisaraCoverTitleStyle() = preferenceStore.getString("kisara_cover_title_style", "default")
     fun kisaraFrostedGlass() = preferenceStore.getBoolean("kisara_frosted_glass", true)
     fun showCategoryTabs() = preferenceStore.getBoolean("kisara_show_category_tabs", false)
     fun hideTopBarOnScroll() = preferenceStore.getBoolean("kisara_hide_top_bar_on_scroll", true)

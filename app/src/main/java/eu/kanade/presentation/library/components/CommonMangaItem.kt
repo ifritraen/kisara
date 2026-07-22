@@ -251,6 +251,10 @@ private fun BoxScope.CoverTextOverlay(
     artistAuthorText: String? = null,
     onClickContinueReading: (() -> Unit)? = null,
 ) {
+    val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+    val titleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+    val params = remember(titleStyleKey) { getCoverTitleParams(titleStyleKey) }
+
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
@@ -276,13 +280,14 @@ private fun BoxScope.CoverTextOverlay(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(8.dp),
+                .padding(horizontal = params.paddingHorizontal, vertical = params.paddingVertical),
         ) {
             if (artistAuthorText != null) {
                 Text(
                     text = artistAuthorText,
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp,
+                    fontSize = (params.fontSize.value - 1f).coerceAtLeast(8f).sp,
+                    lineHeight = params.lineHeight,
+                    letterSpacing = params.letterSpacing,
                     color = Color.White.copy(alpha = 0.75f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -304,6 +309,7 @@ private fun BoxScope.CoverTextOverlay(
                     ),
                 ),
                 minLines = 1,
+                titleStyleKey = titleStyleKey,
             )
         }
         if (onClickContinueReading != null) {
@@ -512,10 +518,15 @@ fun MangaComfortableGridItem(
                     }
                 },
             )
-            Column(modifier = Modifier.padding(horizontal = 0.dp, vertical = 2.dp)) {
+            val titleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+            val params = remember(titleStyleKey) { getCoverTitleParams(titleStyleKey) }
+            Column(modifier = Modifier.padding(horizontal = params.paddingHorizontal, vertical = params.paddingVertical)) {
                 if (artistAuthorText != null) {
                     Text(
                         text = artistAuthorText,
+                        fontSize = (params.fontSize.value - 1f).coerceAtLeast(8f).sp,
+                        lineHeight = params.lineHeight,
+                        letterSpacing = params.letterSpacing,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -527,6 +538,7 @@ fun MangaComfortableGridItem(
                     style = MaterialTheme.typography.titleSmall,
                     minLines = 2,
                     maxLines = titleMaxLines,
+                    titleStyleKey = titleStyleKey,
                 )
             }
         }
@@ -574,6 +586,23 @@ private fun MangaGridCover(
     }
 }
 
+private data class CoverTitleParams(
+    val fontSize: androidx.compose.ui.unit.TextUnit,
+    val lineHeight: androidx.compose.ui.unit.TextUnit,
+    val letterSpacing: androidx.compose.ui.unit.TextUnit,
+    val paddingHorizontal: Dp,
+    val paddingVertical: Dp,
+)
+
+private fun getCoverTitleParams(styleKey: String): CoverTitleParams {
+    return when (styleKey) {
+        "compact" -> CoverTitleParams(10.sp, 12.sp, (-0.3).sp, 2.dp, 2.dp)
+        "ultra_compact" -> CoverTitleParams(9.sp, 11.sp, (-0.4).sp, 0.dp, 0.dp)
+        "moderate" -> CoverTitleParams(10.5.sp, 13.sp, (-0.1).sp, 4.dp, 4.dp)
+        else -> CoverTitleParams(11.sp, 16.sp, 0.sp, 8.dp, 8.dp)
+    }
+}
+
 @Composable
 private fun GridItemTitle(
     title: String,
@@ -581,13 +610,16 @@ private fun GridItemTitle(
     minLines: Int,
     modifier: Modifier = Modifier,
     maxLines: Int = 2,
+    titleStyleKey: String = "default",
 ) {
+    val params = remember(titleStyleKey) { getCoverTitleParams(titleStyleKey) }
     var displayTitle by remember(title) { mutableStateOf(title) }
     Text(
         modifier = modifier,
         text = displayTitle,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
+        fontSize = params.fontSize,
+        lineHeight = params.lineHeight,
+        letterSpacing = params.letterSpacing,
         minLines = minLines,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,

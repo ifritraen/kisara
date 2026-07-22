@@ -450,6 +450,19 @@ object SettingsKisaraScreen : SearchableSettings {
                 title = "Layout & Appearance",
                 preferenceItems = buildList {
                     add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = uiPreferences.kisaraCoverTitleStyle(),
+                            title = stringResource(KMR.strings.pref_cover_title_style),
+                            subtitle = "%s",
+                            entries = persistentMapOf(
+                                "default" to stringResource(KMR.strings.cover_title_style_default),
+                                "compact" to stringResource(KMR.strings.cover_title_style_compact),
+                                "ultra_compact" to stringResource(KMR.strings.cover_title_style_ultra_compact),
+                                "moderate" to stringResource(KMR.strings.cover_title_style_moderate),
+                            ),
+                        ),
+                    )
+                    add(
                         Preference.PreferenceItem.SwitchPreference(
                             preference = floatingBottomBarPref,
                             title = stringResource(KMR.strings.pref_floating_bottom_bar),

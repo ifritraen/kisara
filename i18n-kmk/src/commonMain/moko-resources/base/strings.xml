@@ -2,6 +2,11 @@
 <resources>
     <!-- Actions -->
     <string name="action_favorites">Favorites</string>
+    <string name="pref_cover_title_style">Cover title style</string>
+    <string name="cover_title_style_default">Default</string>
+    <string name="cover_title_style_compact">Compact</string>
+    <string name="cover_title_style_ultra_compact">Ultra Compact</string>
+    <string name="cover_title_style_moderate">Moderate</string>
     <string name="action_search_for_source">Search for sources</string>
     <string name="action_source_search">Search in source</string>
     <string name="action_library_search">Library search</string>
