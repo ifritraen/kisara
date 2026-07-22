@@ -169,13 +169,14 @@ data class BulkSearchScreen(
         ) { paddingValues ->
             Box(
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .padding(top = paddingValues.calculateTopPadding()),
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = paddingValues.calculateTopPadding(),
-                        bottom = 16.dp,
+                        top = 8.dp,
+                        bottom = 24.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
