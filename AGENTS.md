@@ -18,7 +18,7 @@ Kisara is an Android manga reader (min SDK 26, target SDK 36, JVM 17 / Kotlin) f
 
 ## Mandatory rules for AI agents
 
-**Read this section before every change.** These rules override shortcuts (e.g. copying nearby `MR` imports or only running `compileDebugKotlin`).
+**Read this section before every change.** These rules override shortcuts (e.g. copying nearby `MR` imports).
 
 ### Git
 
@@ -54,7 +54,7 @@ Before `git push`, confirm the current branch is not `master` or `main` (`git br
 ```bash
 ./gradlew spotlessApply    # fix formatting
 ./gradlew spotlessCheck    # must pass (same as CI)
-./gradlew assembleDebug    # or :app:compileDebugKotlin for a faster compile-only check
+./gradlew assembleDebug
 ```
 
 - **Do not** skip `spotlessCheck` when verifying changes.
@@ -151,7 +151,7 @@ Gradle `-P` flags (`buildSrc/.../BuildConfig.kt`):
 ./gradlew :data:generateSqlDelightInterface  # after .sq / .sqm changes
 ```
 
-**Agent verification checklist (minimum):** `spotlessApply` → `spotlessCheck` → `assembleDebug` (or `compileDebugKotlin` only if the user asked for a quick compile check—but still run Spotless).
+**Agent verification checklist (minimum):** `spotlessApply` → `spotlessCheck` → `assembleDebug`.
 
 JDK **17**.
 
