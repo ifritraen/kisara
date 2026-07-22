@@ -742,13 +742,13 @@ data object LibraryTab : Tab {
                         val targetItem = visibleItems.firstOrNull { it.index == index }
                         if (targetItem != null) {
                             val offset = (viewportWidth - targetItem.size) / 2
-                            categoryRowState.animateScrollToItem(index, -offset)
+                            categoryRowState.scrollToItem(index, -offset)
                         } else {
                             categoryRowState.scrollToItem(index)
                             val targetItemNext = categoryRowState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
                             if (targetItemNext != null) {
                                 val offset = (viewportWidth - targetItemNext.size) / 2
-                                categoryRowState.animateScrollToItem(index, -offset)
+                                categoryRowState.scrollToItem(index, -offset)
                             }
                         }
                     }

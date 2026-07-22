@@ -713,6 +713,7 @@ class LibraryScreenModel(
         }
 
         return mapValues { (key, value) ->
+            if (value.size <= 1) return@mapValues value
             // SY -->
             val sort = groupSort ?: key.sort
             if (sort.type == LibrarySort.Type.Random) {
