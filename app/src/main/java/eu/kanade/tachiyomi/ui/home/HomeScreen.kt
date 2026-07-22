@@ -370,7 +370,7 @@ object HomeScreen : Screen() {
                                     val currentTab = tabNavigator.current
                                     val hasActions = when (currentTab) {
                                         is LibraryTab -> true
-                                        is HomeTab -> HomeTab.currentPageIndex in 1..4
+                                        is HomeTab -> HomeTab.currentPageIndex in 1..5
                                         is BrowseTab -> BrowseTab.currentPageIndex in 0..3
                                         else -> false
                                     }
@@ -516,88 +516,104 @@ object HomeScreen : Screen() {
                                                     ) {
                                                         when (activePopup) {
                                                             is HomeTab -> {
-                                                                 SubTabButton(
-                                                                     text = "Home",
-                                                                     selected = HomeTab.currentPageIndex == 0,
-                                                                     hovered = hoveredButtonKey == "Home_Landing",
-                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                         subTabButtonBounds["Home_Landing"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                             tabNavigator.current = HomeTab
-                                                                             HomeTab.showSubTab(0)
-                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                         }
-                                                                     },
-                                                                 ) {
-                                                                     tabNavigator.current = HomeTab
-                                                                     HomeTab.showSubTab(0)
-                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                 }
-                                                                 SubTabButton(
-                                                                     text = "Feed",
-                                                                     selected = HomeTab.currentPageIndex == 1,
-                                                                     hovered = hoveredButtonKey == "Home_Feed",
-                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                         subTabButtonBounds["Home_Feed"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                             tabNavigator.current = HomeTab
-                                                                             HomeTab.showSubTab(1)
-                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                         }
-                                                                     },
-                                                                 ) {
-                                                                     tabNavigator.current = HomeTab
-                                                                     HomeTab.showSubTab(1)
-                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                 }
-                                                                 SubTabButton(
-                                                                     text = "Suggestions",
-                                                                     selected = HomeTab.currentPageIndex == 2,
-                                                                     hovered = hoveredButtonKey == "Home_Suggestions",
-                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                         subTabButtonBounds["Home_Suggestions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                             tabNavigator.current = HomeTab
-                                                                             HomeTab.showSubTab(2)
-                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                         }
-                                                                     },
-                                                                 ) {
-                                                                     tabNavigator.current = HomeTab
-                                                                     HomeTab.showSubTab(2)
-                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                 }
-                                                                 SubTabButton(
-                                                                     text = "Updates",
-                                                                     selected = HomeTab.currentPageIndex == 3,
-                                                                     hovered = hoveredButtonKey == "Home_Updates",
-                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                         subTabButtonBounds["Home_Updates"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                             tabNavigator.current = HomeTab
-                                                                             HomeTab.showSubTab(3)
-                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                         }
-                                                                     },
-                                                                 ) {
-                                                                     tabNavigator.current = HomeTab
-                                                                     HomeTab.showSubTab(3)
-                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                 }
-                                                                 SubTabButton(
-                                                                     text = "History",
-                                                                     selected = HomeTab.currentPageIndex == 4,
-                                                                     hovered = hoveredButtonKey == "Home_History",
-                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                         subTabButtonBounds["Home_History"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                             tabNavigator.current = HomeTab
-                                                                             HomeTab.showSubTab(4)
-                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                         }
-                                                                     },
-                                                                 ) {
-                                                                     tabNavigator.current = HomeTab
-                                                                     HomeTab.showSubTab(4)
-                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                 }
-                                                             }
-                                                             is BrowseTab -> {
+                                                                SubTabButton(
+                                                                    text = "Home",
+                                                                    selected = HomeTab.currentPageIndex == 0,
+                                                                    hovered = hoveredButtonKey == "Home_Landing",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Home_Landing"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = HomeTab
+                                                                            HomeTab.showSubTab(0)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = HomeTab
+                                                                    HomeTab.showSubTab(0)
+                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                }
+                                                                SubTabButton(
+                                                                    text = "Feed",
+                                                                    selected = HomeTab.currentPageIndex == 1,
+                                                                    hovered = hoveredButtonKey == "Home_Feed",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Home_Feed"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = HomeTab
+                                                                            HomeTab.showSubTab(1)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = HomeTab
+                                                                    HomeTab.showSubTab(1)
+                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                }
+                                                                SubTabButton(
+                                                                    text = "Suggestions",
+                                                                    selected = HomeTab.currentPageIndex == 2,
+                                                                    hovered = hoveredButtonKey == "Home_Suggestions",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Home_Suggestions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = HomeTab
+                                                                            HomeTab.showSubTab(2)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = HomeTab
+                                                                    HomeTab.showSubTab(2)
+                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                }
+                                                                SubTabButton(
+                                                                    text = "Updates",
+                                                                    selected = HomeTab.currentPageIndex == 3,
+                                                                    hovered = hoveredButtonKey == "Home_Updates",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Home_Updates"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = HomeTab
+                                                                            HomeTab.showSubTab(3)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = HomeTab
+                                                                    HomeTab.showSubTab(3)
+                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                }
+                                                                SubTabButton(
+                                                                    text = "History",
+                                                                    selected = HomeTab.currentPageIndex == 4,
+                                                                    hovered = hoveredButtonKey == "Home_History",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Home_History"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = HomeTab
+                                                                            HomeTab.showSubTab(4)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = HomeTab
+                                                                    HomeTab.showSubTab(4)
+                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                }
+                                                                SubTabButton(
+                                                                    text = "Favorites",
+                                                                    selected = HomeTab.currentPageIndex == 5,
+                                                                    hovered = hoveredButtonKey == "Home_Favorites",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Home_Favorites"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = HomeTab
+                                                                            HomeTab.showSubTab(5)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = HomeTab
+                                                                    HomeTab.showSubTab(5)
+                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                }
+                                                            }
+                                                            is BrowseTab -> {
                                                                 SubTabButton(
                                                                     text = "Sources",
                                                                     selected = BrowseTab.currentPageIndex == 0,
@@ -660,6 +676,22 @@ object HomeScreen : Screen() {
                                                                 ) {
                                                                     tabNavigator.current = BrowseTab
                                                                     BrowseTab.showDuplicate()
+                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                }
+                                                                SubTabButton(
+                                                                    text = "Search",
+                                                                    selected = BrowseTab.currentPageIndex == 4,
+                                                                    hovered = hoveredButtonKey == "Browse_BulkSearch",
+                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                        subTabButtonBounds["Browse_BulkSearch"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            tabNavigator.current = BrowseTab
+                                                                            BrowseTab.showBulkSearch()
+                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                        }
+                                                                    },
+                                                                ) {
+                                                                    tabNavigator.current = BrowseTab
+                                                                    BrowseTab.showBulkSearch()
                                                                     if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                                 }
                                                             }
@@ -906,105 +938,105 @@ object HomeScreen : Screen() {
                                                                 }
                                                                 is HomeTab -> {
                                                                     when (HomeTab.currentPageIndex) {
-                                                                         1 -> { // Feed
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.addFeedEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.Add, contentDescription = "Add Feed", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.sortFeedEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.SwapVert, contentDescription = "Sort Feed", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.bulkSelectEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.Checklist, contentDescription = "Bulk Select", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                         }
-                                                                         2 -> { // Suggestions
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.suggestionsRefreshEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Suggestions", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                         }
-                                                                         3 -> { // Updates
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.updatesUpdateLibraryEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.Refresh, contentDescription = "Update Library", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.updatesCalendarEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.CalendarMonth, contentDescription = "Calendar", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.updatesFilterEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.FilterList, contentDescription = "Filter Updates", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                         }
-                                                                         4 -> { // History
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.historySearchEvent.trySend(null)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Default.Search, contentDescription = "Search History", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.historyFilterEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.FilterList, contentDescription = "Filter History", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                             IconButton(
-                                                                                 onClick = {
-                                                                                     HomeTab.historyChecklistEvent.trySend(Unit)
-                                                                                     showActionPopup = false
-                                                                                 },
-                                                                                 modifier = Modifier.size(36.dp),
-                                                                             ) {
-                                                                                 Icon(Icons.Outlined.Checklist, contentDescription = "Clear History", modifier = Modifier.size(20.dp))
-                                                                             }
-                                                                         }
-                                                                     }
+                                                                        1 -> { // Feed
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.addFeedEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.Add, contentDescription = "Add Feed", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.sortFeedEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.SwapVert, contentDescription = "Sort Feed", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.bulkSelectEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.Checklist, contentDescription = "Bulk Select", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                        }
+                                                                        2 -> { // Suggestions
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.suggestionsRefreshEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Suggestions", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                        }
+                                                                        3 -> { // Updates
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.updatesUpdateLibraryEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.Refresh, contentDescription = "Update Library", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.updatesCalendarEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.CalendarMonth, contentDescription = "Calendar", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.updatesFilterEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.FilterList, contentDescription = "Filter Updates", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                        }
+                                                                        4 -> { // History
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.historySearchEvent.trySend(null)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Default.Search, contentDescription = "Search History", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.historyFilterEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.FilterList, contentDescription = "Filter History", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                            IconButton(
+                                                                                onClick = {
+                                                                                    HomeTab.historyChecklistEvent.trySend(Unit)
+                                                                                    showActionPopup = false
+                                                                                },
+                                                                                modifier = Modifier.size(36.dp),
+                                                                            ) {
+                                                                                Icon(Icons.Outlined.Checklist, contentDescription = "Clear History", modifier = Modifier.size(20.dp))
+                                                                            }
+                                                                        }
+                                                                    }
                                                                 }
                                                                 is BrowseTab -> {
                                                                     when (BrowseTab.currentPageIndex) {

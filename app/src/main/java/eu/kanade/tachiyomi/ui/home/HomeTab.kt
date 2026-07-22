@@ -131,6 +131,7 @@ data object HomeTab : Tab {
             suggestionsTab(suggestionsScreenModel),
             updatesTab(updatesScreenModel, updatesSettingsScreenModel),
             historyTab(historyScreenModel, historySettingsScreenModel),
+            eu.kanade.tachiyomi.ui.home.favorite.favoritesTab(),
         )
 
         val state = rememberPagerState { tabs.size }

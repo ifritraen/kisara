@@ -31,32 +31,44 @@ object MangaTitleParser {
 
     fun parse(rawTitle: String): ParsedTitle {
         var title = rawTitle.trim()
+        val normalized = title.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
+        title = normalized
+
         var author: String? = null
         var artist: String? = null
         var languageCode: String? = null
         var isUncensored = false
         var isColorized = false
 
-        // 1. Parse leading bracket: [Author] or [Artist (Author)] or (Author) or {Author}
-        val leadingBracketRegex = Regex("""^[\[({]([^\]\(){}]+)\s*(?:\(([^\]\){}]+)\))?[\])}]""")
+        // 1. Check for leading volume/sequel in parentheses e.g. (pq)
+        val leadingParenRegex = Regex("""^\(([^()]+)\)\s*(.*)$""")
+        val leadingParenMatch = leadingParenRegex.find(title)
+        if (leadingParenMatch != null) {
+            val rest = leadingParenMatch.groupValues[2].trim()
+            if (rest.startsWith("[") || rest.startsWith("(") || rest.isNotEmpty()) {
+                title = rest
+            }
+        }
+
+        // 2. Parse leading author/artist bracket: [abc (de)] or [abc] or (abc (de)) or (abc)
+        val leadingBracketRegex = Regex("""^[\[({]([^\[\]()]+)\s*(?:\(([^()]+)\))?[\])}]""")
         val match = leadingBracketRegex.find(title)
         if (match != null) {
             val part1 = match.groupValues[1].trim()
             val part2 = match.groupValues.getOrNull(2)?.trim()
-            if (part2 != null && part2.isNotEmpty()) {
-                artist = part1
-                author = part2
+            if (!part2.isNullOrEmpty()) {
+                author = part1
+                artist = part2
             } else {
                 author = part1
             }
             title = title.substring(match.range.last + 1).trim()
         }
 
-        // 2. Parse and strip all brackets at the end/inside the title
-        val bracketsRegex = Regex("""[\[({]([^\])}]+)[\])}]""")
-        val allMatches = bracketsRegex.findAll(title).toList()
-
-        for (m in allMatches) {
+        // 3. Collect flags from remaining bracketed metadata
+        val simpleBracketRegex = Regex("""[\[({]([^\])}]+)[\])}]""")
+        val matches = simpleBracketRegex.findAll(title).toList()
+        for (m in matches) {
             val inside = m.groupValues[1].trim().lowercase()
             if (LANGUAGE_TO_CODE.containsKey(inside)) {
                 languageCode = LANGUAGE_TO_CODE[inside]
@@ -67,15 +79,23 @@ object MangaTitleParser {
             }
         }
 
-        title = bracketsRegex.replace(title, "").trim()
+        // 4. Repeatedly strip all simple bracket expressions to avoid dangling brackets from nested structures
+        while (title.contains("(") || title.contains("[") || title.contains("{")) {
+            val old = title
+            title = title
+                .replace(Regex("""\([^()]*\)"""), "")
+                .replace(Regex("""\[[^\[\]]*\]"""), "")
+                .replace(Regex("""\{[^{}]*\}"""), "")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+            if (title == old) break
+        }
+
         // Cleanup trailing non-alphanumeric chars
         title = title.replace(Regex("""\s+[-|/~]\s*$"""), "").trim()
 
         if (title.isEmpty()) {
-            title = rawTitle.replace(Regex("""[\[({][^\])}]+[\])}]"""), "").trim()
-            if (title.isEmpty()) {
-                title = rawTitle
-            }
+            title = rawTitle
         }
 
         return ParsedTitle(
@@ -86,6 +106,27 @@ object MangaTitleParser {
             isUncensored = isUncensored,
             isColorized = isColorized,
         )
+    }
+
+    fun parseDescriptionTags(description: String?): List<String> {
+        if (description.isNullOrBlank()) return emptyList()
+        val results = mutableListOf<String>()
+        val lines = description.lines()
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.contains(":")) {
+                val parts = trimmed.split(",", ";").map { it.trim() }
+                for (part in parts) {
+                    if (part.contains(":")) {
+                        val cleaned = part.replace(Regex("""[♀♂♀️♂️]"""), "").trim()
+                        if (cleaned.isNotEmpty()) {
+                            results.add(cleaned)
+                        }
+                    }
+                }
+            }
+        }
+        return results.distinct()
     }
 
     fun isColorized(manga: Manga?, title: String): Boolean {
@@ -113,6 +154,13 @@ object MangaTitleParser {
                 }
             }
         }
+        val description = manga?.description
+        if (!description.isNullOrEmpty()) {
+            val lower = description.lowercase()
+            if (lower.contains("uncensored") || lower.contains("decensored")) {
+                return true
+            }
+        }
         return false
     }
 
@@ -125,6 +173,15 @@ object MangaTitleParser {
                 val clean = genre.lowercase().trim()
                 if (LANGUAGE_TO_CODE.containsKey(clean)) {
                     return LANGUAGE_TO_CODE[clean]
+                }
+            }
+        }
+        val description = manga?.description
+        if (!description.isNullOrEmpty()) {
+            val lower = description.lowercase()
+            for ((key, code) in LANGUAGE_TO_CODE) {
+                if (lower.contains(key)) {
+                    return code
                 }
             }
         }

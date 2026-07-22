@@ -409,8 +409,14 @@ fun ExpandableMangaDescription(
                 .padding(horizontal = 16.dp)
                 .clickableNoIndication { onExpanded(!expanded) },
         )
-        val tags = tagsProvider()
-        if (!tags.isNullOrEmpty()) {
+        val descriptionTags = remember(description) {
+            eu.kanade.tachiyomi.util.MangaTitleParser.parseDescriptionTags(description)
+        }
+        val rawTags = tagsProvider() ?: emptyList()
+        val tags = remember(rawTags, descriptionTags) {
+            (rawTags + descriptionTags).distinct()
+        }
+        if (tags.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .padding(top = 8.dp)
@@ -879,14 +885,14 @@ private fun ColumnScope.MangaContentInfo(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (isNsfw) {
-                    eu.kanade.presentation.library.components.UncensoredBadge()
+                    tachiyomi.presentation.core.components.Badge(
+                        text = "18+",
+                        color = MaterialTheme.colorScheme.error,
+                        textColor = MaterialTheme.colorScheme.onError,
+                    )
                 }
                 if (isUncensored) {
-                    tachiyomi.presentation.core.components.Badge(
-                        text = "UNCENSORED",
-                        color = MaterialTheme.colorScheme.tertiary,
-                        textColor = MaterialTheme.colorScheme.onTertiary,
-                    )
+                    eu.kanade.presentation.library.components.UncensoredBadge()
                 }
                 if (langCode != null) {
                     eu.kanade.presentation.library.components.LanguageBadge(

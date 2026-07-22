@@ -66,9 +66,9 @@ internal fun UnreadBadge(count: Long) {
 @Composable
 fun UncensoredBadge() {
     Badge(
-        text = "18+",
-        color = MaterialTheme.colorScheme.error,
-        textColor = MaterialTheme.colorScheme.onError,
+        text = "UNC",
+        color = MaterialTheme.colorScheme.tertiary,
+        textColor = MaterialTheme.colorScheme.onTertiary,
     )
 }
 
