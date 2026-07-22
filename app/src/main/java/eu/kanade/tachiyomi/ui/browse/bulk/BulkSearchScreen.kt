@@ -173,7 +173,7 @@ data class BulkSearchScreen(
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = paddingValues + PaddingValues(bottom = 16.dp),
+                    contentPadding = paddingValues,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     items(state.queryResults) { qr ->
@@ -235,61 +235,53 @@ data class BulkSearchScreen(
                                 val resultsBySource = remember(qr.results) {
                                     qr.results.groupBy { it.second }
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 540.dp),
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .verticalScroll(rememberScrollState()),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                                    ) {
-                                        resultsBySource.forEach { (source, resultsList) ->
-                                            Column(modifier = Modifier.fillMaxWidth()) {
-                                                Text(
-                                                    text = source.name,
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    color = MaterialTheme.colorScheme.secondary,
-                                                    modifier = Modifier.padding(bottom = 4.dp),
-                                                )
-                                                LazyRow(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                                    contentPadding = PaddingValues(end = 16.dp),
-                                                ) {
-                                                    items(resultsList) { (manga, source) ->
-                                                        val isSelected = selectedMangas.any { it.id == manga.id }
-                                                        val isInLibrary = state.favoriteUrls.contains(manga.url) || manga.favorite
+                                    resultsBySource.forEach { (source, resultsList) ->
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            Text(
+                                                text = source.name,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.secondary,
+                                                modifier = Modifier.padding(bottom = 4.dp),
+                                            )
+                                            LazyRow(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                contentPadding = PaddingValues(end = 16.dp),
+                                            ) {
+                                                items(resultsList) { (manga, source) ->
+                                                    val isSelected = selectedMangas.any { it.id == manga.id }
+                                                    val isInLibrary = state.favoriteUrls.contains(manga.url) || manga.favorite
 
-                                                        ResultMangaCard(
-                                                            manga = manga,
-                                                            source = source,
-                                                            isInLibrary = isInLibrary,
-                                                            isSelected = isSelected,
-                                                            isMultiSelectActive = isMultiSelectActiveMode || selectedMangas.isNotEmpty(),
-                                                            onClick = {
-                                                                if (isMultiSelectActiveMode || selectedMangas.isNotEmpty()) {
-                                                                    val idx = selectedMangas.indexOfFirst { it.id == manga.id }
-                                                                    if (idx != -1) {
-                                                                        selectedMangas.removeAt(idx)
-                                                                    } else {
-                                                                        selectedMangas.add(manga)
-                                                                    }
+                                                    ResultMangaCard(
+                                                        manga = manga,
+                                                        source = source,
+                                                        isInLibrary = isInLibrary,
+                                                        isSelected = isSelected,
+                                                        isMultiSelectActive = isMultiSelectActiveMode || selectedMangas.isNotEmpty(),
+                                                        onClick = {
+                                                            if (isMultiSelectActiveMode || selectedMangas.isNotEmpty()) {
+                                                                val idx = selectedMangas.indexOfFirst { it.id == manga.id }
+                                                                if (idx != -1) {
+                                                                    selectedMangas.removeAt(idx)
                                                                 } else {
-                                                                    navigator.push(MangaScreen(manga.id, true))
+                                                                    selectedMangas.add(manga)
                                                                 }
-                                                            },
-                                                            onLongClick = {
-                                                                scope.launch {
-                                                                    val categoryIds = screenModel.getMangaCategoryIds(manga.id)
-                                                                    mangaCategoryIdsMap = mangaCategoryIdsMap + (manga.id to categoryIds)
-                                                                    mangaToAddToLibrary = manga
-                                                                }
-                                                            },
-                                                        )
-                                                    }
+                                                            } else {
+                                                                navigator.push(MangaScreen(manga.id, true))
+                                                            }
+                                                        },
+                                                        onLongClick = {
+                                                            scope.launch {
+                                                                val categoryIds = screenModel.getMangaCategoryIds(manga.id)
+                                                                mangaCategoryIdsMap = mangaCategoryIdsMap + (manga.id to categoryIds)
+                                                                mangaToAddToLibrary = manga
+                                                            }
+                                                        },
+                                                    )
                                                 }
                                             }
                                         }
@@ -551,41 +543,49 @@ fun ResultMangaCard(
 }
 
 fun cleanMangaTitle(title: String): CleanedTitle {
-    val normalized = title.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
+    val normalized = title.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'").trim()
 
-    val squareBracketRegex = Regex("\\[(.*?)\\]")
-    val parenthesisRegex = Regex("\\((.*?)\\)")
-
-    val sqMatches = squareBracketRegex.findAll(normalized).map { it.groupValues[1].trim() }.toList()
-    val prMatches = parenthesisRegex.findAll(normalized).map { it.groupValues[1].trim() }.toList()
-
-    val allBrackets = sqMatches + prMatches
-
-    var language: String? = null
     var sequel: String? = null
-    val titleTrimmed = normalized.trim()
-    val startingParenRegex = Regex("^\\((.*?)\\)")
-    val startingMatch = startingParenRegex.find(titleTrimmed)
-    if (startingMatch != null) {
-        sequel = startingMatch.groupValues[1].trim()
-    }
+    var workingTitle = normalized
 
-    var author: String? = null
-    var artist: String? = null
-    val authorArtistRegex = Regex("^([^()]+)\\s*\\(([^()]+)\\)$")
-    for (bracketText in sqMatches) {
-        val match = authorArtistRegex.matchEntire(bracketText)
-        if (match != null) {
-            author = match.groupValues[1].trim()
-            artist = match.groupValues[2].trim()
+    // 1. Detect leading sequel/volume in parentheses: (pq)
+    val startingParenRegex = Regex("""^\(([^()]+)\)\s*(.*)$""")
+    val startingMatch = startingParenRegex.find(workingTitle)
+    if (startingMatch != null) {
+        val inside = startingMatch.groupValues[1].trim()
+        val rest = startingMatch.groupValues[2].trim()
+        if (rest.startsWith("[") || rest.startsWith("(") || rest.isNotEmpty()) {
+            sequel = inside
+            workingTitle = rest
         }
     }
 
+    // 2. Detect author / artist in leading brackets e.g. [abc (de)] or [abc]
+    var author: String? = null
+    var artist: String? = null
+    val authorArtistRegex = Regex("""^[\[({]([^\[\]()]+)\s*(?:\(([^()]+)\))?[\])}]""")
+    val authorMatch = authorArtistRegex.find(workingTitle)
+    if (authorMatch != null) {
+        val part1 = authorMatch.groupValues[1].trim()
+        val part2 = authorMatch.groupValues.getOrNull(2)?.trim()
+        if (!part2.isNullOrEmpty()) {
+            author = part1
+            artist = part2
+        } else {
+            author = part1
+        }
+        workingTitle = workingTitle.substring(authorMatch.range.last + 1).trim()
+    }
+
+    // 3. Find language and additional sequel info in remaining brackets
     val languagesList = listOf(
-        "english", "en", "spanish", "es", "korean", "kr", "japanese", "jp", "raw", "chinese", "zh", "french", "fr", "german", "de", "italian", "it", "russian", "ru", "vietnamese", "vi",
+        "english", "en", "spanish", "es", "korean", "kr", "japanese", "jp", "raw", "chinese", "zh", "french", "fr", "german", "de", "italian", "it", "russian", "ru", "vietnamese", "vi", "portuguese", "pt",
     )
 
-    for (bracketText in allBrackets) {
+    var language: String? = null
+    val simpleBracketRegex = Regex("""[\[({]([^\])}]+)[\])}]""")
+    for (match in simpleBracketRegex.findAll(workingTitle)) {
+        val bracketText = match.groupValues[1].trim()
         val lower = bracketText.lowercase()
         if (lower.toIntOrNull() != null || lower.startsWith("vol") || lower.startsWith("ch") || lower.startsWith("part")) {
             if (sequel == null) {
@@ -596,20 +596,21 @@ fun cleanMangaTitle(title: String): CleanedTitle {
         }
     }
 
-    var cleanedTitle = normalized
-        .replace(parenthesisRegex, "")
-        .replace(squareBracketRegex, "")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-
-    while (cleanedTitle.startsWith("[") || cleanedTitle.endsWith("]") || cleanedTitle.startsWith("(") || cleanedTitle.endsWith(")")) {
+    // 4. Repeatedly strip all remaining brackets from workingTitle
+    var cleanedTitle = workingTitle
+    while (cleanedTitle.contains("(") || cleanedTitle.contains("[") || cleanedTitle.contains("{")) {
         val old = cleanedTitle
         cleanedTitle = cleanedTitle
-            .removePrefix("[").removeSuffix("]")
-            .removePrefix("(").removeSuffix(")")
+            .replace(Regex("""\([^()]*\)"""), "")
+            .replace(Regex("""\[[^\[\]]*\]"""), "")
+            .replace(Regex("""\{[^{}]*\}"""), "")
+            .replace(Regex("""\s+"""), " ")
             .trim()
         if (cleanedTitle == old) break
     }
+
+    // Strip trailing dashes/slashes
+    cleanedTitle = cleanedTitle.replace(Regex("""\s+[-|/~]\s*$"""), "").trim()
 
     if (cleanedTitle.isEmpty()) {
         cleanedTitle = title
