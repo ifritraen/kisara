@@ -443,13 +443,15 @@ fun SpotlightCarousel(
                 ),
             ),
     ) {
-        Text(
-            text = if (tagName != null) "Recommended: #$tagName" else stringResource(KMR.strings.pref_home_section_names_spotlight),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-        )
+        if (tagName != null) {
+            Text(
+                text = "Recommended: #$tagName",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            )
+        }
 
         HorizontalPager(
             state = pagerState,

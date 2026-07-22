@@ -150,23 +150,12 @@ class LandingScreenModel(
                     }
 
                     try {
-                        // Compute top 10 tags from library manga
-                        val tagCounts = libraryManga.flatMap { it.manga.genre.orEmpty() }
-                            .map { it.lowercase().trim() }
-                            .filter { it.isNotEmpty() }
-                            .groupingBy { it }
-                            .eachCount()
-
-                        val top10Tags = tagCounts.entries.sortedByDescending { it.value }.take(10).map { it.key }.toSet()
-
-                        val libraryWithTopTags = libraryManga.filter { item ->
-                            item.manga.genre.orEmpty().any { g -> top10Tags.contains(g.lowercase().trim()) }
-                        }
-
-                        val shuffled = libraryWithTopTags.map { it.manga }.shuffled().take(20)
+                        val unreadLibrary = libraryManga.filter { it.unreadCount > 0 }
+                        val candidates = unreadLibrary.ifEmpty { libraryManga }
+                        val shuffled = candidates.map { it.manga }.shuffled().take(20)
                         mutableState.update { it.copy(libraryRandom = shuffled.toImmutableList(), isLoading = false) }
                     } catch (e: Exception) {
-                        logcat(LogPriority.ERROR, e) { "Failed to load library recommendations" }
+                        logcat(LogPriority.ERROR, e) { "Failed to load unread library manga" }
                     }
                 }
         }

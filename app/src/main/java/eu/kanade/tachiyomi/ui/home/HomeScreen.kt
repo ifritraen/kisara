@@ -420,7 +420,7 @@ object HomeScreen : Screen() {
                                                     ) {
                                                         if (subcategories.isNotEmpty()) {
                                                             Row(
-                                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
                                                                 verticalAlignment = Alignment.CenterVertically,
                                                             ) {
                                                                 subcategories.forEach { sub ->
@@ -549,7 +549,7 @@ object HomeScreen : Screen() {
                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                 }
                                                                 SubTabButton(
-                                                                    text = "Suggestions",
+                                                                    text = "Suggestion",
                                                                     selected = HomeTab.currentPageIndex == 2,
                                                                     hovered = hoveredButtonKey == "Home_Suggestions",
                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
@@ -597,7 +597,7 @@ object HomeScreen : Screen() {
                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                 }
                                                                 SubTabButton(
-                                                                    text = "Favorites",
+                                                                    text = "Favorite",
                                                                     selected = HomeTab.currentPageIndex == 5,
                                                                     hovered = hoveredButtonKey == "Home_Favorites",
                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
@@ -1448,7 +1448,7 @@ private fun SubTabButton(
             ),
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.padding(horizontal = 6.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(

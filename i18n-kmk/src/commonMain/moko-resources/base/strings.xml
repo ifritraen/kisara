@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Actions -->
-    <string name="action_favorites">Favorites</string>
+    <string name="action_favorites">Favorite</string>
     <string name="pref_cover_title_style">Cover title style</string>
     <string name="cover_title_style_default">Default</string>
     <string name="cover_title_style_compact">Compact</string>
@@ -352,7 +352,7 @@
     <string name="pref_category_bar_selected_font_custom_color">Custom selected font color</string>
     <string name="pref_suggestions_title">Enable Suggestions</string>
     <string name="pref_suggestions_summary">Show recommended manga based on your reading history and favorites</string>
-    <string name="action_suggestions">Suggestions</string>
+    <string name="action_suggestions">Suggestion</string>
     <string name="pref_download_concurrent_chapters">Concurrent chapter downloads</string>
     <string name="pref_download_concurrent_chapters_summary">Number of chapters to download at the same time from each source</string>
     <string name="pref_category_vpn">VPN Settings</string>
@@ -378,9 +378,9 @@
     <string name="pref_home_feed_items_count">Feed Items Count per Source</string>
     <string name="pref_home_feed_items_count_summary">Number of latest mangas to fetch from each extension (default: %1$d)</string>
     <string name="pref_home_section_names_spotlight">Spotlight</string>
-    <string name="pref_home_section_names_continue_reading">Unfinished Chronicles</string>
-    <string name="pref_home_section_names_fresh_releases">Latest Chapters</string>
-    <string name="pref_home_section_names_forgotten_favorites">Echo</string>
+    <string name="pref_home_section_names_continue_reading">Continue where you left</string>
+    <string name="pref_home_section_names_fresh_releases">Chapter Update</string>
+    <string name="pref_home_section_names_forgotten_favorites">Unread From Library</string>
     <string name="pref_home_section_names_explore_feed">Recent</string>
     <string name="pref_search_group">Search</string>
     <string name="pref_search_fuzzy_threshold">Fuzzy Search Threshold</string>
