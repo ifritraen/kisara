@@ -147,12 +147,19 @@ class DuplicateScreenModel(
                 emptyMap()
             }
 
+            val searchIds = targetMangaIds ?: targetMangaId?.let { listOf(it) }
+            val isManualTargetCheck = !searchIds.isNullOrEmpty()
+
             val history = uiPreferences.duplicateHistory().get()
             val maxScan = uiPreferences.duplicateMaxScanCount().get()
             val limit = if (maxScan > 0) maxScan else Int.MAX_VALUE
 
-            // Filter out items in history
-            val filteredLibrary = allLibrary.filter { it.manga.id.toString() !in history }
+            // Filter out items in history ONLY during global scans, NOT when manually checking specific target manga
+            val filteredLibrary = if (isManualTargetCheck) {
+                allLibrary
+            } else {
+                allLibrary.filter { it.manga.id.toString() !in history }
+            }
 
             // Union-Find implementation
             val parent = mutableMapOf<Long, Long>()
@@ -207,7 +214,6 @@ class DuplicateScreenModel(
 
             // Collect grouped duplicates
             val groupsMap = filteredLibrary.groupBy { find(it.manga.id) }
-            val searchIds = targetMangaIds ?: targetMangaId?.let { listOf(it) }
             val groupsList = groupsMap.values
                 .filter { it.size > 1 }
                 .map { group ->
@@ -334,9 +340,8 @@ class DuplicateScreenModel(
 }
 
 private fun cleanTitle(title: String): String {
-    var t = title.lowercase()
-    t = t.replace(Regex("\\([^)]*\\)"), "")
-    t = t.replace(Regex("\\[[^]]*\\]"), "")
+    val parsedClean = eu.kanade.tachiyomi.util.MangaTitleParser.parse(title).cleanTitle
+    var t = parsedClean.lowercase()
     val wordsToRemove = listOf(
         "official", "colored", "digital", "edition", "remastered",
         "uncensored", "scanlation", "webtoon", "manga", "novel",
