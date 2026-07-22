@@ -173,7 +173,10 @@ data class BulkSearchScreen(
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = paddingValues,
+                    contentPadding = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = 16.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     items(state.queryResults) { qr ->
