@@ -49,17 +49,7 @@ Before `git push`, confirm the current branch is not `master` or `main` (`git br
 
 ### Formatting & build verification
 
-**“Build passes” is not enough.** After Kotlin/XML edits, run **in this order** before marking work complete:
-
-```bash
-./gradlew spotlessApply    # fix formatting
-./gradlew spotlessCheck    # must pass (same as CI)
-./gradlew assembleDebug
-```
-
-- **Do not** skip `spotlessCheck` when verifying changes.
-- If `spotlessCheck` fails, run `spotlessApply` and re-run `spotlessCheck`.
-- On Cloud VM, export `ANDROID_HOME` and `JAVA_HOME` first (see [Cursor Cloud](#cursor-cloud-specific-instructions)).
+**Do NOT run automatic builds or spotless tasks.** Only run `./gradlew` commands (`spotlessApply`, `spotlessCheck`, `assembleDebug`) when the user explicitly commands it in their prompt or uses slash commands like `/build` or `/up`.
 
 ---
 
@@ -151,7 +141,7 @@ Gradle `-P` flags (`buildSrc/.../BuildConfig.kt`):
 ./gradlew :data:generateSqlDelightInterface  # after .sq / .sqm changes
 ```
 
-**Agent verification checklist (minimum):** `spotlessApply` → `spotlessCheck` → `assembleDebug`.
+**Agent verification checklist:** Only run builds/spotless when explicitly requested by the user.
 
 JDK **17**.
 
