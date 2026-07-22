@@ -29,7 +29,15 @@ object MangaTitleParser {
         val isColorized: Boolean,
     )
 
+    private val parseCache = java.util.concurrent.ConcurrentHashMap<String, ParsedTitle>(512)
+
     fun parse(rawTitle: String): ParsedTitle {
+        return parseCache.getOrPut(rawTitle) {
+            doParse(rawTitle)
+        }
+    }
+
+    private fun doParse(rawTitle: String): ParsedTitle {
         var title = rawTitle.trim()
         val normalized = title.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
         title = normalized

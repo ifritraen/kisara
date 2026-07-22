@@ -160,8 +160,8 @@ fun LibraryContent(
                                 collapsedParentIds + targetCategory.id
                             }
                         } else {
-                            // Navigate to the tab
-                            pagerState.animateScrollToPage(it)
+                            // Navigate to the tab instantly to avoid composing intermediate pages
+                            pagerState.scrollToPage(it)
                             collapsedParentIds = collapsedParentIds - targetCategory.id
                         }
                         clickedTabParentIds = clickedTabParentIds + targetCategory.id
