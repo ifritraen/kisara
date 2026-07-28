@@ -638,7 +638,7 @@ class ReaderActivity : BaseActivity() {
                         onClickBookmarkPage = { chapterId, pageNumber ->
                             val targetChapter = viewModel.getChapters().find { it.chapter.id == chapterId }?.chapter
                             if (targetChapter != null) {
-                                if (viewModel.state.value.chapter?.chapter?.id == chapterId) {
+                                if (viewModel.state.value.viewerChapters?.currChapter?.chapter?.id == chapterId) {
                                     moveToPageIndex((pageNumber - 1).coerceAtLeast(0))
                                 } else {
                                     viewModel.loadNewChapterFromDialog(targetChapter, pageNumber)
