@@ -30,13 +30,12 @@ description: Push project to GitHub under `ifritraen` identity, auto-sanitize cr
 - Update `pubspec.yaml` version line (`version: X.Y.Z+B`).
 
 ## 3. Persistent Keystore & CI/CD Workflow Audit
-- Verify `.github/workflows/build.yml` exists. If missing, write full CI/CD configuration:
-  - Trigger on push to `main` and `v*` tags.
-  - Dynamically extract version string from `pubspec.yaml`.
-  - Restore persistent release keystore Base64 before build.
-  - Run `flutter analyze --no-fatal-infos --no-fatal-warnings`.
-  - Build split-ABI release APKs (`flutter build apk --split-per-abi`).
-  - Rename output APKs (`<AppName>_v<Version>_<ABI>-release.apk`).
+- Verify `.github/workflows/build.yml` exists. If missing or inconsistent, write full CI/CD configuration:
+  - Trigger on push to `master`, `main` and `v*` tags.
+  - Dynamically extract version string from `pubspec.yaml` or `build.gradle.kts`.
+  - **Build Signature Consistency (CRITICAL)**: Always restore and decode persistent release keystore Base64 (`PS_RELEASE_KEY_FILE` or `GH_RELEASE_KEYSTORE_PATH`) before compilation so that both release and CI workflows produce identically signed release APKs (`<AppName>_v<Version>-release.apk`).
+  - Run code analysis/checks prior to build.
+  - Build signed release APKs/AABs.
   - Publish GitHub Release via `softprops/action-gh-release@v2`.
 
 ## 4. Commit & Push
