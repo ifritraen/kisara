@@ -1,24 +1,24 @@
 ---
-description: Push project to GitHub under `ifritraen` identity, auto-sanitize cross-identity mentions, manage persistent keystore signing, and execute self-healing GitHub Actions build monitoring.
+description: Push project to GitHub under `akhlak` identity, auto-sanitize cross-identity mentions, manage persistent keystore signing, and execute self-healing GitHub Actions build monitoring.
 ---
-# /ghra Workflow (Identity: ifritraen)
+# /ghak Workflow (Identity: akhlak)
 
 ## 0. Target Repository Persistence (AUTO-SAVE)
-- **Saved Target Repo**: ifritraen/kisara
-- **Persistence Rule**: If a GitHub repository is provided in the user prompt (e.g., `ifritraen/AnymeX` or URL) or detected via `git remote get-url origin`:
-  - If **Saved Target Repo** is `[None - specify once to auto-save]` or different, instantly edit and update the `- **Saved Target Repo**: <owner/repo>` line in this `.agents/workflows/ghra.md` file.
-  - All subsequent `/ghra` runs will automatically read and reuse this saved repository without asking again.
+- **Saved Target Repo**: [None - specify once to auto-save]
+- **Persistence Rule**: If a GitHub repository is provided in the user prompt (e.g., `akhlakurrahman1011/AnymeX` or URL) or detected via `git remote get-url origin`:
+  - If **Saved Target Repo** is `[None - specify once to auto-save]` or different, instantly edit and update the `- **Saved Target Repo**: <owner/repo>` line in this `.agents/workflows/ghak.md` file.
+  - All subsequent `/ghak` runs will automatically read and reuse this saved repository without asking again.
 
 ## 1. Identity Sanitization & Credential Gate (STRICT)
-- **Active Profile**: `ifritraen` (`ifrit.raen@gmail.com`)
+- **Active Profile**: `akhlakurrahman1011` (`akhlak-pro-red@gmail.com`)
 - **Credential Source**: Dynamically read token from `C:\Users\akhla\.gemini\.agents\workflows\InfoBank\sensitive.md` (Do NOT hardcode tokens).
 - **Sanitization Checklist**:
   - Scan staged files, commit messages, code comments, and metadata.
-  - Instantly purge/remove any occurrences of `akhlak` or `akhla`.
+  - Instantly purge/remove any occurrences of `ifritraen`, `ifrit`, or `raen`.
 - Configure Git credentials:
   ```powershell
-  git config user.name "ifritraen"
-  git config user.email "ifrit.raen@gmail.com"
+  git config user.name "akhlakurrahman1011"
+  git config user.email "akhlak-pro-red@gmail.com"
   ```
 
 ## 2. Version Bump Engine (Single Source of Truth)
@@ -41,7 +41,7 @@ description: Push project to GitHub under `ifritraen` identity, auto-sanitize cr
 
 ## 4. Commit & Push
 - Stage specific changed files (never `git add .`).
-- Commit message: `release: v<Version> - update under ifritraen identity`
+- Commit message: `release: v<Version> - update under akhlak identity`
 - Push to remote using Saved Target Repo: `git push origin main` and `git push origin v<Version>`
 
 ## 5. Self-Healing Build Polling & Repair Loop (Max 3 Attempts)
@@ -52,5 +52,5 @@ description: Push project to GitHub under `ifritraen` identity, auto-sanitize cr
   - Fetch failure logs: `gh run view <RunID> --log-failed --repo <SavedTargetRepo>`
   - Diagnose exact root cause from traceback.
   - Fix code / workflow file.
-  - Commit under `ifritraen` identity and push.
+  - Commit under `akhlak` identity and push.
   - Repeat polling until green.
