@@ -45,10 +45,30 @@ fun GlobalSearchScreen(
     onToggleClean: () -> Unit = {},
     onToggleFormat: () -> Unit = {},
     onToggleFuzzy: () -> Unit = {},
+    customGroups: List<tachiyomi.domain.source.model.CustomSearchGroup> = emptyList(),
+    activeCustomGroupId: String = "",
+    onSelectCustomGroup: (String) -> Unit = {},
+    onSaveCustomGroup: (tachiyomi.domain.source.model.CustomSearchGroup) -> Unit = {},
+    onDeleteCustomGroup: (String) -> Unit = {},
     // KMK <--
 ) {
     // KMK -->
     val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
+    var showGroupManagerDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    if (showGroupManagerDialog) {
+        eu.kanade.presentation.browse.components.CustomGroupManagerDialog(
+            groups = customGroups,
+            activeGroupId = activeCustomGroupId,
+            onSelectGroup = { groupId ->
+                onSelectCustomGroup(groupId)
+                showGroupManagerDialog = false
+            },
+            onSaveGroup = onSaveCustomGroup,
+            onDeleteGroup = onDeleteCustomGroup,
+            onDismissRequest = { showGroupManagerDialog = false },
+        )
+    }
     // KMK <--
 
     Scaffold(
@@ -98,6 +118,10 @@ fun GlobalSearchScreen(
                     onToggleFormat = onToggleFormat,
                     searchFuzzy = state.searchFuzzy,
                     onToggleFuzzy = onToggleFuzzy,
+                    customGroups = customGroups,
+                    activeCustomGroupId = activeCustomGroupId,
+                    onSelectCustomGroup = onSelectCustomGroup,
+                    onOpenGroupManager = { showGroupManagerDialog = true },
                     // KMK <--
                 )
             }

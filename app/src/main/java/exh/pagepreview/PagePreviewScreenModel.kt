@@ -22,12 +22,16 @@ import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+import kotlinx.coroutines.flow.combine
+import tachiyomi.domain.pagebookmark.model.PageBookmark
+
 class PagePreviewScreenModel(
     private val mangaId: Long,
     private val getPagePreviews: GetPagePreviews = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
     private val getChaptersByMangaId: GetChaptersByMangaId = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
+    private val getPageBookmarks: tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks = Injekt.get(),
 ) : StateScreenModel<PagePreviewState>(PagePreviewState.Loading) {
 
     private val page = MutableStateFlow(1)
@@ -45,8 +49,13 @@ class PagePreviewScreenModel(
                 return@launchIO
             }
             val source = sourceManager.getOrStub(manga.source)
-            page
-                .onEach { page ->
+            combine(
+                page,
+                getPageBookmarks.subscribeByMangaId(mangaId),
+            ) { page, bookmarks ->
+                page to bookmarks
+            }
+                .onEach { (page, bookmarks) ->
                     when (
                         val previews = getPagePreviews.await(manga, source, page)
                     ) {
@@ -64,6 +73,7 @@ class PagePreviewScreenModel(
                                         manga,
                                         chapter,
                                         source,
+                                        bookmarks,
                                     )
                                 }
                                 is PagePreviewState.Success -> it.copy(
@@ -71,6 +81,7 @@ class PagePreviewScreenModel(
                                     pagePreviews = previews.pagePreviews,
                                     hasNextPage = previews.hasNextPage,
                                     pageCount = previews.pageCount,
+                                    pageBookmarks = bookmarks,
                                 )
                             }
                         }
@@ -102,6 +113,7 @@ sealed class PagePreviewState {
         val manga: Manga,
         val chapter: Chapter,
         val source: Source,
+        val pageBookmarks: List<PageBookmark> = emptyList(),
     ) : PagePreviewState()
 
     data class Error(val error: Throwable) : PagePreviewState()

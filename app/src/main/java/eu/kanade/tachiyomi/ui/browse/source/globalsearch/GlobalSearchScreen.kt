@@ -49,6 +49,8 @@ class GlobalSearchScreen(
         // KMK -->
         val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
         val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
+        val customGroups by screenModel.preferences.customSearchGroups().changes().collectAsState(initial = screenModel.preferences.customSearchGroups().get())
+        val activeCustomGroupId by screenModel.preferences.globalSearchActiveCustomGroupId().changes().collectAsState(initial = screenModel.preferences.globalSearchActiveCustomGroupId().get())
 
         val haptic = LocalHapticFeedback.current
 
@@ -111,6 +113,11 @@ class GlobalSearchScreen(
                 onToggleClean = screenModel::toggleSearchClean,
                 onToggleFormat = screenModel::toggleSearchFormat,
                 onToggleFuzzy = screenModel::toggleSearchFuzzy,
+                customGroups = customGroups,
+                activeCustomGroupId = activeCustomGroupId,
+                onSelectCustomGroup = screenModel::setCustomGroupFilter,
+                onSaveCustomGroup = screenModel::saveCustomGroup,
+                onDeleteCustomGroup = screenModel::deleteCustomGroup,
                 // KMK <--
             )
         }

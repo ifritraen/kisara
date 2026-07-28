@@ -235,7 +235,8 @@ fun MangaScreen(
     // KMK -->
     onDeletePageBookmark: (Long) -> Unit = {},
     // KMK <--
-
+) {
+    var selectedChapterTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
@@ -856,6 +857,7 @@ private fun MangaScreenSmallImpl(
                                 maxWidth = maxWidth,
                                 setMaxWidth = { maxWidth = it },
                                 rowCount = previewsRowCount,
+                                bookmarkedPageNumbers = remember(state.pageBookmarks) { state.pageBookmarks.map { it.pageNumber }.toSet() },
                             )
                         }
                     }
@@ -1056,14 +1058,15 @@ private fun MangaScreenSmallImpl(
                                 chapters.map { it.chapter.chapterNumber }.missingChaptersCount()
                             }
 
-                            if (missingChapterCount > 0) {
-                                ChapterHeader(
-                                    enabled = !isAnySelected,
-                                    chapterCount = chapters.size,
-                                    missingChapterCount = missingChapterCount,
-                                    onClick = onFilterClicked,
-                                )
-                            }
+                            ChapterHeader(
+                                enabled = !isAnySelected,
+                                chapterCount = chapters.size,
+                                bookmarkCount = state.pageBookmarks.size,
+                                selectedTab = selectedChapterTab,
+                                onSelectTab = { selectedChapterTab = it },
+                                missingChapterCount = missingChapterCount,
+                                onClick = onFilterClicked,
+                            )
 
                             Box(modifier = Modifier.fillMaxSize()) {
                                 VerticalFastScroller(
@@ -1481,6 +1484,7 @@ private fun MangaScreenLargeImpl(
                                 onOpenPage = onOpenPagePreview,
                                 onMorePreviewsClicked = onMorePreviewsClicked,
                                 rowCount = previewsRowCount,
+                                bookmarkedPageNumbers = remember(state.pageBookmarks) { state.pageBookmarks.map { it.pageNumber }.toSet() },
                             )
                         }
                         // SY <--
@@ -1574,30 +1578,53 @@ private fun MangaScreenLargeImpl(
                                 ChapterHeader(
                                     enabled = !isAnySelected,
                                     chapterCount = chapters.size,
+                                    bookmarkCount = state.pageBookmarks.size,
+                                    selectedTab = selectedChapterTab,
+                                    onSelectTab = { selectedChapterTab = it },
                                     missingChapterCount = missingChapterCount,
                                     onClick = onFilterButtonClicked,
                                 )
                             }
 
-                            sharedChapterItems(
-                                manga = state.manga,
-                                mergedData = state.mergedData,
-                                chapters = listItem,
-                                isAnyChapterSelected = chapters.fastAny { it.selected },
-                                chapterSwipeStartAction = chapterSwipeStartAction,
-                                chapterSwipeEndAction = chapterSwipeEndAction,
-                                // SY -->
-                                alwaysShowReadingProgress = state.alwaysShowReadingProgress,
-                                // SY <--
-                                onChapterClicked = onChapterClicked,
-                                onDownloadChapter = onDownloadChapter,
-                                // KMK -->
-                                onTranslationChapter = onTranslationChapter,
-                                onColorizeChapter = onColorizeChapter,
-                                // KMK <--
-                                onChapterSelected = onChapterSelected,
-                                onChapterSwipe = onChapterSwipe,
-                            )
+                            if (selectedChapterTab == 1 && state.pageBookmarks.isNotEmpty()) {
+                                item(key = "page_bookmarks_tab_content") {
+                                    PageBookmarksSection(
+                                        bookmarks = state.pageBookmarks,
+                                        chapters = remember(state.chapters) { state.chapters.map { it.chapter } },
+                                        onClickBookmark = { chapterId, pageNumber ->
+                                            currentContext.startActivity(
+                                                eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
+                                                    currentContext,
+                                                    state.manga.id,
+                                                    chapterId,
+                                                    pageNumber,
+                                                ),
+                                            )
+                                        },
+                                        onDeleteBookmark = onDeletePageBookmark,
+                                    )
+                                }
+                            } else {
+                                sharedChapterItems(
+                                    manga = state.manga,
+                                    mergedData = state.mergedData,
+                                    chapters = listItem,
+                                    isAnyChapterSelected = chapters.fastAny { it.selected },
+                                    chapterSwipeStartAction = chapterSwipeStartAction,
+                                    chapterSwipeEndAction = chapterSwipeEndAction,
+                                    // SY -->
+                                    alwaysShowReadingProgress = state.alwaysShowReadingProgress,
+                                    // SY <--
+                                    onChapterClicked = onChapterClicked,
+                                    onDownloadChapter = onDownloadChapter,
+                                    // KMK -->
+                                    onTranslationChapter = onTranslationChapter,
+                                    onColorizeChapter = onColorizeChapter,
+                                    // KMK <--
+                                    onChapterSelected = onChapterSelected,
+                                    onChapterSwipe = onChapterSwipe,
+                                )
+                            }
                         }
                     }
                 },

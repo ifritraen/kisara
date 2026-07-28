@@ -19,10 +19,17 @@ import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
+import tachiyomi.i18n.kmk.KMR
+
 @Composable
 fun ChapterHeader(
     enabled: Boolean,
     chapterCount: Int?,
+    bookmarkCount: Int = 0,
+    selectedTab: Int = 0,
+    onSelectTab: (Int) -> Unit = {},
     missingChapterCount: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -31,31 +38,41 @@ fun ChapterHeader(
         // KMK <--
         modifier = modifier
             .fillMaxWidth()
-            .clickable(
-                enabled = enabled,
-                onClick = onClick,
-            )
             .padding(horizontal = 16.dp, vertical = 4.dp),
         // KMK -->
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // KMK <--
-        Column(
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            val chaptersText = if (chapterCount == null) {
+                stringResource(MR.strings.chapters)
+            } else {
+                pluralStringResource(MR.plurals.manga_num_chapters, count = chapterCount, chapterCount)
+            }
             Text(
-                text = if (chapterCount == null) {
-                    stringResource(MR.strings.chapters)
-                } else {
-                    pluralStringResource(MR.plurals.manga_num_chapters, count = chapterCount, chapterCount)
-                },
+                text = chaptersText,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
+                color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.clickable { onSelectTab(0) },
             )
 
-            MissingChaptersWarning(missingChapterCount)
+            if (bookmarkCount > 0) {
+                Text(
+                    text = "${stringResource(KMR.strings.page_bookmarks)} ($bookmarkCount)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
+                    color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    modifier = Modifier.clickable { onSelectTab(1) },
+                )
+            }
         }
+
+        MissingChaptersWarning(missingChapterCount)
     }
 }
 

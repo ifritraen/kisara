@@ -17,8 +17,11 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.FolderSpecial
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Shuffle
+import androidx.compose.ui.text.font.FontWeight
+import tachiyomi.i18n.kmk.KMR
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -77,6 +80,10 @@ fun GlobalSearchToolbar(
     onToggleFormat: () -> Unit = {},
     searchFuzzy: Boolean = false,
     onToggleFuzzy: () -> Unit = {},
+    customGroups: List<tachiyomi.domain.source.model.CustomSearchGroup> = emptyList(),
+    activeCustomGroupId: String = "",
+    onSelectCustomGroup: (String) -> Unit = {},
+    onOpenGroupManager: () -> Unit = {},
     // KMK <--
 ) {
     Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
@@ -198,6 +205,87 @@ fun GlobalSearchToolbar(
                         Text(text = stringResource(MR.strings.all))
                     },
                 )
+
+                // KMK -->
+                var customGroupsExpanded by remember { mutableStateOf(false) }
+                val activeGroup = remember(customGroups, activeCustomGroupId) {
+                    customGroups.firstOrNull { it.id == activeCustomGroupId }
+                }
+                Box {
+                    FilterChip(
+                        selected = sourceFilter == SourceFilter.Custom,
+                        onClick = {
+                            if (customGroups.isEmpty()) {
+                                onOpenGroupManager()
+                            } else {
+                                customGroupsExpanded = true
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.FolderSpecial,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = if (sourceFilter == SourceFilter.Custom && activeGroup != null) {
+                                    activeGroup.name
+                                } else {
+                                    stringResource(KMR.strings.custom_groups)
+                                },
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                            )
+                        },
+                    )
+                    DropdownMenu(
+                        expanded = customGroupsExpanded,
+                        onDismissRequest = { customGroupsExpanded = false },
+                        modifier = Modifier.heightIn(max = 280.dp),
+                    ) {
+                        customGroups.forEach { group ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = group.name,
+                                        fontWeight = if (sourceFilter == SourceFilter.Custom && group.id == activeCustomGroupId) {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.Normal
+                                        },
+                                    )
+                                },
+                                onClick = {
+                                    onSelectCustomGroup(group.id)
+                                    customGroupsExpanded = false
+                                },
+                            )
+                        }
+                        if (customGroups.isNotEmpty()) {
+                            HorizontalDivider()
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(KMR.strings.action_manage_custom_groups),
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            },
+                            onClick = {
+                                customGroupsExpanded = false
+                                onOpenGroupManager()
+                            },
+                        )
+                    }
+                }
+                // KMK <--
 
                 VerticalDivider()
             }

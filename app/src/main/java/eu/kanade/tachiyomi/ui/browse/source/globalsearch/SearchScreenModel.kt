@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import tachiyomi.domain.source.model.CustomSearchGroup
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mihon.domain.manga.model.toDomainManga
@@ -44,7 +45,7 @@ abstract class SearchScreenModel(
     private val extensionManager: ExtensionManager = Injekt.get(),
     private val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
-    private val preferences: SourcePreferences = Injekt.get(),
+    val preferences: SourcePreferences = Injekt.get(),
 ) : StateScreenModel<SearchScreenModel.State>(initialState) {
 
     private val coroutineDispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
@@ -167,6 +168,45 @@ abstract class SearchScreenModel(
         preferences.globalSearchPinnedState().set(filter)
         search()
     }
+
+    // KMK -->
+    fun setCustomGroupFilter(groupId: String) {
+        preferences.globalSearchActiveCustomGroupId().set(groupId)
+        preferences.globalSearchPinnedState().set(SourceFilter.Custom)
+        search()
+    }
+
+    fun saveCustomGroup(group: CustomSearchGroup) {
+        val current = preferences.customSearchGroups().get().toMutableList()
+        val index = current.indexOfFirst { it.id == group.id }
+        if (index != -1) {
+            current[index] = group
+        } else {
+            current.add(group)
+        }
+        preferences.customSearchGroups().set(current)
+        if (preferences.globalSearchActiveCustomGroupId().get().isEmpty() ||
+            preferences.globalSearchActiveCustomGroupId().get() == group.id
+        ) {
+            preferences.globalSearchActiveCustomGroupId().set(group.id)
+            preferences.globalSearchPinnedState().set(SourceFilter.Custom)
+        }
+        search()
+    }
+
+    fun deleteCustomGroup(groupId: String) {
+        val current = preferences.customSearchGroups().get().filterNot { it.id == groupId }
+        preferences.customSearchGroups().set(current)
+        if (preferences.globalSearchActiveCustomGroupId().get() == groupId) {
+            val fallback = current.firstOrNull()?.id ?: ""
+            preferences.globalSearchActiveCustomGroupId().set(fallback)
+            if (fallback.isEmpty() && state.value.sourceFilter == SourceFilter.Custom) {
+                preferences.globalSearchPinnedState().set(SourceFilter.All)
+            }
+        }
+        search()
+    }
+    // KMK <--
 
     fun toggleFilterResults() {
         preferences.globalSearchFilterState().toggle()
@@ -295,6 +335,7 @@ abstract class SearchScreenModel(
 enum class SourceFilter {
     All,
     PinnedOnly,
+    Custom,
 }
 
 sealed interface SearchItemResult {

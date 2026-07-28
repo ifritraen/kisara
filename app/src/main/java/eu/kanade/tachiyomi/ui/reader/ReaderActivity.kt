@@ -634,6 +634,18 @@ class ReaderActivity : BaseActivity() {
                         onDownloadAction = { chapter, action ->
                             viewModel.handleDownloadAction(chapter, action)
                         },
+                        pageBookmarks = state.pageBookmarks,
+                        onClickBookmarkPage = { chapterId, pageNumber ->
+                            val targetChapter = viewModel.getChapters().find { it.chapter.id == chapterId }?.chapter
+                            if (targetChapter != null) {
+                                if (viewModel.state.value.chapter?.chapter?.id == chapterId) {
+                                    moveToPageIndex((pageNumber - 1).coerceAtLeast(0))
+                                } else {
+                                    viewModel.loadNewChapterFromDialog(targetChapter, pageNumber)
+                                }
+                            }
+                        },
+                        onDeleteBookmarkPage = viewModel::deletePageBookmark,
                         // KMK <--
                         isHttpSource = isHttpSource,
                         onBrowserClick = ::openChapterInBrowser.takeIf { isHttpSource },

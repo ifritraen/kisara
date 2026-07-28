@@ -82,6 +82,9 @@ fun PagePreviewScreen(
                     val lazyListState = key(state.page) {
                         rememberLazyListState()
                     }
+                    val bookmarkedPageNumbers = remember(state.pageBookmarks) {
+                        state.pageBookmarks.map { it.pageNumber }.toSet()
+                    }
                     ScrollbarLazyColumn(
                         state = lazyListState,
                         modifier = Modifier,
@@ -101,6 +104,7 @@ fun PagePreviewScreen(
                                         modifier = Modifier.weight(1F),
                                         page = page,
                                         onOpenPage = onOpenPage,
+                                        isBookmarked = page.index in bookmarkedPageNumbers,
                                     )
                                 }
                             }

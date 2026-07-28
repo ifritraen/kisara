@@ -53,6 +53,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import eu.kanade.presentation.manga.components.PageBookmarksSection
+import tachiyomi.domain.pagebookmark.model.PageBookmark
+import tachiyomi.i18n.kmk.KMR
+
 @Composable
 fun ChapterListDialog(
     onDismissRequest: () -> Unit,
@@ -64,6 +70,11 @@ fun ChapterListDialog(
     onDownloadAction: ((Chapter, ChapterDownloadAction) -> Unit)? = null,
     isHttpSource: Boolean,
     onBrowserClick: (() -> Unit)?,
+    // KMK -->
+    pageBookmarks: List<PageBookmark> = emptyList(),
+    onClickBookmarkPage: ((chapterId: Long, pageNumber: Int) -> Unit)? = null,
+    onDeleteBookmarkPage: ((bookmarkId: Long) -> Unit)? = null,
+    // KMK <--
 ) {
     val manga by screenModel.mangaFlow.collectAsState()
     val context = LocalContext.current
@@ -72,7 +83,9 @@ fun ChapterListDialog(
     val downloadQueueState by downloadManager.queueState.collectAsState()
 
     val tabTitles = remember {
-        persistentListOf(MR.strings.chapters)
+        // KMK -->
+        persistentListOf(MR.strings.chapters, KMR.strings.page_bookmarks)
+        // KMK <--
     }
     val pagerState = rememberPagerState { tabTitles.size }
     val mappedTabTitles = tabTitles.map { stringResource(it) }.toImmutableList()
@@ -184,6 +197,25 @@ fun ChapterListDialog(
                             },
                         )
                     }
+                }
+            }
+            1 -> {
+                Box(
+                    modifier = Modifier
+                        .heightIn(min = 200.dp, max = 450.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    PageBookmarksSection(
+                        bookmarks = pageBookmarks,
+                        chapters = remember(chapters) { chapters.map { it.chapter } },
+                        onClickBookmark = { chapterId, pageNumber ->
+                            onClickBookmarkPage?.invoke(chapterId, pageNumber)
+                            onDismissRequest()
+                        },
+                        onDeleteBookmark = { bookmarkId ->
+                            onDeleteBookmarkPage?.invoke(bookmarkId)
+                        },
+                    )
                 }
             }
         }

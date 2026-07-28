@@ -10,6 +10,10 @@ import tachiyomi.core.common.preference.getEnum
 import tachiyomi.core.common.preference.getLongArray
 import tachiyomi.domain.library.model.LibraryDisplayMode
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import tachiyomi.domain.source.model.CustomSearchGroup
+
 class SourcePreferences(
     private val preferenceStore: PreferenceStore,
 ) {
@@ -107,6 +111,21 @@ class SourcePreferences(
     fun globalSearchPinnedState() = preferenceStore.getEnum(
         Preference.appStateKey("global_search_pinned_toggle_state"),
         SourceFilter.PinnedOnly,
+    )
+
+    fun globalSearchActiveCustomGroupId() = preferenceStore.getString("global_search_active_custom_group_id", "")
+
+    fun customSearchGroups() = preferenceStore.getObjectFromString(
+        "custom_search_groups",
+        emptyList<CustomSearchGroup>(),
+        { Json.encodeToString(it) },
+        {
+            try {
+                Json.decodeFromString(it)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        },
     )
 
     fun disabledRepos() = preferenceStore.getStringSet("disabled_repos", emptySet())

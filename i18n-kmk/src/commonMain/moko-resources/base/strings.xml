@@ -399,4 +399,13 @@
     <string name="action_remove_from_favorites">Remove from Favorite</string>
     <string name="added_to_favorite_tags">Added to Favorite Tags</string>
     <string name="removed_from_favorite_tags">Removed from Favorite Tags</string>
+
+    <!-- Custom Search Groups -->
+    <string name="custom_groups">Custom Groups</string>
+    <string name="action_manage_custom_groups">Manage Groups…</string>
+    <string name="action_new_custom_group">New Custom Group</string>
+    <string name="action_edit_custom_group">Edit Group</string>
+    <string name="custom_group_name">Group Name</string>
+    <string name="custom_group_select_sources">Select Extensions &amp; Sources</string>
+    <string name="custom_group_no_groups">No custom groups created yet</string>
 </resources>

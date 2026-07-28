@@ -143,6 +143,7 @@ class ReaderViewModel @JvmOverloads constructor(
     // KMK -->
     private val getPageBookmarks: tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks = Injekt.get(),
     private val togglePageBookmarkInteractor: tachiyomi.domain.pagebookmark.interactor.TogglePageBookmark = Injekt.get(),
+    private val deletePageBookmarkInteractor: tachiyomi.domain.pagebookmark.interactor.DeletePageBookmark = Injekt.get(),
     // KMK <--
 ) : ViewModel() {
 
@@ -620,12 +621,23 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
-    fun loadNewChapterFromDialog(chapter: Chapter) {
+    fun loadNewChapterFromDialog(chapter: Chapter, pageNumber: Int? = null) {
         viewModelScope.launchIO {
             val newChapter = chapterList.firstOrNull { it.chapter.id == chapter.id } ?: return@launchIO
+            if (pageNumber != null) {
+                newChapter.requestedPage = (pageNumber - 1).coerceAtLeast(0)
+            }
             loadAdjacent(newChapter)
         }
     }
+
+    // KMK -->
+    fun deletePageBookmark(bookmarkId: Long) {
+        viewModelScope.launchIO {
+            deletePageBookmarkInteractor.await(bookmarkId)
+        }
+    }
+    // KMK <--
 
     /**
      * Called when the user is going to load the prev/next chapter through the toolbar buttons.

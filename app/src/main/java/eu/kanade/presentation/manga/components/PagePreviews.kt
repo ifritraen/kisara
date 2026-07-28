@@ -63,9 +63,11 @@ private fun PagePreviewLoading(
 }
 
 @Composable
+@Composable
 private fun PagePreviewRow(
     onOpenPage: (Int) -> Unit,
     items: ImmutableList<PagePreview>,
+    bookmarkedPageNumbers: Set<Int> = emptySet(),
 ) {
     Row(
         modifier = Modifier
@@ -79,6 +81,7 @@ private fun PagePreviewRow(
                 modifier = Modifier.weight(1F),
                 page = page,
                 onOpenPage = onOpenPage,
+                isBookmarked = page.index in bookmarkedPageNumbers,
             )
         }
     }
@@ -104,6 +107,7 @@ fun PagePreviews(
     onOpenPage: (Int) -> Unit,
     onMorePreviewsClicked: () -> Unit,
     rowCount: Int,
+    bookmarkedPageNumbers: Set<Int> = emptySet(),
 ) {
     Column(Modifier.fillMaxWidth()) {
         var maxWidth by remember {
@@ -119,6 +123,7 @@ fun PagePreviews(
                     PagePreviewRow(
                         onOpenPage = onOpenPage,
                         items = remember(it) { it.toImmutableList() },
+                        bookmarkedPageNumbers = bookmarkedPageNumbers,
                     )
                 }
 
@@ -136,6 +141,7 @@ fun LazyListScope.PagePreviewItems(
     maxWidth: Dp,
     setMaxWidth: (Dp) -> Unit,
     rowCount: Int,
+    bookmarkedPageNumbers: Set<Int> = emptySet(),
 ) {
     when {
         pagePreviewState is PagePreviewState.Loading || maxWidth == Dp.Hairline -> {
@@ -156,6 +162,7 @@ fun LazyListScope.PagePreviewItems(
                 PagePreviewRow(
                     onOpenPage = onOpenPage,
                     items = remember(it) { it.toImmutableList() },
+                    bookmarkedPageNumbers = bookmarkedPageNumbers,
                 )
             }
             item(
@@ -169,11 +176,18 @@ fun LazyListScope.PagePreviewItems(
     }
 }
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material3.Icon
+
 @Composable
 fun PagePreview(
     modifier: Modifier,
     page: PagePreview,
     onOpenPage: (Int) -> Unit,
+    isBookmarked: Boolean = false,
 ) {
     Column(
         modifier
@@ -206,6 +220,25 @@ fun PagePreview(
                             .clip(MaterialTheme.shapes.small),
                         contentScale = ContentScale.FillWidth,
                     )
+                    if (isBookmarked) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(4.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = CircleShape,
+                                )
+                                .padding(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Bookmark,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
                 }
             },
             modifier = Modifier
