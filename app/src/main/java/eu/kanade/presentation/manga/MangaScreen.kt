@@ -70,6 +70,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -234,6 +235,40 @@ fun MangaScreen(
     // SY <--
     // KMK -->
     onDeletePageBookmark: (Long) -> Unit = {},
+    // KMK <--
+
+    // For bottom action menu
+    onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
+    onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
+    onMarkPreviousAsReadClicked: (Chapter) -> Unit,
+    onMultiDeleteClicked: (List<Chapter>) -> Unit,
+    onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)? = null,
+
+    // For chapter swipe
+    onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
+
+    // Chapter selection
+    onChapterSelected: (ChapterList.Item, Boolean, Boolean) -> Unit,
+    onAllChapterSelected: (Boolean) -> Unit,
+    onInvertSelection: () -> Unit,
+
+    // KMK -->
+    getMangaState: @Composable (Manga) -> State<Manga>,
+    onClickSourceSettingsClicked: (() -> Unit)?,
+    onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onClickColorizerSettingsClicked: (() -> Unit)? = null,
+    onToggleAutoTranslate: (() -> Unit)? = null,
+    onClearManga: () -> Unit,
+    onOpenMangaFolder: (() -> Unit)?,
+    onRelatedMangasScreenClick: () -> Unit,
+    onRelatedMangaClick: (Manga) -> Unit,
+    onRelatedMangaLongClick: (Manga) -> Unit,
+    librarySearch: (query: String) -> Unit,
+    onSourceClick: () -> Unit,
+    onCoverLoaded: (MangaCover) -> Unit,
+    coverRatio: MutableFloatState,
+    onPaletteScreenClick: () -> Unit,
+    hazeState: HazeState,
     // KMK <--
 ) {
     val context = LocalContext.current
@@ -487,6 +522,7 @@ private fun MangaScreenSmallImpl(
 ) {
     val currentContext = LocalContext.current
     val chapterListState = rememberLazyListState()
+    var selectedChapterTab by rememberSaveable { mutableIntStateOf(0) }
 
     val (chapters, listItem, isAnySelected) = remember(state) {
         Triple(
@@ -1165,6 +1201,7 @@ private fun MangaScreenLargeImpl(
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current
     val chapterListState = rememberLazyListState()
+    var selectedChapterTab by rememberSaveable { mutableIntStateOf(0) }
 
     val (chapters, listItem, isAnySelected) = remember(state) {
         Triple(
