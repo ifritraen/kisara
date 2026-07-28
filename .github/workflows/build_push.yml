@@ -62,7 +62,12 @@ jobs:
         run: ./gradlew spotlessCheck
 
       - name: Build app
-        run: ./gradlew assemblePreview --no-configuration-cache -Pinclude-telemetry -Penable-updater
+        run: |
+          FLAGS="-Penable-updater --no-configuration-cache"
+          if [ -f app/google-services.json ]; then
+            FLAGS="$FLAGS -Pinclude-telemetry"
+          fi
+          ./gradlew assemblePreview $FLAGS
 
       - name: Run unit tests
         id: unit_tests
