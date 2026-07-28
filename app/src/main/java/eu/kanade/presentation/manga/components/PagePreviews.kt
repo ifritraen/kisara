@@ -69,7 +69,6 @@ private fun PagePreviewLoading(
 }
 
 @Composable
-@Composable
 private fun PagePreviewRow(
     onOpenPage: (Int) -> Unit,
     items: ImmutableList<PagePreview>,

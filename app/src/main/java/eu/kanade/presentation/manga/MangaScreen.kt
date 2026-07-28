@@ -553,6 +553,7 @@ private fun MangaScreenSmallImpl(
     }
     // SY -->
     val metadataDescription = metadataDescription(state.source)
+    val bookmarkedPageNumbers = remember(state.pageBookmarks) { state.pageBookmarks.map { it.pageNumber }.toSet() }
     var maxWidth by remember {
         mutableStateOf(Dp.Hairline)
     }
@@ -859,7 +860,7 @@ private fun MangaScreenSmallImpl(
                                 maxWidth = maxWidth,
                                 setMaxWidth = { maxWidth = it },
                                 rowCount = previewsRowCount,
-                                bookmarkedPageNumbers = remember(state.pageBookmarks) { state.pageBookmarks.map { it.pageNumber }.toSet() },
+                                bookmarkedPageNumbers = bookmarkedPageNumbers,
                             )
                         }
                     }
@@ -1202,6 +1203,7 @@ private fun MangaScreenLargeImpl(
     val density = LocalDensity.current
     val chapterListState = rememberLazyListState()
     var selectedChapterTab by rememberSaveable { mutableIntStateOf(0) }
+    val bookmarkedPageNumbers = remember(state.pageBookmarks) { state.pageBookmarks.map { it.pageNumber }.toSet() }
 
     val (chapters, listItem, isAnySelected) = remember(state) {
         Triple(
@@ -1487,7 +1489,7 @@ private fun MangaScreenLargeImpl(
                                 onOpenPage = onOpenPagePreview,
                                 onMorePreviewsClicked = onMorePreviewsClicked,
                                 rowCount = previewsRowCount,
-                                bookmarkedPageNumbers = remember(state.pageBookmarks) { state.pageBookmarks.map { it.pageNumber }.toSet() },
+                                bookmarkedPageNumbers = bookmarkedPageNumbers,
                             )
                         }
                         // SY <--

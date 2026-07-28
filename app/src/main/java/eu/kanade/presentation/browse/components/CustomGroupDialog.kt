@@ -354,8 +354,10 @@ private fun ExtensionSourceItem(
                             onCheckedChange = { checked -> onToggleSource(source.id, checked) },
                         )
                         Spacer(modifier = Modifier.width(4.dp))
+import eu.kanade.domain.source.model.toDomainSource
+
                         SourceIcon(
-                            source = source,
+                            source = source.toDomainSource(),
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
