@@ -68,6 +68,7 @@ import eu.kanade.tachiyomi.source.online.MetadataSource
 import eu.kanade.tachiyomi.source.online.all.MergedSource
 import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.isLoading
 import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.removeDuplicates
+import kotlinx.coroutines.flow.collectLatest
 import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.sorted
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
@@ -525,10 +526,9 @@ class MangaScreenModel(
 
             launchIO {
                 getPageBookmarks.subscribeByMangaId(mangaId)
-                    .onEach { bookmarks ->
+                    .collectLatest { bookmarks ->
                         updateSuccessState { it.copy(pageBookmarks = bookmarks) }
                     }
-                    .collect()
             }
 
             launchIO {

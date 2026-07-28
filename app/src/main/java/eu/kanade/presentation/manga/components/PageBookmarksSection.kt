@@ -97,9 +97,10 @@ fun PageBookmarksSection(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (!bookmark.comment.isNullOrBlank()) {
+                            val comment = bookmark.comment
+                            if (!comment.isNullOrBlank()) {
                                 Text(
-                                    text = bookmark.comment,
+                                    text = comment,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.tertiary,
                                     maxLines = 1,

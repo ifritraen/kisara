@@ -323,6 +323,7 @@ fun MangaScreen(
                 onMorePreviewsClicked = onMorePreviewsClicked,
                 previewsRowCount = previewsRowCount,
                 // SY <--
+                onDeletePageBookmark = onDeletePageBookmark,
                 onMultiBookmarkClicked = onMultiBookmarkClicked,
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                 onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -355,9 +356,9 @@ fun MangaScreen(
             MangaScreenLargeImpl(
                 state = state,
                 snackbarHostState = snackbarHostState,
+                nextUpdate = nextUpdate,
                 chapterSwipeStartAction = chapterSwipeStartAction,
                 chapterSwipeEndAction = chapterSwipeEndAction,
-                nextUpdate = nextUpdate,
                 navigateUp = navigateUp,
                 onChapterClicked = onChapterClicked,
                 onDownloadChapter = onDownloadChapter,
@@ -481,6 +482,7 @@ private fun MangaScreenSmallImpl(
     onMorePreviewsClicked: () -> Unit,
     previewsRowCount: Int,
     // SY <--
+    onDeletePageBookmark: (Long) -> Unit,
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -516,6 +518,7 @@ private fun MangaScreenSmallImpl(
     hazeState: HazeState,
     // KMK <--
 ) {
+    val currentContext = LocalContext.current
     val chapterListState = rememberLazyListState()
 
     val (chapters, listItem, isAnySelected) = remember(state) {
@@ -773,9 +776,9 @@ private fun MangaScreenSmallImpl(
                                     bookmarks = state.pageBookmarks,
                                     chapters = remember(state.chapters) { state.chapters.map { it.chapter } },
                                     onClickBookmark = { chapterId, pageNumber ->
-                                        context.startActivity(
+                                        currentContext.startActivity(
                                             eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
-                                                context,
+                                                currentContext,
                                                 state.manga.id,
                                                 chapterId,
                                                 pageNumber,
@@ -1153,6 +1156,7 @@ private fun MangaScreenLargeImpl(
     onMorePreviewsClicked: () -> Unit,
     previewsRowCount: Int,
     // SY <--
+    onDeletePageBookmark: (Long) -> Unit,
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -1188,6 +1192,7 @@ private fun MangaScreenLargeImpl(
     hazeState: HazeState,
     // KMK <--
 ) {
+    val currentContext = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current
     val chapterListState = rememberLazyListState()
@@ -1545,9 +1550,9 @@ private fun MangaScreenLargeImpl(
                                         bookmarks = state.pageBookmarks,
                                         chapters = remember(state.chapters) { state.chapters.map { it.chapter } },
                                         onClickBookmark = { chapterId, pageNumber ->
-                                            context.startActivity(
+                                            currentContext.startActivity(
                                                 eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
-                                                    context,
+                                                    currentContext,
                                                     state.manga.id,
                                                     chapterId,
                                                     pageNumber,
