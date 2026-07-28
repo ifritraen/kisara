@@ -3,6 +3,7 @@
 package eu.kanade.presentation.manga.components
 
 import androidx.annotation.ColorInt
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -71,89 +72,91 @@ enum class MangaCover(val ratio: Float) {
         scale: ContentScale = ContentScale.Crop,
         // KMK <--
     ) {
-        // KMK -->
-        var succeed by remember { mutableStateOf(false) }
-        // KMK <--
+        var state by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
+        val succeed = state is AsyncImagePainter.State.Success
 
-        val modifierColored = modifier
+        val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "shimmer")
+        val translateAnim by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1000f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                animation = androidx.compose.animation.core.tween(
+                    durationMillis = 1200,
+                    easing = androidx.compose.animation.core.LinearEasing,
+                ),
+                repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
+            ),
+            label = "shimmerTranslate",
+        )
+
+        val shimmerBrush = remember(translateAnim) {
+            androidx.compose.ui.graphics.Brush.linearGradient(
+                colors = listOf(
+                    Color(0x1F888888),
+                    Color(0x3DFFFFFF),
+                    Color(0x1F888888),
+                ),
+                start = androidx.compose.ui.geometry.Offset(translateAnim - 300f, translateAnim - 300f),
+                end = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim),
+            )
+        }
+
+        val baseModifier = modifier
             .aspectRatio(ratio)
             .clip(shape)
-            // KMK -->
             .alpha(if (succeed) alpha else 1f)
-            .background(bgColor ?: CoverPlaceholderColor)
-            // KMK <--
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        role = Role.Button,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
+
+        val modifierColored = if (!succeed && state !is AsyncImagePainter.State.Error) {
+            baseModifier.background(shimmerBrush)
+        } else {
+            baseModifier.background(bgColor ?: CoverPlaceholderColor)
+        }.then(
+            if (onClick != null) {
+                Modifier.clickable(
+                    role = Role.Button,
+                    onClick = onClick,
+                )
+            } else {
+                Modifier
+            },
+        )
+
+        Box(modifier = modifierColored) {
+            coil3.compose.AsyncImage(
+                model = data,
+                contentDescription = contentDescription,
+                modifier = Modifier.matchParentSize(),
+                contentScale = scale,
+                onState = { newState ->
+                    state = newState
+                    if (newState is AsyncImagePainter.State.Success && onCoverLoaded != null) {
+                        when (data) {
+                            is Manga -> onCoverLoaded(data.asMangaCover(), newState)
+                            is DomainMangaCover -> onCoverLoaded(data, newState)
+                        }
+                    }
                 },
             )
 
-        SubcomposeAsyncImage(
-            model = data,
-            // KMK -->
-            loading = {
-                Box(
-                    modifier = modifierColored,
-                ) {
-                    CircularProgressIndicator(
-                        color = tint?.let { Color(it) } ?: CoverPlaceholderOnBgColor,
-                        modifier = Modifier
-                            .size(
-                                when (size) {
-                                    Size.Big -> COVER_TEMPLATE_SIZE_BIG
-                                    Size.Medium -> COVER_TEMPLATE_SIZE_MEDIUM
-                                    else -> COVER_TEMPLATE_SIZE_NORMAL
-                                },
-                            )
-                            .align(Alignment.Center),
-                        strokeWidth = when (size) {
-                            Size.Normal -> 3.dp
-                            else -> 2.dp
-                        },
-                    )
-                }
-            },
-            error = {
-                Box(
-                    modifier = modifierColored,
-                ) {
-                    Image(
-                        imageVector = ImageVector.vectorResource(R.drawable.cover_error_vector),
-                        contentDescription = contentDescription,
-                        modifier = Modifier
-                            .size(
-                                when (size) {
-                                    Size.Big -> COVER_TEMPLATE_SIZE_BIG
-                                    Size.Medium -> COVER_TEMPLATE_SIZE_MEDIUM
-                                    else -> COVER_TEMPLATE_SIZE_NORMAL
-                                },
-                            )
-                            .align(Alignment.Center),
-                        colorFilter = ColorFilter.tint(
-                            tint?.let { Color(it) } ?: CoverPlaceholderOnBgColor,
-                        ),
-                    )
-                }
-            },
-            onSuccess = { result ->
-                succeed = true
-                if (onCoverLoaded != null) {
-                    when (data) {
-                        is Manga -> onCoverLoaded(data.asMangaCover(), result)
-                        is DomainMangaCover -> onCoverLoaded(data, result)
-                    }
-                }
-            },
-            // KMK <--
-            contentDescription = contentDescription,
-            modifier = modifierColored,
-            contentScale = scale,
-        )
+            if (state is AsyncImagePainter.State.Error) {
+                Image(
+                    imageVector = ImageVector.vectorResource(R.drawable.cover_error_vector),
+                    contentDescription = contentDescription,
+                    modifier = Modifier
+                        .size(
+                            when (size) {
+                                Size.Big -> COVER_TEMPLATE_SIZE_BIG
+                                Size.Medium -> COVER_TEMPLATE_SIZE_MEDIUM
+                                else -> COVER_TEMPLATE_SIZE_NORMAL
+                            },
+                        )
+                        .align(Alignment.Center),
+                    colorFilter = ColorFilter.tint(
+                        tint?.let { Color(it) } ?: CoverPlaceholderOnBgColor,
+                    ),
+                )
+            }
+        }
     }
 
     companion object {

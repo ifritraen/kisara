@@ -51,7 +51,7 @@ internal fun LibraryList(
             contentType = { "library_list_item" },
         ) { libraryItem ->
             val manga = libraryItem.libraryManga.manga
-            val parsed = remember(manga.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga.title) }
+            val parsed = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, manga.title) }
             MangaListItem(
                 isSelected = manga.id in selection,
                 title = manga.title,

@@ -18,6 +18,13 @@ object SuggestionsReport {
     private val _logs = MutableStateFlow<List<LogEntry>>(emptyList())
     val logs = _logs.asStateFlow()
 
+    val fetchedCount = MutableStateFlow(0)
+    val failedCount = MutableStateFlow(0)
+    val fetchedBySource = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val failedBySource = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val libraryFilteredCount = MutableStateFlow(0)
+    val zeroScoreCount = MutableStateFlow(0)
+
     fun log(level: String, message: String, exception: Throwable? = null) {
         val prefs = try {
             Injekt.get<SuggestionsPreferences>()
@@ -37,5 +44,11 @@ object SuggestionsReport {
 
     fun clear() {
         _logs.value = emptyList()
+        fetchedCount.value = 0
+        failedCount.value = 0
+        fetchedBySource.value = emptyMap()
+        failedBySource.value = emptyMap()
+        libraryFilteredCount.value = 0
+        zeroScoreCount.value = 0
     }
 }

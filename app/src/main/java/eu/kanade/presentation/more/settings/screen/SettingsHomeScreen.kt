@@ -7,6 +7,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.Preference
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableMap
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.kmk.KMR
@@ -47,7 +48,28 @@ object SettingsHomeScreen : SearchableSettings {
             onlineSources.associate { it.id.toString() to it.name }.toImmutableMap()
         }
 
+        val normalCardStyleEntries = persistentMapOf(
+            "default" to "Default",
+            "modern" to "Modern",
+            "exotic" to "Exotic",
+            "minimal_exotic" to "Minimal Exotic",
+            "blur" to "Blur",
+            "material" to "Material",
+            "liquid_glass" to "Liquid Glass",
+        )
+
         return listOf(
+            Preference.PreferenceGroup(
+                title = "Card Style Settings",
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.normalCardStyle(),
+                        entries = normalCardStyleEntries,
+                        title = "Card Style",
+                        subtitle = "Global layout style for manga cards across Home, Library, Search, and Browse",
+                    ),
+                ),
+            ),
             Preference.PreferenceGroup(
                 title = stringResource(KMR.strings.pref_home_sections),
                 preferenceItems = persistentListOf(

@@ -22,6 +22,22 @@ CREATE TABLE suggestion_sources (
     sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE suggestion_authors (
+    author TEXT NOT NULL PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_user_added INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE suggestion_artists (
+    artist TEXT NOT NULL PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    is_blocked INTEGER NOT NULL DEFAULT 0,
+    is_user_added INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE suggestion_dismissed (
     manga_url TEXT NOT NULL PRIMARY KEY,
     title TEXT NOT NULL,
@@ -108,5 +124,43 @@ DELETE FROM suggestion_dismissed WHERE manga_url = :mangaUrl;
 
 deleteAllDismissedSuggestions:
 DELETE FROM suggestion_dismissed;
+
+-- Author queries
+getSuggestionAuthors:
+SELECT * FROM suggestion_authors ORDER BY sort_order ASC, count DESC;
+
+insertSuggestionAuthor:
+INSERT OR REPLACE INTO suggestion_authors(author, count, is_blocked, is_user_added, sort_order)
+VALUES (:author, :count, :isBlocked, :isUserAdded, :sortOrder);
+
+updateSuggestionAuthor:
+UPDATE suggestion_authors
+SET count = :count, is_blocked = :isBlocked, is_user_added = :isUserAdded, sort_order = :sortOrder
+WHERE author = :author;
+
+deleteSuggestionAuthor:
+DELETE FROM suggestion_authors WHERE author = :author;
+
+deleteAllSuggestionAuthors:
+DELETE FROM suggestion_authors;
+
+-- Artist queries
+getSuggestionArtists:
+SELECT * FROM suggestion_artists ORDER BY sort_order ASC, count DESC;
+
+insertSuggestionArtist:
+INSERT OR REPLACE INTO suggestion_artists(artist, count, is_blocked, is_user_added, sort_order)
+VALUES (:artist, :count, :isBlocked, :isUserAdded, :sortOrder);
+
+updateSuggestionArtist:
+UPDATE suggestion_artists
+SET count = :count, is_blocked = :isBlocked, is_user_added = :isUserAdded, sort_order = :sortOrder
+WHERE artist = :artist;
+
+deleteSuggestionArtist:
+DELETE FROM suggestion_artists WHERE artist = :artist;
+
+deleteAllSuggestionArtists:
+DELETE FROM suggestion_artists;
 
 

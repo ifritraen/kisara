@@ -32,9 +32,36 @@ object MangaTitleParser {
     private val parseCache = java.util.concurrent.ConcurrentHashMap<String, ParsedTitle>(512)
 
     fun parse(rawTitle: String): ParsedTitle {
-        return parseCache.getOrPut(rawTitle) {
-            doParse(rawTitle)
-        }
+        return parseCache.computeIfAbsent(rawTitle) { doParse(it) }
+    }
+
+    fun parse(manga: Manga?, rawTitle: String): ParsedTitle {
+        val parsed = parse(rawTitle)
+        val finalAuthor = parsed.author ?: manga?.author?.takeIf { it.isNotBlank() } ?: extractAuthorFromDescription(manga?.description)
+        val finalArtist = parsed.artist ?: manga?.artist?.takeIf { it.isNotBlank() } ?: extractArtistFromDescription(manga?.description)
+        val finalLanguage = getLanguageCode(manga, rawTitle)
+        val finalColorized = isColorized(manga, rawTitle)
+        val finalUncensored = isUncensored(manga, rawTitle)
+
+        return parsed.copy(
+            author = finalAuthor,
+            artist = finalArtist,
+            languageCode = finalLanguage,
+            isColorized = finalColorized,
+            isUncensored = finalUncensored,
+        )
+    }
+
+    private fun extractAuthorFromDescription(description: String?): String? {
+        if (description.isNullOrBlank()) return null
+        val match = Regex("""(?i)(?:author|circle)\s*:\s*([^,\n;]+)""").find(description)
+        return match?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun extractArtistFromDescription(description: String?): String? {
+        if (description.isNullOrBlank()) return null
+        val match = Regex("""(?i)(?:artist)\s*:\s*([^,\n;]+)""").find(description)
+        return match?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
     }
 
     private fun doParse(rawTitle: String): ParsedTitle {

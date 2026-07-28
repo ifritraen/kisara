@@ -580,12 +580,29 @@ class ReaderActivity : BaseActivity() {
                         hasExtraPage = (state.dialog as? ReaderViewModel.Dialog.PageActions)?.extraPage != null,
                         bookmarked = state.bookmarked,
                         onToggleBookmarked = viewModel::toggleChapterBookmark,
+                        pageBookmarked = state.pageBookmarks.any {
+                            it.chapterId == (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page?.chapter?.chapter?.id &&
+                                it.pageNumber == (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page?.number
+                        },
+                        onTogglePageBookmarked = {
+                            val pageNum = (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page?.number
+                            viewModel.togglePageBookmark(pageNum)
+                        },
                         isAutoScroll = state.autoScroll,
                         onToggleAutoscroll = viewModel::toggleAutoScroll,
                         onClickRetryAll = ::exhRetryAll,
                         onClickBoostPage = ::exhBoostPage,
                         autoScrollFrequency = state.ehAutoscrollFreq,
                         onSetAutoScrollFrequency = viewModel::setAutoScrollFrequency,
+                        showTranslationEnabled = readerPreferences.showTranslations().get(),
+                        onToggleShowTranslation = {
+                            readerPreferences.showTranslations().set(!readerPreferences.showTranslations().get())
+                        },
+                        onStartTranslationEditMode = {
+                            (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page?.let { page ->
+                                startTranslationEditMode(page)
+                            }
+                        },
                     )
                 }
 
@@ -1411,19 +1428,6 @@ class ReaderActivity : BaseActivity() {
      */
     fun onPageLongTap(page: ReaderPage, /* SY --> */ extraPage: ReaderPage? = null, event: android.view.MotionEvent? = null /* SY <-- */) {
         if (tempDisabledTranslations) return
-        val height = binding.root.height
-        val isTopTap = event != null && height > 0 && event.y < height * 0.20f
-        val targetPage = if (page.translation != null) {
-            page
-        } else if (extraPage?.translation != null) {
-            extraPage
-        } else {
-            null
-        }
-        if (isTopTap && targetPage != null) {
-            startTranslationEditMode(targetPage)
-            return
-        }
         viewModel.openPageDialog(page, /* SY --> */ extraPage /* SY <-- */)
     }
 
@@ -1602,6 +1606,21 @@ class ReaderActivity : BaseActivity() {
          * Initializes the reader subscriptions.
          */
         init {
+            readerPreferences.translationEditMode().changes()
+                .onEach { enabled ->
+                    if (enabled) {
+                        val page = exhCurrentpage()
+                        if (page != null) {
+                            startTranslationEditMode(page)
+                        } else {
+                            readerPreferences.translationEditMode().set(false)
+                        }
+                    } else {
+                        exitTranslationEditMode(save = false)
+                    }
+                }
+                .launchIn(lifecycleScope)
+
             readerPreferences.readerTheme().changes()
                 .onEach { theme ->
                     binding.readerContainer.setBackgroundColor(
@@ -1809,7 +1828,8 @@ class ReaderActivity : BaseActivity() {
         private set
 
     fun startTranslationEditMode(page: ReaderPage) {
-        val trans = page.translation ?: return
+        val trans = page.translation ?: eu.kanade.translation.model.PageTranslation()
+        viewModel.closeDialog()
         editingPageTranslationState = TranslationEditState(page, trans.deepCopy())
         hideMenu()
     }
@@ -1828,7 +1848,7 @@ class ReaderActivity : BaseActivity() {
             translationManager.saveChapterTranslation(
                 chapterName = chapter.name,
                 scanlator = chapter.scanlator,
-                mangaTitle = manga.title,
+                mangaTitle = manga.ogTitle,
                 source = source,
                 key = translationKey,
                 pageTranslation = updatedTranslation,
@@ -1845,6 +1865,7 @@ class ReaderActivity : BaseActivity() {
             }
         }
         editingPageTranslationState = null
+        readerPreferences.translationEditMode().set(false)
     }
     // KMK <--
 }

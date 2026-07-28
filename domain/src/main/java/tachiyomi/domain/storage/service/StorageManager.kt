@@ -114,6 +114,10 @@ class StorageManager(
     fun getTranslationsDirectory(): UniFile? {
         return baseDir?.createDirectory(TRANSLATION_PATH)
     }
+
+    fun getColorizerDirectory(): UniFile? {
+        return baseDir?.createDirectory(COLORIZER_PATH)
+    }
     // KMK <--
 
     companion object {
@@ -257,4 +261,5 @@ private const val LOGS_PATH = "logs"
 
 // KMK -->
 private const val TRANSLATION_PATH = "translations"
+private const val COLORIZER_PATH = "colorizer"
 // KMK <--

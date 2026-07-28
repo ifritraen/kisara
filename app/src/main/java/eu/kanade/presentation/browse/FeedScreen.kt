@@ -218,13 +218,19 @@ fun FeedCardGrid(
         return
     }
 
+    val rowCount = remember(titles) {
+        kotlin.math.min(2, kotlin.math.ceil(titles.size / 3.0).toInt())
+    }
+    val gridHeight = if (rowCount <= 1) 180.dp else 360.dp
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         modifier = Modifier
-            .height(450.dp)
+            .height(gridHeight)
             .padding(horizontal = MaterialTheme.padding.small),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+        userScrollEnabled = true,
     ) {
         items(titles) {
             val title by getManga(it)
@@ -235,6 +241,7 @@ fun FeedCardGrid(
                 onClick = { onClick(title) },
                 onLongClick = { onLongClick(title) },
                 isSelected = selection.fastAny { selected -> selected.id == title.id },
+                manga = title,
             )
         }
     }

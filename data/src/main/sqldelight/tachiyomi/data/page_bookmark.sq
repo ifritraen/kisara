@@ -1,0 +1,47 @@
+CREATE TABLE page_bookmark (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    page_number INTEGER NOT NULL,
+    comment TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX page_bookmark_manga_id_idx ON page_bookmark(manga_id);
+CREATE INDEX page_bookmark_chapter_id_idx ON page_bookmark(chapter_id);
+
+getByMangaId:
+SELECT *
+FROM page_bookmark
+WHERE manga_id = :mangaId
+ORDER BY created_at DESC;
+
+getByChapterId:
+SELECT *
+FROM page_bookmark
+WHERE chapter_id = :chapterId
+ORDER BY page_number ASC;
+
+getByChapterAndPage:
+SELECT *
+FROM page_bookmark
+WHERE chapter_id = :chapterId AND page_number = :pageNumber
+LIMIT 1;
+
+insert:
+INSERT INTO page_bookmark(manga_id, chapter_id, page_number, comment, created_at)
+VALUES (:mangaId, :chapterId, :pageNumber, :comment, :createdAt);
+
+deleteById:
+DELETE FROM page_bookmark
+WHERE _id = :id;
+
+deleteByChapterAndPage:
+DELETE FROM page_bookmark
+WHERE chapter_id = :chapterId AND page_number = :pageNumber;
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();
+

@@ -327,11 +327,11 @@ class ExtensionManager(
         val result = ExtensionLoader.loadExtensionFromPkgName(context, pkgName)
         if (result is LoadResult.Success) {
             registerNewExtension(result.extension)
-            updatePendingUpdatesCount()
+            updatedInstalledExtensionsStatuses(availableExtensionMapFlow.value.values.toList())
         } else if (result is LoadResult.Untrusted) {
             installedExtensionMapFlow.value -= pkgName
             untrustedExtensionMapFlow.value += result.extension
-            updatePendingUpdatesCount()
+            updatedInstalledExtensionsStatuses(availableExtensionMapFlow.value.values.toList())
         }
     }
 
@@ -349,7 +349,11 @@ class ExtensionManager(
                 "_${extension.signatureHash}",
             // KMK <--
         ] ?: return emptyFlow()
-        return installExtension(availableExt)
+        return if (extension.isShared) {
+            installExtension(availableExt)
+        } else {
+            sideloadExtension(availableExt)
+        }
     }
 
     fun cancelInstallUpdateExtension(extension: Extension) {
@@ -486,6 +490,7 @@ class ExtensionManager(
 
     private fun Extension.Installed.updateExists(availableExtension: Extension.Available? = null): Boolean {
         val availableExt = availableExtension
+            ?: availableExtensionMapFlow.value[pkgName + "_$signatureHash"]
             ?: availableExtensionMapFlow.value[pkgName]
             ?: return false
 

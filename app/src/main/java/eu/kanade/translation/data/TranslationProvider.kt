@@ -92,7 +92,7 @@ class TranslationProvider(
      * @param source the source of the chapter.
      */
     fun findChapterFiles(chapters: List<Chapter>, manga: Manga, source: Source): Pair<UniFile?, List<UniFile>> {
-        val mangaDir = findMangaDir(manga.title, source) ?: return null to emptyList()
+        val mangaDir = findMangaDir(manga.ogTitle, source) ?: return null to emptyList()
         return mangaDir to chapters.mapNotNull { chapter ->
             mangaDir.findFile(getTranslationFileName(chapter.name, chapter.scanlator))
         }

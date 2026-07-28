@@ -27,6 +27,14 @@ class UiPreferences(
     // KMK -->
     fun colorTheme() = preferenceStore.getInt("pref_color_theme", 0xFFDF0090.toInt())
 
+    fun colorSecondaryTheme() = preferenceStore.getInt("pref_color_secondary_theme", 0xFF00B0FF.toInt())
+
+    fun themeGradientEnabled() = preferenceStore.getBoolean("pref_theme_gradient_enabled", true)
+
+    fun themeGlassOpacity() = preferenceStore.getFloat("pref_theme_glass_opacity", 0.85f)
+
+    fun darkModeDepth() = preferenceStore.getInt("pref_dark_mode_depth", 0) // 0: OLED Black, 1: Midnight Navy, 2: Deep Charcoal, 3: Soft Tonal
+
     fun customThemeStyle() = preferenceStore.getEnum("pref_custom_theme_style_key", PaletteStyle.Fidelity)
 
     fun themeCoverBased() = preferenceStore.getBoolean("pref_theme_cover_based_key", true)
@@ -91,6 +99,10 @@ class UiPreferences(
 
     // Kisara Settings
     fun kisaraCoverTitleStyle() = preferenceStore.getString("kisara_cover_title_style", "default")
+    fun normalCardStyle() = preferenceStore.getString("kisara_normal_card_style", "default")
+    fun spotlightCardStyle() = preferenceStore.getString("kisara_spotlight_card_style", "default")
+    fun continueReadingCardStyle() = preferenceStore.getString("kisara_continue_reading_card_style", "default")
+    fun recentUpdatesCardStyle() = preferenceStore.getString("kisara_recent_updates_card_style", "default")
     fun kisaraFrostedGlass() = preferenceStore.getBoolean("kisara_frosted_glass", true)
     fun showCategoryTabs() = preferenceStore.getBoolean("kisara_show_category_tabs", false)
     fun hideTopBarOnScroll() = preferenceStore.getBoolean("kisara_hide_top_bar_on_scroll", true)

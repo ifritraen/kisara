@@ -27,5 +27,18 @@ class TranslationPreferences(
     fun bubbleDetectionEnabled() = preferenceStore.getBoolean("bubble_detection_enabled", true)
     fun translationLoggingEnabled() = preferenceStore.getBoolean("translation_logging_enabled", true)
     fun hasAutoDownloadedBubbleModel() = preferenceStore.getBoolean("has_auto_downloaded_bubble_model", false)
+    fun maxLettersPerLine() = preferenceStore.getInt("translation_max_letters_per_line", 15)
+    fun fullBoundingBoxCover() = preferenceStore.getBoolean("translation_full_bounding_box_cover", false)
+    fun paddingTextHorizontal() = preferenceStore.getInt("translation_padding_text_horizontal", 2)
+    fun paddingTextVertical() = preferenceStore.getInt("translation_padding_text_vertical", 1)
+    fun showWholeWordEvenIfOutside() = preferenceStore.getBoolean("translation_show_whole_word_even_if_outside", false)
     // KMK <--
+
+    // Colorizer settings
+    fun useColorizer() = preferenceStore.getBoolean("use_colorizer", false)
+    fun colorizerKaggleUsername() = preferenceStore.getString("colorizer_kaggle_username", "")
+    fun colorizerKaggleApiKey() = preferenceStore.getString("colorizer_kaggle_api_key", "")
+    fun colorizerNgrokAuthToken() = preferenceStore.getString("colorizer_ngrok_auth_token", "")
+    fun colorizerKaggleKernelSlug() = preferenceStore.getString("colorizer_kaggle_kernel_slug", "binitdox/manga-colorizer")
+    fun autoColorizeAfterDownload() = preferenceStore.getBoolean("auto_colorize_after_download", false)
 }

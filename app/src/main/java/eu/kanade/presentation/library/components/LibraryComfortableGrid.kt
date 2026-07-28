@@ -44,7 +44,7 @@ internal fun LibraryComfortableGrid(
             contentType = { "library_comfortable_grid_item" },
         ) { libraryItem ->
             val manga = libraryItem.libraryManga.manga
-            val parsed = remember(manga.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga.title) }
+            val parsed = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, manga.title) }
             MangaComfortableGridItem(
                 isSelected = manga.id in selection,
                 title = manga.title,

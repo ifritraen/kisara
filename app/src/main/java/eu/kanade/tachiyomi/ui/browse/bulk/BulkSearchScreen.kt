@@ -176,7 +176,7 @@ data class BulkSearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         top = 8.dp,
-                        bottom = 24.dp,
+                        bottom = 120.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {

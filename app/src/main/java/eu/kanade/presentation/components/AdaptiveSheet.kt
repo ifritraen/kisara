@@ -122,7 +122,10 @@ fun AdaptiveSheet(
         onDismissRequest = onDismissRequest,
         properties = dialogProperties,
     ) {
-        CompositionLocalProvider(LocalHazeState provides parentHazeState) {
+        CompositionLocalProvider(
+            LocalHazeState provides parentHazeState,
+            LocalHazeBypass provides true,
+        ) {
             AdaptiveSheetContent(
                 isTabletUi = isTabletUi,
                 enableSwipeDismiss = enableSwipeDismiss,

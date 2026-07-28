@@ -66,7 +66,7 @@ internal fun UnreadBadge(count: Long) {
 @Composable
 fun UncensoredBadge() {
     Badge(
-        text = "UNC",
+        text = "UN",
         color = MaterialTheme.colorScheme.tertiary,
         textColor = MaterialTheme.colorScheme.onTertiary,
     )

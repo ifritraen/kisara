@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -74,6 +75,10 @@ import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.DisplayOverlaySettingsDialog
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.presentation.components.cards.HomeSectionCardStyle
+import eu.kanade.presentation.components.cards.KisaraHomeSectionCard
+import eu.kanade.presentation.components.cards.KisaraNormalCard
+import eu.kanade.presentation.components.cards.NormalCardStyle
 import eu.kanade.presentation.library.components.ColorizedBadge
 import eu.kanade.presentation.library.components.CommonMangaItemDefaults
 import eu.kanade.presentation.library.components.DownloadsBadge
@@ -166,6 +171,9 @@ fun landingTab(
                 )
             }
 
+            val normalStyle = NormalCardStyle.fromKey(uiPreferences.normalCardStyle().collectAsState().value)
+            val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+
             PullRefresh(
                 refreshing = state.isFeedRefreshing,
                 enabled = true,
@@ -234,19 +242,42 @@ fun landingTab(
                                             }
                                         }
                                     }
-                                    if (isFirst) {
-                                        HistoryWideCard(
-                                            history = historyItem,
-                                            onClick = { navigator.push(MangaScreen(historyItem.mangaId)) },
-                                            onResume = onResume,
-                                        )
-                                    } else {
-                                        HistoryCompactCard(
-                                            history = historyItem,
-                                            onClick = { navigator.push(MangaScreen(historyItem.mangaId)) },
-                                            onResume = onResume,
-                                        )
+                                    val coverTitleStyle = uiPreferences.kisaraCoverTitleStyle().collectAsState().value
+
+                                    val parsed = remember(historyItem.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(historyItem.title) }
+                                    val numberMatch = remember(historyItem.title) { Regex("(\\d+)$").find(historyItem.title) }
+                                    val endingNumber = numberMatch?.groupValues?.get(1)
+                                    val cleanTitle = remember(parsed.cleanTitle, endingNumber) {
+                                        if (endingNumber != null && !parsed.cleanTitle.endsWith(endingNumber)) {
+                                            "${parsed.cleanTitle} $endingNumber"
+                                        } else {
+                                            parsed.cleanTitle
+                                        }
                                     }
+
+                                    val authorArtist = remember(parsed.author, parsed.artist) {
+                                        listOfNotNull(parsed.author, parsed.artist).distinct().joinToString(" • ").ifBlank { null }
+                                    }
+
+                                    val chapterSubtitle = if (historyItem.chapterNumber > -1) {
+                                        "Ch. ${formatChapterNumber(historyItem.chapterNumber)}"
+                                    } else {
+                                        ""
+                                    }
+
+                                    KisaraHomeSectionCard(
+                                        style = HomeSectionCardStyle.DEFAULT,
+                                        title = cleanTitle,
+                                        subtitle = authorArtist,
+                                        coverData = historyItem.coverData,
+                                        progress = 0.5f,
+                                        chapterName = chapterSubtitle,
+                                        readAtTimestamp = historyItem.readAt?.toTimestampString(),
+                                        languageCode = parsed.languageCode,
+                                        coverTitleStyle = coverTitleStyle,
+                                        onClick = { navigator.push(MangaScreen(historyItem.mangaId)) },
+                                        onResume = onResume,
+                                    )
                                 }
 
                                 item {
@@ -293,9 +324,10 @@ fun landingTab(
                         }
                     }
 
-                    // 4. Forgotten Favorites (Library)
+                    // 4. Forgotten Favorites / Recently Added (Library)
                     if (showLibrary && state.libraryRandom.isNotEmpty()) {
                         item {
+                            val libraryPairs = remember(state.libraryRandom) { state.libraryRandom.chunked(2) }
                             SectionHeader(
                                 title = stringResource(KMR.strings.pref_home_section_names_forgotten_favorites),
                                 onClickMore = null,
@@ -303,23 +335,75 @@ fun landingTab(
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 items(
-                                    items = state.libraryRandom,
-                                    key = { "forgotten-${it.id}" },
-                                ) { manga ->
-                                    MangaCoverCard(
-                                        mangaId = manga.id,
-                                        coverData = manga.asMangaCover(),
-                                        title = manga.title,
-                                        badgeText = null,
-                                        onClick = { navigator.push(MangaScreen(manga.id)) },
-                                        onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            screenModel.toggleFavorite(manga.id, manga.favorite)
-                                        },
-                                    )
+                                    items = libraryPairs,
+                                    key = { pair -> "pair-${pair.first().id}" },
+                                ) { pair ->
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        for (manga in pair) {
+                                            val coverData = remember(manga) { manga.asMangaCover() }
+                                            val parsed = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, manga.title) }
+                                            val numberMatch = remember(manga.title) { Regex("(\\d+)$").find(manga.title) }
+                                            val endingNumber = numberMatch?.groupValues?.get(1)
+                                            val cleanTitle = remember(parsed.cleanTitle, endingNumber) {
+                                                if (endingNumber != null && !parsed.cleanTitle.endsWith(endingNumber)) {
+                                                    "${parsed.cleanTitle} $endingNumber"
+                                                } else {
+                                                    parsed.cleanTitle
+                                                }
+                                            }
+
+                                            val coverBadgeEnd: @Composable (androidx.compose.foundation.layout.RowScope.() -> Unit) = {
+                                                val targetLang = parsed.languageCode
+                                                if (!targetLang.isNullOrEmpty()) {
+                                                    LanguageBadge(isLocal = false, sourceLanguage = targetLang)
+                                                }
+                                                if (parsed.isColorized) {
+                                                    ColorizedBadge()
+                                                }
+                                                if (parsed.isUncensored) {
+                                                    UncensoredBadge()
+                                                }
+                                            }
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(120.dp)
+                                                    .height(170.dp),
+                                            ) {
+                                                if (normalStyle != NormalCardStyle.DEFAULT) {
+                                                    KisaraNormalCard(
+                                                        style = normalStyle,
+                                                        title = cleanTitle,
+                                                        coverData = coverData,
+                                                        coverBadgeEnd = coverBadgeEnd,
+                                                        coverTitleStyle = coverTitleStyleKey,
+                                                        onClick = { navigator.push(MangaScreen(manga.id)) },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            screenModel.toggleFavorite(manga.id, manga.favorite)
+                                                        },
+                                                    )
+                                                } else {
+                                                    eu.kanade.presentation.library.components.MangaCompactGridItem(
+                                                        coverData = coverData,
+                                                        title = cleanTitle,
+                                                        coverBadgeEnd = coverBadgeEnd,
+                                                        onClick = { navigator.push(MangaScreen(manga.id)) },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            screenModel.toggleFavorite(manga.id, manga.favorite)
+                                                        },
+                                                        manga = manga,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -329,7 +413,7 @@ fun landingTab(
                     if (showFeed) {
                         item {
                             SectionHeader(
-                                title = stringResource(KMR.strings.pref_home_section_names_explore_feed),
+                                title = "Explore Feed",
                                 onClickMore = { HomeTab.showSubTab(1) },
                             )
                         }
@@ -362,7 +446,7 @@ fun landingTab(
                                 }
                             }
                         } else {
-                            val chunkedFeed = state.feed.chunked(columnsCount)
+                            val chunkedFeed = state.feed.chunked(2)
                             items(chunkedFeed) { rowItems ->
                                 Row(
                                     modifier = Modifier
@@ -374,6 +458,8 @@ fun landingTab(
                                         Box(modifier = Modifier.weight(1f)) {
                                             FeedItemCard(
                                                 item = item,
+                                                normalStyle = normalStyle,
+                                                coverTitleStyleKey = coverTitleStyleKey,
                                                 onClick = { navigator.push(MangaScreen(item.id)) },
                                                 onLongClick = {
                                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -382,8 +468,8 @@ fun landingTab(
                                             )
                                         }
                                     }
-                                    if (rowItems.size < columnsCount) {
-                                        repeat(columnsCount - rowItems.size) {
+                                    if (rowItems.size < 2) {
+                                        repeat(2 - rowItems.size) {
                                             Spacer(modifier = Modifier.weight(1f))
                                         }
                                     }
@@ -457,16 +543,44 @@ fun SpotlightCarousel(
             state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp),
+                .height(240.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
             pageSpacing = 12.dp,
         ) { page ->
             val suggestion = suggestions[page]
             val manga = suggestion.manga
             val coverData = manga.asMangaCover()
-            val parsed = remember(manga.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga.title) }
-            val cleanTitle = parsed.cleanTitle
-            val authorText = manga.author.orEmpty().ifBlank { parsed.author ?: parsed.artist }.orEmpty().ifBlank { "Unknown Author" }
+            val parsed = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, manga.title) }
+            val numberMatch = remember(manga.title) { Regex("(\\d+)$").find(manga.title) }
+            val endingNumber = numberMatch?.groupValues?.get(1)
+            val cleanTitle = remember(parsed.cleanTitle, endingNumber) {
+                if (endingNumber != null && !parsed.cleanTitle.endsWith(endingNumber)) {
+                    "${parsed.cleanTitle} $endingNumber"
+                } else {
+                    parsed.cleanTitle
+                }
+            }
+
+            val authorText = remember(manga.author, manga.artist, parsed.author, parsed.artist) {
+                listOfNotNull(manga.author?.ifBlank { null }, manga.artist?.ifBlank { null }, parsed.author, parsed.artist)
+                    .distinct()
+                    .joinToString(" • ")
+                    .ifBlank { "Unknown Author" }
+            }
+
+            val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+            val titleFontSize = remember(coverTitleStyleKey) {
+                when (coverTitleStyleKey) {
+                    "compact" -> 13.sp
+                    "ultra_compact" -> 11.sp
+                    "moderate" -> 14.sp
+                    else -> 16.sp
+                }
+            }
+
+            val tags: List<String> = remember(manga.genre) {
+                manga.genre ?: emptyList()
+            }
 
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -479,12 +593,12 @@ fun SpotlightCarousel(
                     ),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Blur Background Cover
+                    // Subtle Blur Background Cover (Reduced blur)
                     MangaCover.Book(
                         data = coverData,
                         modifier = Modifier
                             .fillMaxSize()
-                            .blur(20.dp),
+                            .blur(8.dp),
                     )
 
                     // Black gradient overlay
@@ -494,8 +608,8 @@ fun SpotlightCarousel(
                             .background(
                                 Brush.verticalGradient(
                                     colors = listOf(
-                                        Color.Black.copy(alpha = 0.4f),
-                                        Color.Black.copy(alpha = 0.85f),
+                                        Color.Black.copy(alpha = 0.35f),
+                                        Color.Black.copy(alpha = 0.82f),
                                     ),
                                 ),
                             ),
@@ -503,85 +617,102 @@ fun SpotlightCarousel(
 
                     // Content Split Row
                     Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(12.dp),
+                        modifier = Modifier.fillMaxSize(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
+                        // Left Thumbnail (Full height flush aspect ratio 2:3)
+                        MangaCover.Book(
+                            data = coverData,
                             modifier = Modifier
-                                .width(96.dp)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(8.dp)),
-                        ) {
-                            MangaCover.Book(
-                                data = coverData,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-
-                            if (parsed.isColorized) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(4.dp),
-                                ) {
-                                    ColorizedBadge()
-                                }
-                            }
-                            if (parsed.isUncensored) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .padding(4.dp),
-                                ) {
-                                    UncensoredBadge()
-                                }
-                            }
-                            val targetLang = parsed.languageCode
-                            if (!targetLang.isNullOrEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(4.dp),
-                                ) {
-                                    LanguageBadge(isLocal = false, sourceLanguage = targetLang)
-                                }
-                            }
-                        }
+                                .aspectRatio(2f / 3f)
+                                .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)),
+                        )
 
                         Spacer(modifier = Modifier.width(12.dp))
 
+                        // Right Info Column
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxHeight(),
+                                .fillMaxHeight()
+                                .padding(vertical = 12.dp, horizontal = 4.dp),
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            Text(
-                                text = cleanTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            // 1. Title following Cover Title Style + Preserved Ending Number Suffix
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    text = parsed.cleanTitle,
+                                    fontSize = titleFontSize,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (endingNumber != null) {
+                                    Text(
+                                        text = " $endingNumber",
+                                        fontSize = titleFontSize,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+
                             Spacer(modifier = Modifier.height(4.dp))
+
+                            // 2. Artist & Author Name
                             Text(
                                 text = authorText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = Color.White.copy(alpha = 0.75f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = manga.description.orEmpty().ifBlank { "No description available." },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.55f),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                lineHeight = 14.sp,
-                            )
+
+                            // 3. Badges Row (Language, Color, Uncensored)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                val targetLang = parsed.languageCode
+                                if (!targetLang.isNullOrEmpty()) {
+                                    LanguageBadge(isLocal = false, sourceLanguage = targetLang)
+                                }
+                                if (parsed.isColorized) {
+                                    ColorizedBadge()
+                                }
+                                if (parsed.isUncensored) {
+                                    UncensoredBadge()
+                                }
+                            }
+
+                            // 4. Tags List Chips
+                            if (tags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    items(items = tags) { tag ->
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                                            shape = RoundedCornerShape(6.dp),
+                                        ) {
+                                            Text(
+                                                text = tag,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                fontSize = 9.sp,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -929,17 +1060,6 @@ fun MangaCoverCard(
                 }
             }
 
-            // Uncensored badge overlay
-            if (parsed.isUncensored) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(4.dp),
-                ) {
-                    UncensoredBadge()
-                }
-            }
-
             // END Badges (local, language, source icons)
             val targetLang = source?.lang ?: parsed.languageCode
             val badgeEndVisible = (showLocalBadge && source?.isLocal() == true) ||
@@ -1041,132 +1161,169 @@ fun SeeAllEndCard(
 @Composable
 fun FeedItemCard(
     item: CachedFeedManga,
+    normalStyle: NormalCardStyle = NormalCardStyle.DEFAULT,
+    coverTitleStyleKey: String = "default",
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val numberMatch = remember(item.title) { Regex("(\\d+)$").find(item.title) }
+    val endingNumber = numberMatch?.groupValues?.get(1)
     val parsed = remember(item.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(item.title) }
-    val cleanTitle = parsed.cleanTitle
+    val cleanTitle = remember(parsed.cleanTitle, endingNumber) {
+        if (endingNumber != null && !parsed.cleanTitle.endsWith(endingNumber)) {
+            "${parsed.cleanTitle} $endingNumber"
+        } else {
+            parsed.cleanTitle
+        }
+    }
 
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            ),
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            val coverData = remember(item.id, item.sourceId, item.favorite, item.thumbnailUrl, item.coverLastModified) {
-                tachiyomi.domain.manga.model.MangaCover(
-                    mangaId = item.id,
-                    sourceId = item.sourceId,
-                    isMangaFavorite = item.favorite,
-                    ogUrl = item.thumbnailUrl,
-                    lastModified = item.coverLastModified,
+    val coverData = remember(item.id, item.sourceId, item.favorite, item.thumbnailUrl, item.coverLastModified) {
+        tachiyomi.domain.manga.model.MangaCover(
+            mangaId = item.id,
+            sourceId = item.sourceId,
+            isMangaFavorite = item.favorite,
+            ogUrl = item.thumbnailUrl,
+            lastModified = item.coverLastModified,
+        )
+    }
+
+    val coverBadgeEnd: @Composable (androidx.compose.foundation.layout.RowScope.() -> Unit) = {
+        val targetLang = parsed.languageCode
+        if (!targetLang.isNullOrEmpty()) {
+            LanguageBadge(isLocal = false, sourceLanguage = targetLang)
+        }
+        if (parsed.isColorized) {
+            ColorizedBadge()
+        }
+        if (parsed.isUncensored) {
+            UncensoredBadge()
+        }
+    }
+
+    if (normalStyle != NormalCardStyle.DEFAULT) {
+        KisaraNormalCard(
+            style = normalStyle,
+            title = cleanTitle,
+            coverData = coverData,
+            subtitle = parsed.author ?: parsed.artist,
+            coverBadgeEnd = coverBadgeEnd,
+            coverTitleStyle = coverTitleStyleKey,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    } else {
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                ),
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                MangaCover.Book(
+                    data = coverData,
+                    modifier = Modifier.fillMaxSize(),
+                    alpha = if (item.favorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 )
-            }
 
-            MangaCover.Book(
-                data = coverData,
-                modifier = Modifier.fillMaxSize(),
-                alpha = if (item.favorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
-            )
-
-            // Bottom Gradient Overlay for Title
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.5f),
-                                Color.Black.copy(alpha = 0.9f),
+                // Bottom Gradient Overlay for Title
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.5f),
+                                    Color.Black.copy(alpha = 0.9f),
+                                ),
+                                startY = 180f,
                             ),
-                            startY = 180f,
                         ),
-                    ),
-            )
+                )
 
-            // Content Overlay
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                // Top Left: Extension Badge or Title Badges
-                val showLanguage = parsed.languageCode != null
-                val showColorized = parsed.isColorized
-                val showUncensored = parsed.isUncensored
+                // Content Overlay
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    // Top Left: Extension Badge or Title Badges
+                    val showLanguage = parsed.languageCode != null
+                    val showColorized = parsed.isColorized
+                    val showUncensored = parsed.isUncensored
 
-                if (showLanguage || showColorized || showUncensored) {
-                    Row(
-                        modifier = Modifier.align(Alignment.Start),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (showLanguage) {
-                            LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode!!)
+                    if (showLanguage || showColorized || showUncensored) {
+                        Row(
+                            modifier = Modifier.align(Alignment.Start),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (showLanguage) {
+                                LanguageBadge(isLocal = false, sourceLanguage = parsed.languageCode!!)
+                            }
+                            if (showColorized) {
+                                ColorizedBadge()
+                            }
+                            if (showUncensored) {
+                                UncensoredBadge()
+                            }
                         }
-                        if (showColorized) {
-                            ColorizedBadge()
+                    } else {
+                        val sourceManager = remember { Injekt.get<SourceManager>() }
+                        val source = remember(item.sourceId) { sourceManager.get(item.sourceId) }
+                        val domainSource = remember(source, item.sourceId) {
+                            if (source != null) {
+                                tachiyomi.domain.source.model.Source(
+                                    id = source.id,
+                                    lang = source.lang,
+                                    name = source.name,
+                                    supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
+                                    isStub = false,
+                                )
+                            } else {
+                                tachiyomi.domain.source.model.Source(
+                                    id = item.sourceId,
+                                    lang = "",
+                                    name = item.sourceName,
+                                    supportsLatest = false,
+                                    isStub = true,
+                                )
+                            }
                         }
-                        if (showUncensored) {
-                            UncensoredBadge()
+                        Box(modifier = Modifier.align(Alignment.Start)) {
+                            SourceIconBadge(source = domainSource)
                         }
                     }
-                } else {
-                    val sourceManager = remember { Injekt.get<SourceManager>() }
-                    val source = remember(item.sourceId) { sourceManager.get(item.sourceId) }
-                    val domainSource = remember(source, item.sourceId) {
-                        if (source != null) {
-                            tachiyomi.domain.source.model.Source(
-                                id = source.id,
-                                lang = source.lang,
-                                name = source.name,
-                                supportsLatest = source is eu.kanade.tachiyomi.source.CatalogueSource,
-                                isStub = false,
-                            )
-                        } else {
-                            tachiyomi.domain.source.model.Source(
-                                id = item.sourceId,
-                                lang = "",
-                                name = item.sourceName,
-                                supportsLatest = false,
-                                isStub = true,
-                            )
-                        }
-                    }
-                    Box(modifier = Modifier.align(Alignment.Start)) {
-                        SourceIconBadge(source = domainSource)
-                    }
-                }
 
-                // Bottom: Title & Author
-                Column {
-                    Text(
-                        text = cleanTitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val author = parsed.author ?: parsed.artist
-                    if (author != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
+                    // Bottom: Title & Author
+                    Column {
                         Text(
-                            text = author,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 8.sp,
-                            maxLines = 1,
+                            text = cleanTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        val author = parsed.author ?: parsed.artist
+                        if (author != null) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = author,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 8.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

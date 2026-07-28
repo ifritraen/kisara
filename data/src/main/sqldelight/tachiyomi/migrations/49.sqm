@@ -1,0 +1,11 @@
+CREATE TABLE logbook (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER NOT NULL,
+    action_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    target_id INTEGER,
+    target_name TEXT,
+    extra_data TEXT
+);
+
+CREATE INDEX logbook_timestamp_idx ON logbook(timestamp);

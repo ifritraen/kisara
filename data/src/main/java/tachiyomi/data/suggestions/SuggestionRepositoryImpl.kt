@@ -5,6 +5,8 @@ import tachiyomi.data.DatabaseHandler
 import tachiyomi.data.manga.MangaMapper
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.suggestions.model.Suggestion
+import tachiyomi.domain.suggestions.model.SuggestionArtist
+import tachiyomi.domain.suggestions.model.SuggestionAuthor
 import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
 import tachiyomi.domain.suggestions.repository.SuggestionRepository
@@ -221,6 +223,110 @@ class SuggestionRepositoryImpl(
     override suspend fun clearDismissed() {
         handler.await {
             suggestionsQueries.deleteAllDismissedSuggestions()
+        }
+    }
+
+    override fun observeAuthors(): Flow<List<SuggestionAuthor>> {
+        return handler.subscribeToList {
+            suggestionsQueries.getSuggestionAuthors { author, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionAuthor(
+                    author = author,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun getAuthors(): List<SuggestionAuthor> {
+        return handler.awaitList {
+            suggestionsQueries.getSuggestionAuthors { author, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionAuthor(
+                    author = author,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun insertAuthor(author: SuggestionAuthor) {
+        handler.await {
+            suggestionsQueries.insertSuggestionAuthor(
+                author = author.author,
+                count = author.count,
+                isBlocked = if (author.isBlocked) 1L else 0L,
+                isUserAdded = if (author.isUserAdded) 1L else 0L,
+                sortOrder = author.sortOrder,
+            )
+        }
+    }
+
+    override suspend fun deleteAuthor(author: String) {
+        handler.await {
+            suggestionsQueries.deleteSuggestionAuthor(author)
+        }
+    }
+
+    override suspend fun clearAuthors() {
+        handler.await {
+            suggestionsQueries.deleteAllSuggestionAuthors()
+        }
+    }
+
+    override fun observeArtists(): Flow<List<SuggestionArtist>> {
+        return handler.subscribeToList {
+            suggestionsQueries.getSuggestionArtists { artist, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionArtist(
+                    artist = artist,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun getArtists(): List<SuggestionArtist> {
+        return handler.awaitList {
+            suggestionsQueries.getSuggestionArtists { artist, count, isBlocked, isUserAdded, sortOrder ->
+                SuggestionArtist(
+                    artist = artist,
+                    count = count,
+                    isBlocked = isBlocked == 1L,
+                    isUserAdded = isUserAdded == 1L,
+                    sortOrder = sortOrder,
+                )
+            }
+        }
+    }
+
+    override suspend fun insertArtist(artist: SuggestionArtist) {
+        handler.await {
+            suggestionsQueries.insertSuggestionArtist(
+                artist = artist.artist,
+                count = artist.count,
+                isBlocked = if (artist.isBlocked) 1L else 0L,
+                isUserAdded = if (artist.isUserAdded) 1L else 0L,
+                sortOrder = artist.sortOrder,
+            )
+        }
+    }
+
+    override suspend fun deleteArtist(artist: String) {
+        handler.await {
+            suggestionsQueries.deleteSuggestionArtist(artist)
+        }
+    }
+
+    override suspend fun clearArtists() {
+        handler.await {
+            suggestionsQueries.deleteAllSuggestionArtists()
         }
     }
 }

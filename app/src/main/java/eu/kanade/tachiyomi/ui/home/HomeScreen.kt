@@ -168,7 +168,7 @@ object HomeScreen : Screen() {
     private val openTabEvent = Channel<Tab>()
     private val showBottomNavEvent = Channel<Boolean>()
 
-    private const val TAB_FADE_DURATION = 200
+    private const val TAB_FADE_DURATION = 90
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
     private val TABS = listOf(

@@ -133,7 +133,7 @@ class TranslationManager(
     fun deleteTranslation(chapter: Chapter, manga: Manga, source: Source) {
         launchIO {
             removeFromTranslationQueue(chapter)
-            val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
+            val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.ogTitle, source)
             file?.delete()
         }
     }
@@ -143,7 +143,7 @@ class TranslationManager(
             if (removeQueued) {
                 translator.removeFromQueue(manga)
             }
-            provider.findMangaDir(manga.title, source)?.delete()
+            provider.findMangaDir(manga.ogTitle, source)?.delete()
             val sourceDir = provider.findSourceDir(source)
             if (sourceDir?.listFiles()?.isEmpty() == true) {
                 sourceDir.delete()

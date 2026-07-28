@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -41,15 +43,16 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GTranslate
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -95,12 +98,14 @@ import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.RelatedMangaTitle
+import eu.kanade.presentation.components.ColorizerDropdownMenu
 import eu.kanade.presentation.components.DownloadDropdownMenu
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.components.TranslationDropdownMenu
 import eu.kanade.presentation.components.relativeDateText
+import eu.kanade.presentation.manga.ColorizerAction
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.presentation.manga.TranslationAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
@@ -116,6 +121,7 @@ import eu.kanade.presentation.manga.components.MangaInfoButtons
 import eu.kanade.presentation.manga.components.MangaToolbar
 import eu.kanade.presentation.manga.components.MissingChapterCountListItem
 import eu.kanade.presentation.manga.components.OutlinedButtonWithArrow
+import eu.kanade.presentation.manga.components.PageBookmarksSection
 import eu.kanade.presentation.manga.components.PagePreviewItems
 import eu.kanade.presentation.manga.components.PagePreviews
 import eu.kanade.presentation.manga.components.RelatedMangasRow
@@ -187,6 +193,7 @@ fun MangaScreen(
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     // KMK <--
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -209,6 +216,7 @@ fun MangaScreen(
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onTranslateActionClicked: ((TranslationAction) -> Unit)? = null,
+    onColorizeActionClicked: ((ColorizerAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditFetchIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -224,6 +232,9 @@ fun MangaScreen(
     onMorePreviewsClicked: () -> Unit,
     previewsRowCount: Int,
     // SY <--
+    // KMK -->
+    onDeletePageBookmark: (Long) -> Unit = {},
+    // KMK <--
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -244,6 +255,7 @@ fun MangaScreen(
     getMangaState: @Composable (Manga) -> State<Manga>,
     onClickSourceSettingsClicked: (() -> Unit)?,
     onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onClickColorizerSettingsClicked: (() -> Unit)? = null,
     onToggleAutoTranslate: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
@@ -278,6 +290,7 @@ fun MangaScreen(
                 onDownloadChapter = onDownloadChapter,
                 // KMK -->
                 onTranslationChapter = onTranslationChapter,
+                onColorizeChapter = onColorizeChapter,
                 // KMK <--
                 onAddToLibraryClicked = onAddToLibraryClicked,
                 onWebViewClicked = onWebViewClicked,
@@ -294,6 +307,7 @@ fun MangaScreen(
                 onShareClicked = onShareClicked,
                 onDownloadActionClicked = onDownloadActionClicked,
                 onTranslateActionClicked = onTranslateActionClicked,
+                onColorizeActionClicked = onColorizeActionClicked,
                 onEditCategoryClicked = onEditCategoryClicked,
                 onEditIntervalClicked = onEditFetchIntervalClicked,
                 onMigrateClicked = onMigrateClicked,
@@ -322,6 +336,7 @@ fun MangaScreen(
                 getMangaState = getMangaState,
                 onClickSourceSettingsClicked = onClickSourceSettingsClicked,
                 onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
+                onClickColorizerSettingsClicked = onClickColorizerSettingsClicked,
                 onToggleAutoTranslate = onToggleAutoTranslate,
                 onClearManga = onClearManga,
                 onOpenMangaFolder = onOpenMangaFolder,
@@ -348,6 +363,7 @@ fun MangaScreen(
                 onDownloadChapter = onDownloadChapter,
                 // KMK -->
                 onTranslationChapter = onTranslationChapter,
+                onColorizeChapter = onColorizeChapter,
                 // KMK <--
                 onAddToLibraryClicked = onAddToLibraryClicked,
                 onWebViewClicked = onWebViewClicked,
@@ -364,6 +380,7 @@ fun MangaScreen(
                 onShareClicked = onShareClicked,
                 onDownloadActionClicked = onDownloadActionClicked,
                 onTranslateActionClicked = onTranslateActionClicked,
+                onColorizeActionClicked = onColorizeActionClicked,
                 onEditCategoryClicked = onEditCategoryClicked,
                 onEditIntervalClicked = onEditFetchIntervalClicked,
                 onMigrateClicked = onMigrateClicked,
@@ -379,6 +396,7 @@ fun MangaScreen(
                 onMorePreviewsClicked = onMorePreviewsClicked,
                 previewsRowCount = previewsRowCount,
                 // SY <--
+                onDeletePageBookmark = onDeletePageBookmark,
                 onMultiBookmarkClicked = onMultiBookmarkClicked,
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                 onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -392,6 +410,7 @@ fun MangaScreen(
                 getMangaState = getMangaState,
                 onClickSourceSettingsClicked = onClickSourceSettingsClicked,
                 onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
+                onClickColorizerSettingsClicked = onClickColorizerSettingsClicked,
                 onToggleAutoTranslate = onToggleAutoTranslate,
                 onClearManga = onClearManga,
                 onOpenMangaFolder = onOpenMangaFolder,
@@ -422,6 +441,7 @@ private fun MangaScreenSmallImpl(
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     // KMK <--
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -445,6 +465,7 @@ private fun MangaScreenSmallImpl(
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onTranslateActionClicked: ((TranslationAction) -> Unit)?,
+    onColorizeActionClicked: ((ColorizerAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -480,6 +501,7 @@ private fun MangaScreenSmallImpl(
     getMangaState: @Composable ((Manga) -> State<Manga>),
     onClickSourceSettingsClicked: (() -> Unit)?,
     onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onClickColorizerSettingsClicked: (() -> Unit)? = null,
     onToggleAutoTranslate: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
@@ -616,6 +638,16 @@ private fun MangaScreenSmallImpl(
                     titleAlphaProvider = { titleAlpha },
                     backgroundAlphaProvider = { backgroundAlpha },
                     onPaletteScreenClick = onPaletteScreenClick,
+                    autoTranslate = state.manga.autoTranslateAfterDownload,
+                    onClickToggleAutoTranslate = onToggleAutoTranslate.takeIf { !state.source.isLocalOrStub() },
+                    onClickTranslationSettings = {
+                        if (onClickTranslationSettingsClicked != null) {
+                            onClickTranslationSettingsClicked()
+                        } else {
+                            showTranslationSettings = true
+                        }
+                    },
+                    onClickColorizerSettings = onClickColorizerSettingsClicked,
                 )
             },
             bottomBar = {
@@ -733,6 +765,26 @@ private fun MangaScreenSmallImpl(
                                     SearchMetadataChips(state.meta, state.source.id, state.manga.genre)
                                 },
                             )
+                        }
+
+                        if (state.pageBookmarks.isNotEmpty()) {
+                            item(key = "page_bookmarks") {
+                                PageBookmarksSection(
+                                    bookmarks = state.pageBookmarks,
+                                    chapters = remember(state.chapters) { state.chapters.map { it.chapter } },
+                                    onClickBookmark = { chapterId, pageNumber ->
+                                        context.startActivity(
+                                            eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
+                                                context,
+                                                state.manga.id,
+                                                chapterId,
+                                                pageNumber,
+                                            ),
+                                        )
+                                    },
+                                    onDeleteBookmark = onDeletePageBookmark,
+                                )
+                            }
                         }
 
                         if (state.source !is StubSource &&
@@ -935,6 +987,31 @@ private fun MangaScreenSmallImpl(
                                         }
                                     }
 
+                                    // Colorize Button
+                                    if (onColorizeActionClicked != null) {
+                                        var colorizeMenuExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(
+                                                onClick = { colorizeMenuExpanded = true },
+                                                modifier = Modifier.size(36.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Palette,
+                                                    contentDescription = "Colorize Options",
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                            ColorizerDropdownMenu(
+                                                expanded = colorizeMenuExpanded,
+                                                onDismissRequest = { colorizeMenuExpanded = false },
+                                                onColorizeClicked = { action ->
+                                                    colorizeMenuExpanded = false
+                                                    onColorizeActionClicked(action)
+                                                },
+                                            )
+                                        }
+                                    }
+
                                     // Filter Button
                                     IconButton(
                                         onClick = onFilterClicked,
@@ -947,49 +1024,24 @@ private fun MangaScreenSmallImpl(
                                         )
                                     }
 
-                                    // Translation Settings Button
+                                    // Resume Button
+                                    val isReading = remember(chapters) {
+                                        chapters.fastAny { it.chapter.read }
+                                    }
                                     IconButton(
-                                        onClick = {
-                                            if (onClickTranslationSettingsClicked != null) {
-                                                onClickTranslationSettingsClicked()
-                                            } else {
-                                                showTranslationSettings = true
-                                            }
-                                        },
+                                        onClick = onContinueReading,
                                         modifier = Modifier.size(36.dp),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.GTranslate,
-                                            contentDescription = "Translation Settings",
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-
-                                    // Autotranslate after download Button
-                                    if (onToggleAutoTranslate != null && !state.source.isLocalOrStub()) {
-                                        val autoTranslate = state.manga.autoTranslateAfterDownload
-                                        IconButton(
-                                            onClick = onToggleAutoTranslate,
-                                            modifier = Modifier.size(36.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.AutoAwesome,
-                                                contentDescription = "Auto Translate after Download",
-                                                modifier = Modifier.size(20.dp),
-                                                tint = if (autoTranslate) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                            )
-                                        }
-                                    }
-
-                                    // Resume Button
-                                    IconButton(
-                                        onClick = onContinueReading,
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
                                             imageVector = Icons.Default.PlayArrow,
-                                            contentDescription = "Resume",
-                                            modifier = Modifier.size(28.dp),
+                                            contentDescription = stringResource(
+                                                if (isReading) {
+                                                    MR.strings.action_resume
+                                                } else {
+                                                    MR.strings.action_start
+                                                },
+                                            ),
+                                            modifier = Modifier.size(20.dp),
                                         )
                                     }
                                 }
@@ -1033,6 +1085,7 @@ private fun MangaScreenSmallImpl(
                                             onDownloadChapter = onDownloadChapter,
                                             // KMK -->
                                             onTranslationChapter = onTranslationChapter,
+                                            onColorizeChapter = onColorizeChapter,
                                             // KMK <--
                                             onChapterSelected = onChapterSelected,
                                             onChapterSwipe = onChapterSwipe,
@@ -1060,6 +1113,7 @@ private fun MangaScreenLargeImpl(
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     // KMK <--
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -1083,6 +1137,7 @@ private fun MangaScreenLargeImpl(
     onShareClicked: (() -> Unit)?,
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onTranslateActionClicked: ((TranslationAction) -> Unit)?,
+    onColorizeActionClicked: ((ColorizerAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -1118,6 +1173,7 @@ private fun MangaScreenLargeImpl(
     getMangaState: @Composable ((Manga) -> State<Manga>),
     onClickSourceSettingsClicked: (() -> Unit)?,
     onClickTranslationSettingsClicked: (() -> Unit)? = null,
+    onClickColorizerSettingsClicked: (() -> Unit)? = null,
     onToggleAutoTranslate: (() -> Unit)? = null,
     onClearManga: () -> Unit,
     onOpenMangaFolder: (() -> Unit)?,
@@ -1232,7 +1288,10 @@ private fun MangaScreenLargeImpl(
                 backgroundAlphaProvider = { 1f },
                 // KMK -->
                 onPaletteScreenClick = onPaletteScreenClick,
-                // KMK <--
+                autoTranslate = state.manga.autoTranslateAfterDownload,
+                onClickToggleAutoTranslate = onToggleAutoTranslate.takeIf { !state.source.isLocalOrStub() },
+                onClickTranslationSettings = onClickTranslationSettingsClicked,
+                onClickColorizerSettings = onClickColorizerSettingsClicked,
             )
         },
         bottomBar = {
@@ -1260,7 +1319,7 @@ private fun MangaScreenLargeImpl(
             val isFABVisible = remember(chapters) {
                 chapters.fastAny { !it.chapter.read } && !isAnySelected
             }
-            SmallExtendedFloatingActionButton(
+            ExtendedFloatingActionButton(
                 text = {
                     val isReading = remember(state.chapters) {
                         state.chapters.fastAny { it.chapter.read }
@@ -1480,6 +1539,26 @@ private fun MangaScreenLargeImpl(
                             }
                             // KMK <--
 
+                            if (state.pageBookmarks.isNotEmpty()) {
+                                item(key = "page_bookmarks") {
+                                    PageBookmarksSection(
+                                        bookmarks = state.pageBookmarks,
+                                        chapters = remember(state.chapters) { state.chapters.map { it.chapter } },
+                                        onClickBookmark = { chapterId, pageNumber ->
+                                            context.startActivity(
+                                                eu.kanade.tachiyomi.ui.reader.ReaderActivity.newIntent(
+                                                    context,
+                                                    state.manga.id,
+                                                    chapterId,
+                                                    pageNumber,
+                                                ),
+                                            )
+                                        },
+                                        onDeleteBookmark = onDeletePageBookmark,
+                                    )
+                                }
+                            }
+
                             item(
                                 key = MangaScreenItem.CHAPTER_HEADER,
                                 contentType = MangaScreenItem.CHAPTER_HEADER,
@@ -1509,6 +1588,7 @@ private fun MangaScreenLargeImpl(
                                 onDownloadChapter = onDownloadChapter,
                                 // KMK -->
                                 onTranslationChapter = onTranslationChapter,
+                                onColorizeChapter = onColorizeChapter,
                                 // KMK <--
                                 onChapterSelected = onChapterSelected,
                                 onChapterSwipe = onChapterSwipe,
@@ -1583,6 +1663,7 @@ private fun LazyListScope.sharedChapterItems(
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     // KMK <--
     onChapterSelected: (ChapterList.Item, Boolean, Boolean) -> Unit,
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -1654,6 +1735,12 @@ private fun LazyListScope.sharedChapterItems(
                     translationStateProvider = { item.translationState },
                     onTranslationClick = if (onTranslationChapter != null) {
                         { onTranslationChapter(item, it) }
+                    } else {
+                        null
+                    },
+                    colorizerStateProvider = { item.colorizerState },
+                    onColorizeClick = if (onColorizeChapter != null) {
+                        { onColorizeChapter(item, it) }
                     } else {
                         null
                     },

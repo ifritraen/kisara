@@ -100,6 +100,7 @@ fun MoreScreen(
     // KMK -->
     onClickLibraryUpdateErrors: () -> Unit,
     onClickKisaraSettings: () -> Unit,
+    onClickLogbook: () -> Unit,
     // KMK <--
 ) {
     val uriHandler = LocalUriHandler.current
@@ -243,6 +244,13 @@ fun MoreScreen(
                     title = stringResource(MR.strings.label_stats),
                     icon = Icons.Outlined.QueryStats,
                     onPreferenceClick = onClickStats,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(tachiyomi.i18n.kmk.KMR.strings.label_logbook),
+                    icon = Icons.Outlined.History,
+                    onPreferenceClick = onClickLogbook,
                 )
             }
             // KMK -->

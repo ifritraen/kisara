@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.browse.extension
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -12,6 +13,7 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
+import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.source.JarCatalogueSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
@@ -24,25 +26,28 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import logcat.LogPriority
+import okhttp3.Request
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import android.content.Context
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.coroutines.flow.filter
+import java.io.File
 import kotlin.time.Duration.Companion.seconds
 
 class ExtensionsScreenModel(
@@ -118,10 +123,10 @@ class ExtensionsScreenModel(
                 val jarAvailables: List<Extension.AvailableJar> = extensionsData.jarAvailables
                 val jarSources: List<JarCatalogueSource> = extensionsData.jarSources
 
-                val updatesList: List<Extension.Installed> = extensions.updates
-                val installedList: List<Extension.Installed> = extensions.installed
+                val updatesList: List<Extension.Installed> = extensions.updates.filter { !temporarilySideloadedPkgs.contains(it.pkgName) }
+                val installedList: List<Extension.Installed> = extensions.installed.filter { !temporarilySideloadedPkgs.contains(it.pkgName) }
                 val availableList: List<Extension.Available> = extensions.available
-                val untrustedList: List<Extension.Untrusted> = extensions.untrusted
+                val untrustedList: List<Extension.Untrusted> = extensions.untrusted.filter { !temporarilySideloadedPkgs.contains(it.pkgName) }
                 val enabledLanguages = preferences.enabledLanguages().get()
                 buildMap<ExtensionUiModel.Header, List<ExtensionUiModel.Item>> {
                     val updates = updatesList.filter(predicate).map(extensionMapper(downloads))
@@ -151,6 +156,7 @@ class ExtensionsScreenModel(
                     }
 
                     val jarPlugins = eu.kanade.tachiyomi.extension.JarExtensionManager.getInstalledJars()
+                        .filter { !temporarilySideloadedPkgs.contains("jar:${it.jarName}") }
                     if (jarPlugins.isNotEmpty()) {
                         val jarItems = jarPlugins.mapNotNull { plugin ->
                             val pluginSources = jarSources.filter { it.originalSource in plugin.sources && it.lang in enabledLanguages }
@@ -516,87 +522,100 @@ class ExtensionsScreenModel(
 
     fun browseAvailableExtension(extension: Extension.Available, onBrowse: (Long) -> Unit) {
         screenModelScope.launchIO {
+            val installed = extensionManager.installedExtensionsFlow.value.find { it.pkgName == extension.pkgName }
+            val targetSourceId = installed?.sources?.firstOrNull()?.id ?: extension.sources.firstOrNull()?.id
+            if (targetSourceId != null) {
+                onBrowse(targetSourceId)
+                return@launchIO
+            }
             var success = false
-            var isError = false
+            val context = Injekt.get<Application>()
+            val tmpFile = File(context.cacheDir, "temp_ext_${extension.pkgName}.apk")
             try {
-                val isInstalled = extensionManager.installedExtensionsFlow.value.any { it.pkgName == extension.pkgName }
-                if (!isInstalled) {
-                    temporarilySideloadedPkgs.add(extension.pkgName)
+                temporarilySideloadedPkgs.add(extension.pkgName)
+                addDownloadState(extension, InstallStep.Downloading)
+                val apkUrl = "${extension.repoUrl}/apk/${extension.apkName}"
+                val request = Request.Builder().url(apkUrl).build()
+                val client = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().client
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw Exception("Failed to download extension: HTTP ${response.code}")
+                    }
+                    tmpFile.outputStream().use { output ->
+                        response.body.byteStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
 
-                extensionManager.sideloadExtension(extension)
-                    .onEach { installStep ->
-                        addDownloadState(extension, installStep)
-                        if (installStep == InstallStep.Installed) {
-                            success = true
-                            extensionManager.registerSideloadedExtension(extension.pkgName)
-                        } else if (installStep == InstallStep.Error) {
-                            isError = true
-                        }
-                    }
-                    .takeWhile { installStep -> installStep != InstallStep.Installed && installStep != InstallStep.Error }
-                    .onCompletion {
-                        removeDownloadState(extension)
-                        if (success) {
-                            val installed = withTimeoutOrNull<Extension.Installed>(2000) {
-                                extensionManager.installedExtensionsFlow
-                                    .mapNotNull { list -> list.find { it.pkgName == extension.pkgName } }
-                                    .filter { it.sources.isNotEmpty() }
-                                    .first()
-                            }
-                            val targetSourceId = installed?.sources?.firstOrNull()?.id
-                            if (targetSourceId != null) {
-                                onBrowse(targetSourceId)
-                            } else {
-                                temporarilySideloadedPkgs.remove(extension.pkgName)
-                                val installedExt = extensionManager.installedExtensionsFlow.value.find { it.pkgName == extension.pkgName }
-                                if (installedExt != null) {
-                                    extensionManager.uninstallExtension(installedExt)
-                                }
-                                _events.trySend(Event.SideloadError(extension.name, Exception("No sources found in extension")))
-                            }
-                        } else if (isError) {
-                            temporarilySideloadedPkgs.remove(extension.pkgName)
-                            val installedExt = extensionManager.installedExtensionsFlow.value.find { it.pkgName == extension.pkgName }
-                            if (installedExt != null) {
-                                extensionManager.uninstallExtension(installedExt)
-                            }
-                            val err = extensionManager.getAndClearSideloadError(extension.pkgName) ?: Exception("Unknown error during sideloading")
-                            _events.trySend(Event.SideloadError(extension.name, err))
-                        }
-                    }
-                    .collect()
+                addDownloadState(extension, InstallStep.Installing)
+                val installedOk = ExtensionLoader.installPrivateExtensionFile(context, tmpFile, isTemporary = true)
+                if (installedOk) {
+                    success = true
+                    extensionManager.registerSideloadedExtension(extension.pkgName)
+                } else {
+                    throw Exception("Failed to install extension internally")
+                }
             } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to browse available extension" }
                 temporarilySideloadedPkgs.remove(extension.pkgName)
                 val installedExt = extensionManager.installedExtensionsFlow.value.find { it.pkgName == extension.pkgName }
                 if (installedExt != null) {
                     extensionManager.uninstallExtension(installedExt)
                 }
                 _events.trySend(Event.SideloadError(extension.name, e))
+            } finally {
+                removeDownloadState(extension)
+                tmpFile.delete()
+            }
+
+            if (success) {
+                val installed = withTimeoutOrNull<Extension.Installed>(8000) {
+                    extensionManager.installedExtensionsFlow
+                        .mapNotNull { list -> list.find { it.pkgName == extension.pkgName } }
+                        .filter { it.sources.isNotEmpty() }
+                        .first()
+                }
+                val targetSourceId = installed?.sources?.firstOrNull()?.id ?: extension.sources.firstOrNull()?.id
+                if (targetSourceId != null) {
+                    onBrowse(targetSourceId)
+                } else {
+                    temporarilySideloadedPkgs.remove(extension.pkgName)
+                    val installedExt = extensionManager.installedExtensionsFlow.value.find { it.pkgName == extension.pkgName }
+                    if (installedExt != null) {
+                        extensionManager.uninstallExtension(installedExt)
+                    }
+                    _events.trySend(Event.SideloadError(extension.name, Exception("No sources found in extension")))
+                }
             }
         }
     }
 
     fun browseAvailableJar(context: Context, extension: Extension.AvailableJar, onBrowse: (Long) -> Unit) {
         screenModelScope.launchIO {
+            val filename = "${extension.pkgName}.jar"
+            val isInstalled = eu.kanade.tachiyomi.extension.JarExtensionManager.getInstalledJars().any { it.jarName == filename }
+            if (isInstalled) {
+                val sourceId = eu.kanade.tachiyomi.extension.JarExtensionManager.getSourcesForJar(filename).firstOrNull()
+                if (sourceId != null) {
+                    onBrowse(sourceId)
+                    return@launchIO
+                }
+            }
             var success = false
             try {
-                val filename = "${extension.pkgName}.jar"
-                val isInstalled = eu.kanade.tachiyomi.extension.JarExtensionManager.getInstalledJars().any { it.jarName == filename }
-                if (!isInstalled) {
-                    temporarilySideloadedPkgs.add("jar:$filename")
-                }
-
+                temporarilySideloadedPkgs.add("jar:$filename")
                 addDownloadState(extension, InstallStep.Installing)
                 val ok = eu.kanade.tachiyomi.extension.JarExtensionManager.downloadAndInstallJar(
                     context = context,
                     url = extension.url,
                     filename = filename,
                     repoName = extension.repoName,
+                    isTemporary = true,
                 )
                 removeDownloadState(extension)
                 if (ok) {
-                    val sourceId = kotlinx.coroutines.withTimeoutOrNull<Long>(3000) {
+                    val sourceId = kotlinx.coroutines.withTimeoutOrNull<Long>(8000) {
                         eu.kanade.tachiyomi.extension.JarExtensionManager.sources
                             .map { sourcesList ->
                                 val jarSourcesList = eu.kanade.tachiyomi.extension.JarExtensionManager.getSourcesForJar(filename)

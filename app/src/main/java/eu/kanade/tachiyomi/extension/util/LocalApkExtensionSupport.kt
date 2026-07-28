@@ -34,12 +34,12 @@ object LocalApkExtensionSupport {
     }
 
     fun getSideloadDir(context: Context): File {
-        val internalDir = File(context.filesDir, SIDELOAD_DIR)
-        val externalDir = File(context.getExternalFilesDir(null) ?: context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
-        if (internalDir.exists() && internalDir.isDirectory && internalDir != externalDir) {
-            migrateDir(internalDir, externalDir)
+        val internalDir = File(context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
+        val externalDir = File(context.getExternalFilesDir(null) ?: context.filesDir, SIDELOAD_DIR)
+        if (externalDir.exists() && externalDir.isDirectory && internalDir != externalDir) {
+            migrateDir(externalDir, internalDir)
         }
-        return externalDir
+        return internalDir
     }
 
     fun getLocalApkFiles(context: Context): List<File> {
@@ -57,24 +57,7 @@ object LocalApkExtensionSupport {
         val root = getSideloadDir(context)
         val apkFile = File(root, "$packageName.apk")
         if (!apkFile.isFile) return null
-        return try {
-            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                pkgManager.getPackageArchiveInfo(
-                    apkFile.absolutePath,
-                    PackageManager.PackageInfoFlags.of(PACKAGE_FLAGS.toLong()),
-                )
-            } else {
-                pkgManager.getPackageArchiveInfo(apkFile.absolutePath, PACKAGE_FLAGS)
-            }
-            packageInfo?.apply {
-                applicationInfo?.apply {
-                    sourceDir = apkFile.absolutePath
-                    publicSourceDir = apkFile.absolutePath
-                }
-            }
-        } catch (_: Exception) {
-            null
-        }
+        return ExtensionLoader.getPackageArchiveInfoWithCache(context, apkFile, PACKAGE_FLAGS)
     }
 
     fun prepareLoadableApkPath(
@@ -87,11 +70,12 @@ object LocalApkExtensionSupport {
             return sourcePath
         }
 
-        val internalCache = File(context.filesDir, LOAD_CACHE_DIR)
-        val cacheRoot = File(context.getExternalFilesDir(null) ?: context.filesDir, LOAD_CACHE_DIR).apply { mkdirs() }
-        if (internalCache.exists() && internalCache.isDirectory && internalCache != cacheRoot) {
-            migrateDir(internalCache, cacheRoot)
+        val internalCache = File(context.filesDir, LOAD_CACHE_DIR).apply { mkdirs() }
+        val externalCache = File(context.getExternalFilesDir(null) ?: context.filesDir, LOAD_CACHE_DIR)
+        if (externalCache.exists() && externalCache.isDirectory && internalCache != externalCache) {
+            migrateDir(externalCache, internalCache)
         }
+        val cacheRoot = internalCache
         val uniqueName = "${pkgName}_${sourceFile.lastModified()}_${sourceFile.length()}.apk"
         val targetFile = File(cacheRoot, uniqueName)
 
@@ -135,6 +119,7 @@ object LocalApkExtensionSupport {
         packageName: String,
         sourceFile: File,
     ): File {
+        deleteSideloadedApk(context, packageName)
         val root = getSideloadDir(context)
         val targetFile = File(root, "$packageName.apk")
         sourceFile.copyTo(targetFile, overwrite = true)
@@ -146,6 +131,7 @@ object LocalApkExtensionSupport {
         context: Context,
         packageName: String,
     ): Boolean {
+        ExtensionLoader.invalidateCacheForPackage(context, packageName)
         val root = getSideloadDir(context)
         val cacheRoot = File(context.filesDir, LOAD_CACHE_DIR)
 
@@ -156,11 +142,7 @@ object LocalApkExtensionSupport {
                 val name = file.nameWithoutExtension
                 val matchesName = name == packageName || name.startsWith("$packageName-") || name.startsWith("${packageName}_")
                 val matchesPackage = matchesName || try {
-                    val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong()))
-                    } else {
-                        context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_META_DATA)
-                    }
+                    val info = ExtensionLoader.getPackageArchiveInfoWithCache(context, file, PackageManager.GET_META_DATA)
                     info?.packageName == packageName
                 } catch (_: Exception) {
                     false

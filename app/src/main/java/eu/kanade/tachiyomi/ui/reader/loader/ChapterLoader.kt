@@ -131,7 +131,13 @@ class ChapterLoader(
                     source is LocalSource -> source.getFormat(chapter.chapter).let { format ->
                         when (format) {
                             is Format.Directory -> DirectoryPageLoader(format.file)
-                            is Format.Archive -> ArchivePageLoader(format.file.archiveReader(context))
+                            is Format.Archive -> ArchivePageLoader(
+                                reader = format.file.archiveReader(context),
+                                chapterName = chapter.chapter.name,
+                                scanlator = chapter.chapter.scanlator,
+                                mangaTitle = manga.ogTitle,
+                                source = source,
+                            )
                             is Format.Epub -> EpubPageLoader(format.file.epubReader(context))
                         }
                     }
@@ -149,7 +155,13 @@ class ChapterLoader(
             source is LocalSource -> source.getFormat(chapter.chapter).let { format ->
                 when (format) {
                     is Format.Directory -> DirectoryPageLoader(format.file)
-                    is Format.Archive -> ArchivePageLoader(format.file.archiveReader(context))
+                    is Format.Archive -> ArchivePageLoader(
+                        reader = format.file.archiveReader(context),
+                        chapterName = dbChapter.name,
+                        scanlator = dbChapter.scanlator,
+                        mangaTitle = manga.ogTitle,
+                        source = source,
+                    )
                     is Format.Epub -> EpubPageLoader(format.file.epubReader(context))
                 }
             }

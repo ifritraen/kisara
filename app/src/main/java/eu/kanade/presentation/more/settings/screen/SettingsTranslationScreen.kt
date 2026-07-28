@@ -81,6 +81,7 @@ object SettingsTranslationScreen : SearchableSettings {
             getTranslatioEngineGroup(translationPreferences),
             getOcrGroup(translationPreferences),
             getTranslatioAdvancedGroup(translationPreferences),
+            getColorizerGroup(translationPreferences),
             getDiagnosticGroup(translationPreferences),
         )
     }
@@ -230,6 +231,43 @@ object SettingsTranslationScreen : SearchableSettings {
                             },
                         )
                     },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getColorizerGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = "Manga Colorizer Settings",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = translationPreferences.useColorizer(),
+                    title = "Use Manga Colorizer",
+                    subtitle = "Automatically colorizes manga pages using Kaggle Server",
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = translationPreferences.autoColorizeAfterDownload(),
+                    title = "Colorize after Downloading",
+                    subtitle = "Automatically colorizes downloaded chapters in the background",
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = translationPreferences.colorizerKaggleUsername(),
+                    title = "Kaggle Username",
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = translationPreferences.colorizerKaggleApiKey(),
+                    title = "Kaggle API Key",
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = translationPreferences.colorizerNgrokAuthToken(),
+                    title = "ngrok Auth Token",
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = translationPreferences.colorizerKaggleKernelSlug(),
+                    title = "Kaggle Kernel Slug",
                 ),
             ),
         )

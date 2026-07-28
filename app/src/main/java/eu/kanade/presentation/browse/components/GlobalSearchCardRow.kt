@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.library.components.CommonMangaItemDefaults
-import eu.kanade.presentation.library.components.MangaComfortableGridItem
+import eu.kanade.presentation.library.components.MangaCompactGridItem
 import eu.kanade.presentation.manga.components.RatioSwitchToPanorama
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaCover
@@ -80,30 +80,16 @@ internal fun MangaItem(
     // KMK <--
     manga: Manga? = null,
 ) {
-    // KMK -->
-    val panoramaCover = usePanoramaCover ?: Injekt.get<UiPreferences>().usePanoramaCoverFlow().collectAsState().value
-    val coverRatio = remember { mutableFloatStateOf(1f) }
-    // KMK <--
     Box(
-        modifier = Modifier.width(
-            // KMK -->
-            if (panoramaCover && coverRatio.floatValue <= RatioSwitchToPanorama) 205.dp else 96.dp,
-            // KMK <--
-        ),
+        modifier = Modifier.width(96.dp),
     ) {
-        MangaComfortableGridItem(
+        MangaCompactGridItem(
             title = title,
-            titleMaxLines = 3,
             coverData = cover,
             coverBadgeStart = {
                 InLibraryBadge(enabled = isFavorite)
             },
-            // KMK -->
             isSelected = isSelected,
-            coverRatio = coverRatio,
-            usePanoramaCover = panoramaCover,
-            fitToPanoramaCover = true,
-            // KMK <--
             manga = manga,
             coverAlpha = if (isFavorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
             onClick = onClick,

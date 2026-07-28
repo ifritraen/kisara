@@ -280,11 +280,11 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
                         // Sideloaded / Private app might not be registered in the standard manager state yet, parse APK directly
                         val sideloadedFile = java.io.File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
                         if (sideloadedFile.isFile) {
-                            context.packageManager.getPackageArchiveInfoCompat(sideloadedFile.absolutePath, android.content.pm.PackageManager.GET_META_DATA)
+                            ExtensionLoader.getPackageArchiveInfoWithCache(context, sideloadedFile, android.content.pm.PackageManager.GET_META_DATA)
                         } else {
                             val privateExtensionFile = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext")
                             if (privateExtensionFile.isFile) {
-                                context.packageManager.getPackageArchiveInfoCompat(privateExtensionFile.absolutePath, android.content.pm.PackageManager.GET_META_DATA)
+                                ExtensionLoader.getPackageArchiveInfoWithCache(context, privateExtensionFile, android.content.pm.PackageManager.GET_META_DATA)
                             } else {
                                 context.packageManager.getPackageInfoCompat(pkgName, android.content.pm.PackageManager.GET_META_DATA)
                             }

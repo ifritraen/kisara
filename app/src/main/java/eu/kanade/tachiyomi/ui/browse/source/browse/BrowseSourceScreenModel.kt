@@ -154,7 +154,7 @@ open class BrowseSourceScreenModel(
         }
         // KMK -->
         screenModelScope.launch {
-            var retry = 10
+            var retry = 50
             while (source !is CatalogueSource && retry-- > 0) {
                 // Sometime source is late to load, so we need to wait a bit
                 delay(100)
@@ -710,6 +710,30 @@ open class BrowseSourceScreenModel(
 
     override fun onDispose() {
         super.onDispose()
+        val extensionManager = uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.extension.ExtensionManager>()
+        val extension = extensionManager.installedExtensionsFlow.value.find { ext ->
+            ext.sources.any { it.id == source.id }
+        }
+        if (extension != null) {
+            val isTemp = eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel.temporarilySideloadedPkgs.contains(extension.pkgName)
+            if (isTemp) {
+                eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel.temporarilySideloadedPkgs.remove(extension.pkgName)
+                extensionManager.uninstallExtension(extension)
+            }
+        } else {
+            val jarPlugin = eu.kanade.tachiyomi.extension.JarExtensionManager.getInstalledJars().find { plugin ->
+                plugin.sources.any { it.name == source.name }
+            }
+            if (jarPlugin != null) {
+                val jarFilename = jarPlugin.jarName
+                val isTempJar = eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel.temporarilySideloadedPkgs.contains("jar:$jarFilename")
+                if (isTempJar) {
+                    eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel.temporarilySideloadedPkgs.remove("jar:$jarFilename")
+                    val context = uy.kohesive.injekt.Injekt.get<android.app.Application>()
+                    eu.kanade.tachiyomi.extension.JarExtensionManager.uninstallJar(context, jarFilename)
+                }
+            }
+        }
         val wireguardManager = Injekt.get<eu.kanade.tachiyomi.vpn.WireguardManager>()
         screenModelScope.launchIO {
             wireguardManager.stopTunnelForSource(sourceId, "browse_source_$sourceId")

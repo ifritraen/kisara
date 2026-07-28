@@ -206,7 +206,7 @@ class ChapterTranslator(
 
     fun queueChapter(manga: Manga, chapter: Chapter) {
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
-        if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source) != null) return
+        if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.ogTitle, source) != null) return
         if (queueState.value.any { it.chapter.id == chapter.id }) return
         val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
         val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
@@ -248,7 +248,7 @@ class ChapterTranslator(
                     .build(translationPreferences, translation.fromLang, translation.toLang)
             }
             // Directory where translations for a manga is stored
-            val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
+            val translationMangaDir = provider.getMangaDir(translation.manga.ogTitle, translation.source)
 
             // translations save file
             val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
@@ -258,7 +258,7 @@ class ChapterTranslator(
                 chapterName = translation.chapter.name,
                 chapterScanlator = translation.chapter.scanlator,
                 chapterUrl = translation.chapter.url,
-                mangaTitle = translation.manga.title,
+                mangaTitle = translation.manga.ogTitle,
                 source = translation.source,
             )!!
 

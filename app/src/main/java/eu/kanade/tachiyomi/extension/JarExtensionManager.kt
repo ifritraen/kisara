@@ -104,11 +104,12 @@ object JarExtensionManager {
 
     fun initialize(context: Context) {
         val extensionDir = File(context.filesDir, "jar_extensions")
+        val tempDir = File(extensionDir, "temp").apply { mkdirs() }
         if (!extensionDir.exists()) {
             extensionDir.mkdirs()
         }
 
-        val loaded = loadFromDirectory(context, extensionDir)
+        val loaded = loadFromDirectory(context, extensionDir) + loadFromDirectory(context, tempDir)
         val wrappedSources = mutableListOf<JarCatalogueSource>()
 
         val loaderContext = createLoaderContext(context)
@@ -512,6 +513,15 @@ object JarExtensionManager {
         }
     }
 
+    fun cleanTemporaryJars(context: Context) {
+        try {
+            val tempDir = File(File(context.filesDir, "jar_extensions"), "temp")
+            tempDir.deleteRecursively()
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
     fun uninstallJar(context: Context, filename: String): Boolean {
         return try {
             try {
@@ -522,9 +532,14 @@ object JarExtensionManager {
             } catch (_: Exception) {}
 
             val extensionDir = File(context.filesDir, "jar_extensions")
+            val tempDir = File(extensionDir, "temp")
             val file = File(extensionDir, filename)
+            val tempFile = File(tempDir, filename)
             if (file.exists()) {
                 file.delete()
+            }
+            if (tempFile.exists()) {
+                tempFile.delete()
             }
             initialize(context)
             true
@@ -534,7 +549,7 @@ object JarExtensionManager {
         }
     }
 
-    suspend fun downloadAndInstallJar(context: Context, url: String, filename: String, repoName: String? = null): Boolean {
+    suspend fun downloadAndInstallJar(context: Context, url: String, filename: String, repoName: String? = null, isTemporary: Boolean = false): Boolean {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 if (repoName != null) {
@@ -547,7 +562,11 @@ object JarExtensionManager {
                     } catch (_: Exception) {}
                 }
 
-                val extensionDir = File(context.filesDir, "jar_extensions")
+                val extensionDir = if (isTemporary) {
+                    File(File(context.filesDir, "jar_extensions"), "temp").apply { mkdirs() }
+                } else {
+                    File(context.filesDir, "jar_extensions").apply { mkdirs() }
+                }
                 if (!extensionDir.exists()) {
                     extensionDir.mkdirs()
                 }
@@ -575,26 +594,96 @@ object JarExtensionManager {
     suspend fun fetchRepositoryIndex(repoUrl: String): List<JarExtensionInfo> {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val request = okhttp3.Request.Builder().url(repoUrl).build()
+                // Handle direct .jar URL added as a repository
+                val cleanUrl = repoUrl.trim()
+                if (cleanUrl.endsWith(".jar", ignoreCase = true) || cleanUrl.contains(".jar?", ignoreCase = true)) {
+                    val rawFileName = cleanUrl.substringBefore('?').substringAfterLast('/')
+                    val name = if (rawFileName.isNotBlank()) rawFileName.removeSuffix(".jar") else "Kotatsu Extension"
+                    val pkg = rawFileName.removeSuffix(".jar").replace(Regex("[^a-zA-Z0-9_]"), "_").lowercase()
+                    return@withContext listOf(
+                        JarExtensionInfo(
+                            name = name,
+                            pkg = if (pkg.isNotBlank()) pkg else "kotatsu_jar",
+                            versionCode = 1,
+                            version = "1.0",
+                            url = cleanUrl,
+                            iconUrl = null,
+                        ),
+                    )
+                }
+
+                val request = okhttp3.Request.Builder().url(cleanUrl).build()
                 val response = OkHttpClient().newCall(request).execute()
                 if (!response.isSuccessful) return@withContext emptyList()
-                val body = response.body?.string() ?: return@withContext emptyList()
-                val array = org.json.JSONArray(body)
+                val body = response.body?.string()?.trim() ?: return@withContext emptyList()
+
+                val array = if (body.startsWith("[")) {
+                    org.json.JSONArray(body)
+                } else if (body.startsWith("{")) {
+                    val jsonObj = org.json.JSONObject(body)
+                    val keys = listOf("parsers", "packages", "extensions", "items", "data", "sources")
+                    var foundArray: org.json.JSONArray? = null
+                    for (key in keys) {
+                        if (jsonObj.has(key)) {
+                            val candidate = jsonObj.optJSONArray(key)
+                            if (candidate != null) {
+                                foundArray = candidate
+                                break
+                            }
+                        }
+                    }
+                    foundArray ?: return@withContext emptyList()
+                } else {
+                    return@withContext emptyList()
+                }
+
                 val list = mutableListOf<JarExtensionInfo>()
                 for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    val name = obj.getString("name")
-                    val pkg = obj.getString("pkg")
-                    val versionCode = if (obj.has("versionCode")) obj.getInt("versionCode") else obj.getInt("code")
-                    val version = obj.getString("version")
-                    val rawUrl = if (obj.has("url")) obj.getString("url") else obj.getString("apk")
+                    val obj = array.optJSONObject(i) ?: continue
+                    val name = when {
+                        obj.has("name") -> obj.optString("name")
+                        obj.has("title") -> obj.optString("title")
+                        obj.has("label") -> obj.optString("label")
+                        else -> null
+                    } ?: continue
+
+                    val pkg = when {
+                        obj.has("pkg") -> obj.optString("pkg")
+                        obj.has("package") -> obj.optString("package")
+                        obj.has("id") -> obj.optString("id")
+                        else -> name.replace(Regex("[^a-zA-Z0-9_]"), "_").lowercase()
+                    }
+
+                    val versionCode = when {
+                        obj.has("versionCode") -> obj.optInt("versionCode")
+                        obj.has("code") -> obj.optInt("code")
+                        obj.has("version_code") -> obj.optInt("version_code")
+                        else -> 1
+                    }
+
+                    val version = when {
+                        obj.has("version") -> obj.optString("version")
+                        obj.has("versionName") -> obj.optString("versionName")
+                        obj.has("version_name") -> obj.optString("version_name")
+                        else -> "1.0"
+                    }
+
+                    val rawUrl = when {
+                        obj.has("url") -> obj.optString("url")
+                        obj.has("apk") -> obj.optString("apk")
+                        obj.has("jar") -> obj.optString("jar")
+                        obj.has("file") -> obj.optString("file")
+                        obj.has("downloadUrl") -> obj.optString("downloadUrl")
+                        else -> null
+                    } ?: continue
+
                     val url = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
                         rawUrl
                     } else {
                         val base = repoUrl.substringBeforeLast('/')
-                        "$base/$rawUrl"
+                        "$base/${rawUrl.removePrefix("/")}"
                     }
-                    val iconUrl = obj.optString("iconUrl", null)
+                    val iconUrl = obj.optString("iconUrl", obj.optString("icon", null))
                     list.add(
                         JarExtensionInfo(
                             name = name,

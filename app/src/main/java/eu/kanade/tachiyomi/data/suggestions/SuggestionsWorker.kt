@@ -14,6 +14,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -23,6 +24,8 @@ import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.domain.suggestions.model.SuggestionArtist
+import tachiyomi.domain.suggestions.model.SuggestionAuthor
 import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
 import tachiyomi.domain.suggestions.repository.SuggestionRepository
@@ -151,6 +154,54 @@ class SuggestionsWorker(
                 }
             }
 
+            // Sync authors
+            val authorFrequencies = seed.mapNotNull { it.author?.lowercase()?.trim() }.filter { it.isNotBlank() }.groupingBy { it }.eachCount()
+            val existingAuthors = suggestionRepository.getAuthors()
+            val existingAuthorsMap = existingAuthors.associateBy { it.author }
+            var nextAuthorSortOrder = (existingAuthors.maxOfOrNull { it.sortOrder } ?: -1L) + 1
+
+            val sortedAuthorFreqs = authorFrequencies.entries.sortedByDescending { it.value }
+            sortedAuthorFreqs.forEach { (authorText, count) ->
+                val existing = existingAuthorsMap[authorText]
+                if (existing != null) {
+                    suggestionRepository.insertAuthor(existing.copy(count = count.toLong()))
+                } else {
+                    suggestionRepository.insertAuthor(
+                        SuggestionAuthor(
+                            author = authorText,
+                            count = count.toLong(),
+                            isBlocked = false,
+                            isUserAdded = false,
+                            sortOrder = nextAuthorSortOrder++,
+                        ),
+                    )
+                }
+            }
+
+            // Sync artists
+            val artistFrequencies = seed.mapNotNull { it.artist?.lowercase()?.trim() }.filter { it.isNotBlank() }.groupingBy { it }.eachCount()
+            val existingArtists = suggestionRepository.getArtists()
+            val existingArtistsMap = existingArtists.associateBy { it.artist }
+            var nextArtistSortOrder = (existingArtists.maxOfOrNull { it.sortOrder } ?: -1L) + 1
+
+            val sortedArtistFreqs = artistFrequencies.entries.sortedByDescending { it.value }
+            sortedArtistFreqs.forEach { (artistText, count) ->
+                val existing = existingArtistsMap[artistText]
+                if (existing != null) {
+                    suggestionRepository.insertArtist(existing.copy(count = count.toLong()))
+                } else {
+                    suggestionRepository.insertArtist(
+                        SuggestionArtist(
+                            artist = artistText,
+                            count = count.toLong(),
+                            isBlocked = false,
+                            isUserAdded = false,
+                            sortOrder = nextArtistSortOrder++,
+                        ),
+                    )
+                }
+            }
+
             // 2. Fetch unblocked active configurations
             val allTags = suggestionRepository.getTags()
             val nonBlockedTags = allTags.filter { !it.isBlocked }
@@ -164,17 +215,41 @@ class SuggestionsWorker(
             val activeSources = nonBlockedSources.filter { top5Sources.contains(it.sourceId) || it.isUserAdded }
                 .sortedWith(compareBy<SuggestionSource> { it.sortOrder }.thenByDescending { it.count })
 
-            // Fetch top 5 defaults if empty
+            val allAuthors = suggestionRepository.getAuthors()
+            val nonBlockedAuthors = allAuthors.filter { !it.isBlocked }
+            val top5Authors = nonBlockedAuthors.sortedByDescending { it.count }.take(5).map { it.author }.toSet()
+            val activeAuthors = nonBlockedAuthors.filter { top5Authors.contains(it.author) || it.isUserAdded }
+                .sortedWith(compareBy<SuggestionAuthor> { it.sortOrder }.thenByDescending { it.count })
+
+            val allArtists = suggestionRepository.getArtists()
+            val nonBlockedArtists = allArtists.filter { !it.isBlocked }
+            val top5Artists = nonBlockedArtists.sortedByDescending { it.count }.take(5).map { it.artist }.toSet()
+            val activeArtists = nonBlockedArtists.filter { top5Artists.contains(it.artist) || it.isUserAdded }
+                .sortedWith(compareBy<SuggestionArtist> { it.sortOrder }.thenByDescending { it.count })
+
+            // Fetch defaults if empty
             val finalTags = if (activeTags.isEmpty()) {
-                allTags.sortedByDescending { it.count }.take(5)
+                allTags.filter { !it.isBlocked }.sortedByDescending { it.count }.take(5)
             } else {
                 activeTags
             }
 
             val finalSources = if (activeSources.isEmpty()) {
-                allSources.sortedByDescending { it.count }.take(5)
+                allSources.filter { !it.isBlocked }.sortedByDescending { it.count }.take(5)
             } else {
                 activeSources
+            }
+
+            val finalAuthors = if (activeAuthors.isEmpty()) {
+                allAuthors.filter { !it.isBlocked }.sortedByDescending { it.count }.take(2)
+            } else {
+                activeAuthors
+            }
+
+            val finalArtists = if (activeArtists.isEmpty()) {
+                allArtists.filter { !it.isBlocked }.sortedByDescending { it.count }.take(2)
+            } else {
+                activeArtists
             }
 
             if (finalTags.isEmpty() || finalSources.isEmpty()) {
@@ -198,27 +273,24 @@ class SuggestionsWorker(
                 return Result.success()
             }
 
-            val favoriteAuthors = favorites.mapNotNull { it.author?.lowercase()?.trim() }.filter { it.isNotBlank() }.toSet()
-            val favoriteArtists = favorites.mapNotNull { it.artist?.lowercase()?.trim() }.filter { it.isNotBlank() }.toSet()
+            val favoriteAuthors = nonBlockedAuthors.map { it.author }.toSet()
+            val favoriteArtists = nonBlockedArtists.map { it.artist }.toSet()
 
-            val authorCounts = favorites.mapNotNull { it.author?.trim() }.filter { it.isNotBlank() }
-                .groupBy { it.lowercase() }
-                .mapValues { it.value.size }
-            val artistCounts = favorites.mapNotNull { it.artist?.trim() }.filter { it.isNotBlank() }
-                .groupBy { it.lowercase() }
-                .mapValues { it.value.size }
+            val topAuthors = finalAuthors.map { it.author }
+            val topArtists = finalArtists.map { it.artist }
 
-            val topAuthors = authorCounts.entries.sortedByDescending { it.value }.take(2).map { it.key }
-            val topArtists = artistCounts.entries.sortedByDescending { it.value }.take(2).map { it.key }
-
+            val maxTagsToMatch = suggestionsPreferences.maxTagsToMatch().get()
             val searchTerms = mutableListOf<String>()
             searchTerms.addAll(topAuthors)
             searchTerms.addAll(topArtists)
-            finalTags.forEach { searchTerms.add(it.tag) }
 
-            val fallbackTags = allTags.filter { !it.isBlocked && !finalTags.any { ft -> ft.tag == it.tag } }
-                .sortedByDescending { it.count }
-            fallbackTags.forEach { searchTerms.add(it.tag) }
+            val tagCandidates = finalTags.map { it.tag }.toMutableList()
+            if (tagCandidates.size < maxTagsToMatch) {
+                val fallbackTags = allTags.filter { !it.isBlocked && !finalTags.any { ft -> ft.tag == it.tag } }
+                    .sortedByDescending { it.count }
+                tagCandidates.addAll(fallbackTags.map { it.tag })
+            }
+            searchTerms.addAll(tagCandidates.distinct().take(maxTagsToMatch))
 
             val totalRanks = searchTerms.size
 
@@ -248,7 +320,14 @@ class SuggestionsWorker(
                                 try {
                                     SuggestionsReport.log("INFO", "Extension '${source.name}' starting search for: '$currentSearchTerm'")
                                     val results = source.getSearchManga(1, currentSearchTerm, eu.kanade.tachiyomi.source.model.FilterList())
-                                    SuggestionsReport.log("INFO", "Extension '${source.name}' returned ${results.mangas.size} results.")
+                                    val fetchedSize = results.mangas.size
+                                    SuggestionsReport.log("INFO", "Extension '${source.name}' returned $fetchedSize results.")
+
+                                    SuggestionsReport.fetchedCount.update { it + fetchedSize }
+                                    SuggestionsReport.fetchedBySource.update { map ->
+                                        map + (source.name to (map[source.name] ?: 0) + fetchedSize)
+                                    }
+
                                     results.mangas.forEach { smanga ->
                                         synchronized(candidates) {
                                             candidates[smanga.url] = Pair(smanga, source.id)
@@ -257,6 +336,11 @@ class SuggestionsWorker(
                                 } catch (e: Exception) {
                                     SuggestionsReport.log("ERROR", "Failed to search '${source.name}': ${e.message}", e)
                                     logcat(LogPriority.WARN, e) { "Failed suggestions fetch for source: ${source.name}" }
+
+                                    SuggestionsReport.failedCount.update { it + 1 }
+                                    SuggestionsReport.failedBySource.update { map ->
+                                        map + (source.name to (map[source.name] ?: 0) + 1)
+                                    }
                                 }
                             }
                         }
@@ -266,12 +350,16 @@ class SuggestionsWorker(
 
                 val filteredCandidates = candidates.values.filter { (smanga, _) ->
                     val titleClean = smanga.title.lowercase().trim()
-                    !favoriteUrls.contains(smanga.url) &&
-                        !historyUrls.contains(smanga.url) &&
-                        !favoriteTitles.contains(titleClean) &&
-                        !historyTitles.contains(titleClean) &&
-                        !dismissedUrls.contains(smanga.url) &&
-                        !dismissedTitles.contains(titleClean)
+                    val exclude = favoriteUrls.contains(smanga.url) ||
+                        historyUrls.contains(smanga.url) ||
+                        favoriteTitles.contains(titleClean) ||
+                        historyTitles.contains(titleClean) ||
+                        dismissedUrls.contains(smanga.url) ||
+                        dismissedTitles.contains(titleClean)
+                    if (exclude) {
+                        SuggestionsReport.libraryFilteredCount.update { it + 1 }
+                    }
+                    !exclude
                 }
 
                 SuggestionsReport.log("INFO", "Candidates filtering: ${filteredCandidates.size} remaining out of ${candidates.size} total candidates (removed library, read history, and dismissed items).")
@@ -291,10 +379,11 @@ class SuggestionsWorker(
                 val scoredSuggestions = mutableListOf<Pair<Manga, Double>>()
                 val candidatesBySource = filteredCandidates.groupBy { it.second }
 
-                // Dynamically compute candidates to initialize to fill 100 suggestions
+                // Dynamically compute candidates to initialize to fill suggestions limit
                 val combos = finalTags.size * onlineSources.size
+                val limitPref = suggestionsPreferences.maxSuggestionsToDisplay().get()
                 val candidatesToFetch = if (combos > 0) {
-                    Math.ceil(100.0 / combos).toInt().coerceIn(2, 10)
+                    Math.ceil(limitPref.toDouble() / combos).toInt().coerceIn(2, 10)
                 } else {
                     5
                 }
@@ -370,6 +459,7 @@ class SuggestionsWorker(
 
                                             if (tagSum == 0.0) {
                                                 SuggestionsReport.log("INFO", "Candidate '${smanga.title}' skipped: no matching tags or author/artist.")
+                                                SuggestionsReport.zeroScoreCount.update { it + 1 }
                                                 return@async
                                             }
                                             val score = extWeight * tagSum
@@ -425,7 +515,7 @@ class SuggestionsWorker(
                     }
                 }
 
-                val maxSuggestions = 100 + rankIdx * 50
+                val maxSuggestions = limitPref + rankIdx * 50
                 val finalSuggestions = mergedMap.values
                     .sortedByDescending { it.relevance }
                     .take(maxSuggestions)

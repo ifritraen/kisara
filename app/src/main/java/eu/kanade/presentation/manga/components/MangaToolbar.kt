@@ -1,9 +1,12 @@
 package eu.kanade.presentation.manga.components
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FlipToBack
+import androidx.compose.material.icons.outlined.GTranslate
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.LocalContentColor
@@ -76,6 +79,10 @@ fun MangaToolbar(
     // KMK -->
     onPaletteScreenClick: () -> Unit,
     // KMK <--
+    autoTranslate: Boolean = false,
+    onClickToggleAutoTranslate: (() -> Unit)? = null,
+    onClickTranslationSettings: (() -> Unit)? = null,
+    onClickColorizerSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // KMK -->
@@ -165,6 +172,34 @@ fun MangaToolbar(
                                 title = "Bulk Translate",
                                 icon = Icons.Outlined.Translate,
                                 onClick = { translateExpanded = !translateExpanded },
+                            ),
+                        )
+                    }
+                    if (onClickToggleAutoTranslate != null) {
+                        add(
+                            AppBar.Action(
+                                title = "Auto Translate after Download",
+                                icon = Icons.Outlined.AutoAwesome,
+                                iconTint = if (autoTranslate) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.4f),
+                                onClick = onClickToggleAutoTranslate,
+                            ),
+                        )
+                    }
+                    if (onClickTranslationSettings != null) {
+                        add(
+                            AppBar.Action(
+                                title = "Translation Settings",
+                                icon = Icons.Outlined.GTranslate,
+                                onClick = onClickTranslationSettings,
+                            ),
+                        )
+                    }
+                    if (onClickColorizerSettings != null) {
+                        add(
+                            AppBar.Action(
+                                title = "Manga Colorizer Settings",
+                                icon = Icons.Outlined.Palette,
+                                onClick = onClickColorizerSettings,
                             ),
                         )
                     }

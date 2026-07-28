@@ -95,6 +95,7 @@ data object MoreTab : Tab {
             // KMK -->
             onClickLibraryUpdateErrors = { navigator.push(LibraryUpdateErrorScreen()) },
             onClickKisaraSettings = { navigator.push(SettingsKisaraScreen) },
+            onClickLogbook = { navigator.push(eu.kanade.tachiyomi.ui.more.logbook.LogbookTabScreen()) },
             // KMK <--
         )
 

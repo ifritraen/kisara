@@ -2,8 +2,10 @@ package tachiyomi.domain.manga.model
 
 import androidx.compose.runtime.Immutable
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.manga.interactor.GetCustomMangaInfo
+import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.io.Serializable
 import java.time.Instant
@@ -105,7 +107,20 @@ data class Manga(
         }
 
     val autoTranslateAfterDownload: Boolean
-        get() = chapterFlags and MANGA_AUTO_TRANSLATE_AFTER_DOWNLOAD != 0L
+        get() {
+            val flags = chapterFlags and MANGA_AUTO_TRANSLATE_MASK
+            return when (flags) {
+                MANGA_AUTO_TRANSLATE_EXPLICIT_ENABLE -> true
+                MANGA_AUTO_TRANSLATE_EXPLICIT_DISABLE -> false
+                else -> {
+                    try {
+                        uy.kohesive.injekt.Injekt.get<tachiyomi.domain.translation.TranslationPreferences>().autoTranslateAfterDownload().get()
+                    } catch (e: Throwable) {
+                        false
+                    }
+                }
+            }
+        }
 
     fun sortDescending(): Boolean {
         return chapterFlags and CHAPTER_SORT_DIR_MASK == CHAPTER_SORT_DESC
@@ -141,7 +156,9 @@ data class Manga(
         const val CHAPTER_DISPLAY_NUMBER = 0x00100000L
         const val CHAPTER_DISPLAY_MASK = 0x00100000L
 
-        const val MANGA_AUTO_TRANSLATE_AFTER_DOWNLOAD = 0x00200000L
+        const val MANGA_AUTO_TRANSLATE_EXPLICIT_ENABLE = 0x00200000L
+        const val MANGA_AUTO_TRANSLATE_EXPLICIT_DISABLE = 0x00400000L
+        const val MANGA_AUTO_TRANSLATE_MASK = 0x00600000L
 
         fun create() = Manga(
             id = -1L,

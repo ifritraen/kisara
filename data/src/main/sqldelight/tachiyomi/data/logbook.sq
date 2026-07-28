@@ -1,0 +1,39 @@
+CREATE TABLE logbook (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER NOT NULL,
+    action_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    target_id INTEGER,
+    target_name TEXT,
+    extra_data TEXT
+);
+
+CREATE INDEX logbook_timestamp_idx ON logbook(timestamp);
+
+getAll:
+SELECT *
+FROM logbook
+ORDER BY timestamp DESC;
+
+getByActionType:
+SELECT *
+FROM logbook
+WHERE action_type = :actionType
+ORDER BY timestamp DESC;
+
+search:
+SELECT *
+FROM logbook
+WHERE title LIKE :query OR target_name LIKE :query OR extra_data LIKE :query
+ORDER BY timestamp DESC;
+
+insert:
+INSERT INTO logbook(timestamp, action_type, title, target_id, target_name, extra_data)
+VALUES (:timestamp, :actionType, :title, :targetId, :targetName, :extraData);
+
+deleteAll:
+DELETE FROM logbook;
+
+deleteOlderThan:
+DELETE FROM logbook
+WHERE timestamp < :timestamp;

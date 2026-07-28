@@ -139,6 +139,10 @@ class ReaderViewModel @JvmOverloads constructor(
     private val getMergedReferencesById: GetMergedReferencesById = Injekt.get(),
     private val getMergedChaptersByMangaId: GetMergedChaptersByMangaId = Injekt.get(),
     // SY <--
+    // KMK -->
+    private val getPageBookmarks: tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks = Injekt.get(),
+    private val togglePageBookmarkInteractor: tachiyomi.domain.pagebookmark.interactor.TogglePageBookmark = Injekt.get(),
+    // KMK <--
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(State())
@@ -365,6 +369,14 @@ class ReaderViewModel @JvmOverloads constructor(
                     currentChapter.requestedPage = currentChapter.chapter.last_page_read
                 }
                 chapterId = currentChapter.chapter.id!!
+                val manga = state.value.manga
+                if (manga != null) {
+                    eu.kanade.tachiyomi.data.logbook.LogbookLogger.logReadingStart(
+                        mangaId = manga.id,
+                        mangaTitle = manga.title,
+                        chapterName = currentChapter.chapter.name,
+                    )
+                }
             }
             .launchIn(viewModelScope)
 
@@ -385,6 +397,17 @@ class ReaderViewModel @JvmOverloads constructor(
             }
             .launchIn(viewModelScope)
         // SY <--
+
+        // KMK -->
+        state.map { it.manga?.id }
+            .filterNotNull()
+            .distinctUntilChanged()
+            .flatMapLatest { mangaId -> getPageBookmarks.subscribeByMangaId(mangaId) }
+            .onEach { bookmarks ->
+                mutableState.update { it.copy(pageBookmarks = bookmarks) }
+            }
+            .launchIn(viewModelScope)
+        // KMK <--
     }
 
     override fun onCleared() {
@@ -1031,6 +1054,22 @@ class ReaderViewModel @JvmOverloads constructor(
     }
     // SY <--
 
+    // KMK -->
+    fun togglePageBookmark(pageNumber: Int? = null) {
+        val manga = state.value.manga ?: return
+        val chapter = getCurrentChapter()?.chapter ?: return
+        val page = pageNumber ?: (state.value.currentPage + 1).takeIf { it > 0 } ?: return
+
+        viewModelScope.launchIO {
+            togglePageBookmarkInteractor.await(
+                mangaId = manga.id,
+                chapterId = chapter.id!!,
+                pageNumber = page,
+            )
+        }
+    }
+    // KMK <--
+
     /**
      * Returns the viewer position used by this manga or the default one.
      */
@@ -1530,6 +1569,9 @@ class ReaderViewModel @JvmOverloads constructor(
         val isAutoScrollEnabled: Boolean = false,
         val ehAutoscrollFreq: String = "",
         // SY <--
+        // KMK -->
+        val pageBookmarks: List<tachiyomi.domain.pagebookmark.model.PageBookmark> = emptyList(),
+        // KMK <--
     ) {
         val currentChapter: ReaderChapter?
             get() = viewerChapters?.currChapter

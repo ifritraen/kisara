@@ -126,10 +126,7 @@ fun TabbedScreen(
                 enter = expandVertically(),
                 exit = shrinkVertically(),
             ) {
-                PrimaryTabRow(
-                    selectedTabIndex = state.currentPage,
-                    modifier = Modifier.zIndex(1f).height(36.dp),
-                ) {
+                val tabRowContent = @Composable {
                     tabs.forEachIndexed { index, tab ->
                         Tab(
                             selected = state.currentPage == index,
@@ -140,6 +137,20 @@ fun TabbedScreen(
                         )
                     }
                 }
+                if (tabs.size > 4) {
+                    androidx.compose.material3.PrimaryScrollableTabRow(
+                        selectedTabIndex = state.currentPage,
+                        edgePadding = 0.dp,
+                        modifier = Modifier.zIndex(1f).height(36.dp),
+                        tabs = tabRowContent,
+                    )
+                } else {
+                    PrimaryTabRow(
+                        selectedTabIndex = state.currentPage,
+                        modifier = Modifier.zIndex(1f).height(36.dp),
+                        tabs = tabRowContent,
+                    )
+                }
             }
 
             HorizontalPager(
@@ -149,7 +160,18 @@ fun TabbedScreen(
             ) { page ->
                 val uiPreferences = remember { Injekt.get<UiPreferences>() }
                 val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
-                val bottomPadding = contentPadding.calculateBottomPadding() + (if (floatingBottomBar) 72.dp else 0.dp)
+                val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
+                val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
+                val standardBottomBarHeight by uiPreferences.standardBottomBarHeight().collectAsState()
+                val standardBottomBarBottomMargin by uiPreferences.standardBottomBarBottomMargin().collectAsState()
+
+                val totalBottomInset = if (floatingBottomBar) {
+                    (bottomBarHeight + bottomBarBottomMargin + 24).dp
+                } else {
+                    (standardBottomBarHeight + standardBottomBarBottomMargin + 24).dp
+                }
+
+                val bottomPadding = contentPadding.calculateBottomPadding() + totalBottomInset
 
                 tabs[page].content(
                     PaddingValues(bottom = bottomPadding),

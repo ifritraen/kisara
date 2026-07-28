@@ -1,0 +1,13 @@
+CREATE TABLE page_bookmark (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    page_number INTEGER NOT NULL,
+    comment TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX page_bookmark_manga_id_idx ON page_bookmark(manga_id);
+CREATE INDEX page_bookmark_chapter_id_idx ON page_bookmark(chapter_id);

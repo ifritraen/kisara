@@ -92,11 +92,11 @@ class SetMangaChapterFlags(
     }
 
     suspend fun awaitSetAutoTranslate(manga: Manga, enabled: Boolean): Boolean {
-        val flag = if (enabled) Manga.MANGA_AUTO_TRANSLATE_AFTER_DOWNLOAD else 0L
+        val flag = if (enabled) Manga.MANGA_AUTO_TRANSLATE_EXPLICIT_ENABLE else Manga.MANGA_AUTO_TRANSLATE_EXPLICIT_DISABLE
         return mangaRepository.update(
             MangaUpdate(
                 id = manga.id,
-                chapterFlags = manga.chapterFlags.setFlag(flag, Manga.MANGA_AUTO_TRANSLATE_AFTER_DOWNLOAD),
+                chapterFlags = manga.chapterFlags.setFlag(flag, Manga.MANGA_AUTO_TRANSLATE_MASK),
             ),
         )
     }

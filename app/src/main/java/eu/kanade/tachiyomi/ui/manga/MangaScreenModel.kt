@@ -46,6 +46,7 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.manga.ColorizerAction
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.manga.components.ChapterTranslationAction
@@ -73,6 +74,7 @@ import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.getBitmapOrNull
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.translation.ColorizerManager
 import eu.kanade.translation.TranslationManager
 import eu.kanade.translation.model.Translation
 import exh.debug.DebugToggles
@@ -198,6 +200,7 @@ class MangaScreenModel(
     private val downloadManager: DownloadManager = Injekt.get(),
     // KMK -->
     private val translationManager: TranslationManager = Injekt.get(),
+    private val colorizerManager: ColorizerManager = Injekt.get(),
     // KMK <--
     private val downloadCache: DownloadCache = Injekt.get(),
     private val getMangaAndChapters: GetMangaWithChapters = Injekt.get(),
@@ -225,6 +228,10 @@ class MangaScreenModel(
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
     private val setMangaDefaultChapterFlags: SetMangaDefaultChapterFlags = Injekt.get(),
     private val setReadStatus: SetReadStatus = Injekt.get(),
+    // KMK -->
+    private val getPageBookmarks: tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks = Injekt.get(),
+    private val deletePageBookmarkInteractor: tachiyomi.domain.pagebookmark.interactor.DeletePageBookmark = Injekt.get(),
+    // KMK <--
     private val updateChapter: UpdateChapter = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
     private val syncChaptersWithSource: SyncChaptersWithSource = Injekt.get(),
@@ -442,6 +449,7 @@ class MangaScreenModel(
         observeDownloads()
         // KMK -->
         observeTranslations()
+        observeColorizer()
         // KMK <--
 
         screenModelScope.launchIO {
@@ -514,6 +522,14 @@ class MangaScreenModel(
 
             // Start observe tracking since it only needs mangaId
             observeTrackers()
+
+            launchIO {
+                getPageBookmarks.subscribeByMangaId(mangaId)
+                    .onEach { bookmarks ->
+                        updateSuccessState { it.copy(pageBookmarks = bookmarks) }
+                    }
+                    .collect()
+            }
 
             launchIO {
                 val duplicates = getDuplicateLibraryManga(manga)
@@ -838,10 +854,12 @@ class MangaScreenModel(
                     if (manga.removeCovers() != manga) {
                         updateManga.awaitUpdateCoverLastModified(manga.id)
                     }
+                    eu.kanade.tachiyomi.data.logbook.LogbookLogger.logLibraryRemove(manga.id, manga.title)
                     withUIContext { onRemoved() }
                 }
             } else {
                 // Add to library
+                eu.kanade.tachiyomi.data.logbook.LogbookLogger.logLibraryAdd(manga.id, manga.title)
                 // First, check if duplicate exists if callback is provided
                 if (checkDuplicate) {
                     val duplicates = getDuplicateLibraryManga(manga)
@@ -1098,6 +1116,20 @@ class MangaScreenModel(
         }
     }
 
+    private fun observeColorizer() {
+        screenModelScope.launchIO {
+            colorizerManager.statusFlow()
+                .filter { it.manga.id == successState?.manga?.id }
+                .catch { error -> logcat(LogPriority.ERROR, error) }
+                .flowWithLifecycle(lifecycle)
+                .collect {
+                    withUIContext {
+                        updateColorizerState(it)
+                    }
+                }
+        }
+    }
+
     private fun updateTranslationState(translation: Translation) {
         updateSuccessState { successState ->
             val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
@@ -1106,6 +1138,20 @@ class MangaScreenModel(
             val newChapters = successState.chapters.toMutableList().apply {
                 val item = removeAt(modifiedIndex)
                     .copy(translationState = translation.status)
+                add(modifiedIndex, item)
+            }
+            successState.copy(chapters = newChapters)
+        }
+    }
+
+    private fun updateColorizerState(translation: Translation) {
+        updateSuccessState { successState ->
+            val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
+            if (modifiedIndex < 0) return@updateSuccessState successState
+
+            val newChapters = successState.chapters.toMutableList().apply {
+                val item = removeAt(modifiedIndex)
+                    .copy(colorizerState = translation.status)
                 add(modifiedIndex, item)
             }
             successState.copy(chapters = newChapters)
@@ -1156,8 +1202,16 @@ class MangaScreenModel(
 
             // KMK -->
             var translationState = Translation.State.NOT_TRANSLATED
+            var colorizerState = Translation.State.NOT_TRANSLATED
             if (downloadState == Download.State.DOWNLOADED) {
                 translationState = translationManager.getChapterTranslationStatus(
+                    chapterId = chapter.id,
+                    chapterName = chapter.name,
+                    scanlator = chapter.scanlator,
+                    title = manga.ogTitle,
+                    sourceId = manga.source,
+                )
+                colorizerState = colorizerManager.getChapterColorizerStatus(
                     chapterId = chapter.id,
                     chapterName = chapter.name,
                     scanlator = chapter.scanlator,
@@ -1178,8 +1232,15 @@ class MangaScreenModel(
                 // SY <--
                 // KMK -->
                 translationState = translationState,
+                colorizerState = colorizerState,
                 // KMK <--
             )
+        }
+    }
+
+    fun deletePageBookmark(bookmarkId: Long) {
+        screenModelScope.launchIO {
+            deletePageBookmarkInteractor.await(bookmarkId)
         }
     }
 
@@ -1504,6 +1565,69 @@ class MangaScreenModel(
                     translationManager.translateChapter(manga, item.chapter)
                 }
             }
+        }
+    }
+
+    fun runChapterColorizerActions(
+        item: ChapterList.Item,
+        action: ChapterTranslationAction,
+    ) {
+        when (action) {
+            ChapterTranslationAction.START -> {
+                if (item.downloadState != Download.State.DOWNLOADED) return
+                val manga = successState?.manga ?: return
+                screenModelScope.launchNonCancellable {
+                    colorizerManager.colorizeChapter(manga, item.chapter)
+                }
+            }
+
+            ChapterTranslationAction.CANCEL -> {
+                val activeColorizer = colorizerManager.getQueuedColorizerOrNull(item.chapter.id) ?: return
+                colorizerManager.cancelQueuedColorizer(activeColorizer)
+                updateColorizerState(activeColorizer.apply { status = Translation.State.NOT_TRANSLATED })
+            }
+
+            ChapterTranslationAction.DELETE -> {
+                screenModelScope.launchNonCancellable {
+                    try {
+                        successState?.let { state ->
+                            colorizerManager.deleteColorizer(
+                                item.chapter,
+                                state.manga,
+                                state.source,
+                            )
+                            updateSuccessState { successState ->
+                                val modifiedIndex = successState.chapters.indexOfFirst { it.id == item.chapter.id }
+                                if (modifiedIndex < 0) return@updateSuccessState successState
+
+                                val newChapters = successState.chapters.toMutableList().apply {
+                                    val item = removeAt(modifiedIndex)
+                                        .copy(colorizerState = Translation.State.NOT_TRANSLATED)
+                                    add(modifiedIndex, item)
+                                }
+                                successState.copy(chapters = newChapters)
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        logcat(LogPriority.ERROR, e)
+                    }
+                }
+            }
+        }
+    }
+
+    fun runColorizerAction(action: ColorizerAction) {
+        val chaptersToColorize = when (action) {
+            ColorizerAction.NEXT_1_CHAPTER -> getUnreadChaptersSorted().take(1)
+            ColorizerAction.NEXT_5_CHAPTERS -> getUnreadChaptersSorted().take(5)
+            ColorizerAction.NEXT_10_CHAPTERS -> getUnreadChaptersSorted().take(10)
+            ColorizerAction.NEXT_25_CHAPTERS -> getUnreadChaptersSorted().take(25)
+            ColorizerAction.UNREAD_CHAPTERS -> getUnreadChapters()
+            ColorizerAction.BOOKMARKED_CHAPTERS -> getBookmarkedChapters()
+        }
+        val manga = successState?.manga ?: return
+        chaptersToColorize.forEach { chapterItem ->
+            colorizerManager.colorizeChapter(manga, chapterItem)
         }
     }
     // KMK <--
@@ -2199,6 +2323,9 @@ class MangaScreenModel(
             val relatedMangaCollection: List<RelatedManga>? = null,
             val seedColor: Color? = manga.asMangaCover().vibrantCoverColor?.let { Color(it) },
             // KMK <--
+            // KMK -->
+            val pageBookmarks: List<tachiyomi.domain.pagebookmark.model.PageBookmark> = emptyList(),
+            // KMK <--
         ) : State {
             // KMK -->
             /**
@@ -2308,6 +2435,7 @@ sealed class ChapterList {
         val showScanlator: Boolean,
         // SY <--
         val translationState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
+        val colorizerState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
     ) : ChapterList() {
         val id = chapter.id
         val isDownloaded = downloadState == Download.State.DOWNLOADED

@@ -35,6 +35,10 @@ internal fun ReadingModePage(screenModel: ReaderSettingsScreenModel) {
         label = stringResource(KMR.strings.pref_show_translations),
         pref = screenModel.preferences.showTranslations(),
     )
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_translation_edit_mode),
+        pref = screenModel.preferences.translationEditMode(),
+    )
     // KMK <--
 
     val readingMode = remember(manga) { ReadingMode.fromPreference(manga?.readingMode?.toInt()) }

@@ -36,5 +36,17 @@ class KMKDomainModule : InjektModule {
         addFactory { GetLibraryUpdateErrors(get()) }
         addFactory { DeleteLibraryUpdateErrors(get()) }
         addFactory { InsertLibraryUpdateErrors(get()) }
+
+        // Logbook
+        addSingletonFactory<tachiyomi.domain.logbook.repository.LogbookRepository> { tachiyomi.data.logbook.LogbookRepositoryImpl(get()) }
+        addFactory { tachiyomi.domain.logbook.interactor.GetLogbookEntries(get()) }
+        addFactory { tachiyomi.domain.logbook.interactor.InsertLogbookEntry(get()) }
+        addFactory { tachiyomi.domain.logbook.interactor.ClearLogbook(get()) }
+
+        // Page Bookmark
+        addSingletonFactory<tachiyomi.domain.pagebookmark.repository.PageBookmarkRepository> { tachiyomi.data.pagebookmark.PageBookmarkRepositoryImpl(get()) }
+        addFactory { tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks(get()) }
+        addFactory { tachiyomi.domain.pagebookmark.interactor.TogglePageBookmark(get()) }
+        addFactory { tachiyomi.domain.pagebookmark.interactor.DeletePageBookmark(get()) }
     }
 }

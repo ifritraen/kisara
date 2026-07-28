@@ -44,6 +44,7 @@ import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.connections.discord.DiscordRPCService
 import eu.kanade.tachiyomi.data.connections.discord.DiscordScreen
+import eu.kanade.tachiyomi.ui.browse.bulk.bulkSearchTab
 import eu.kanade.tachiyomi.ui.browse.duplicate.duplicateSourceTab
 import eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.extension.extensionsTab
@@ -120,6 +121,10 @@ data object BrowseTab : Tab {
         switchToTabChannel.trySend(3)
     }
 
+    fun showBulkSearch() {
+        switchToTabChannel.trySend(4)
+    }
+
     @Composable
     override fun Content() {
         val context = LocalContext.current
@@ -138,6 +143,7 @@ data object BrowseTab : Tab {
             extensionsTab(extensionsScreenModel),
             migrateSourceTab(),
             duplicateSourceTab(),
+            bulkSearchTab(),
         )
 
         val state = rememberPagerState { tabs.size }

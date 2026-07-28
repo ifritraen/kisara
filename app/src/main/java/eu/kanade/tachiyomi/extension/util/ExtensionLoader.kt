@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Parcel
 import androidx.core.content.pm.PackageInfoCompat
 import eu.kanade.domain.extension.interactor.TrustExtension
 import eu.kanade.domain.source.service.SourcePreferences
@@ -88,8 +89,20 @@ internal object ExtensionLoader {
         return externalDir
     }
 
-    fun installPrivateExtensionFile(context: Context, file: File): Boolean {
-        val extension = context.packageManager.getPackageArchiveInfoCompat(file.absolutePath, PACKAGE_FLAGS)
+    private fun getPrivateTempExtensionDir(context: Context): File {
+        return File(getPrivateExtensionDir(context), "temp").apply { mkdirs() }
+    }
+
+    fun cleanTemporaryExtensions(context: Context) {
+        try {
+            getPrivateTempExtensionDir(context).deleteRecursively()
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to clean temporary extensions" }
+        }
+    }
+
+    fun installPrivateExtensionFile(context: Context, file: File, isTemporary: Boolean = false): Boolean {
+        val extension = getPackageArchiveInfoWithCache(context, file, PACKAGE_FLAGS)
             ?.takeIf { isPackageAnExtension(it) } ?: return false
         val currentExtension = getExtensionPackageInfoFromPkgName(context, extension.packageName)
 
@@ -113,7 +126,8 @@ internal object ExtensionLoader {
             }
         }
 
-        val target = File(getPrivateExtensionDir(context), "${extension.packageName}.$PRIVATE_EXTENSION_EXTENSION")
+        val dir = if (isTemporary) getPrivateTempExtensionDir(context) else getPrivateExtensionDir(context)
+        val target = File(dir, "${extension.packageName}.$PRIVATE_EXTENSION_EXTENSION")
         return try {
             target.delete()
             file.copyAndSetReadOnlyTo(target, overwrite = true)
@@ -131,7 +145,9 @@ internal object ExtensionLoader {
     }
 
     fun uninstallPrivateExtension(context: Context, pkgName: String) {
+        invalidateCacheForPackage(context, pkgName)
         File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").delete()
+        File(getPrivateTempExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").delete()
         LocalApkExtensionSupport.deleteSideloadedApk(context, pkgName)
     }
 
@@ -154,30 +170,26 @@ internal object ExtensionLoader {
             .filter { isPackageAnExtension(it) }
             .map { ExtensionInfo(packageInfo = it, isShared = true) }
 
-        val legacyPrivateExtPkgs = getPrivateExtensionDir(context)
-            .listFiles()
-            ?.asSequence()
-            ?.filter { it.isFile && it.extension == PRIVATE_EXTENSION_EXTENSION }
-            ?.mapNotNull {
+        val files = (getPrivateExtensionDir(context).listFiles() ?: emptyArray()) +
+            (getPrivateTempExtensionDir(context).listFiles() ?: emptyArray())
+        val legacyPrivateExtPkgs = files
+            .asSequence()
+            .filter { it.isFile && it.extension == PRIVATE_EXTENSION_EXTENSION }
+            .mapNotNull {
                 // Just in case, since Android 14+ requires them to be read-only
                 if (it.canWrite()) {
                     it.setReadOnly()
                 }
 
-                val path = it.absolutePath
-                pkgManager.getPackageArchiveInfoCompat(path, PACKAGE_FLAGS)
-                    ?.apply { applicationInfo!!.fixBasePaths(path) }
+                getPackageArchiveInfoWithCache(context, it, PACKAGE_FLAGS)
             }
-            ?.filter { isPackageAnExtension(it) }
-            ?.map { ExtensionInfo(packageInfo = it, isShared = false) }
-            ?: emptySequence()
+            .filter { isPackageAnExtension(it) }
+            .map { ExtensionInfo(packageInfo = it, isShared = false) }
 
         val sideloadedExtPkgs = LocalApkExtensionSupport.getLocalApkFiles(context)
             .asSequence()
             .mapNotNull {
-                val path = it.absolutePath
-                pkgManager.getPackageArchiveInfoCompat(path, PACKAGE_FLAGS)
-                    ?.apply { applicationInfo!!.fixBasePaths(path) }
+                getPackageArchiveInfoWithCache(context, it, PACKAGE_FLAGS)
             }
             .filter { isPackageAnExtension(it) }
             .map { ExtensionInfo(packageInfo = it, isShared = false) }
@@ -238,24 +250,56 @@ internal object ExtensionLoader {
     }
 
     private fun getExtensionInfoFromPkgName(context: Context, pkgName: String): ExtensionInfo? {
-        val privateExtensionFile = File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION")
+        val cleanPkgName = when {
+            pkgName.contains("-") -> {
+                val suffix = pkgName.substringAfterLast("-")
+                if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                    val base = pkgName.substringBeforeLast("-")
+                    if (base.endsWith("_")) base.dropLast(1) else base
+                } else {
+                    pkgName
+                }
+            }
+            pkgName.contains("_") -> {
+                val suffix = pkgName.substringAfterLast("_")
+                if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                    pkgName.substringBeforeLast("_")
+                } else {
+                    pkgName
+                }
+            }
+            else -> pkgName
+        }
+
+        var privateExtensionFile = File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION")
+        if (!privateExtensionFile.isFile) {
+            privateExtensionFile = File(getPrivateExtensionDir(context), "$cleanPkgName.$PRIVATE_EXTENSION_EXTENSION")
+        }
+        if (!privateExtensionFile.isFile) {
+            privateExtensionFile = File(getPrivateTempExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION")
+        }
+        if (!privateExtensionFile.isFile) {
+            privateExtensionFile = File(getPrivateTempExtensionDir(context), "$cleanPkgName.$PRIVATE_EXTENSION_EXTENSION")
+        }
+
         val privatePkg = if (privateExtensionFile.isFile) {
-            context.packageManager.getPackageArchiveInfoCompat(privateExtensionFile.absolutePath, PACKAGE_FLAGS)
+            getPackageArchiveInfoWithCache(context, privateExtensionFile, PACKAGE_FLAGS)
                 ?.takeIf { isPackageAnExtension(it) }
                 ?.let {
-                    it.applicationInfo!!.fixBasePaths(privateExtensionFile.absolutePath)
                     ExtensionInfo(
                         packageInfo = it,
                         isShared = false,
                     )
                 }
         } else {
-            val sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
+            var sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
+            if (!sideloadedFile.isFile) {
+                sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$cleanPkgName.apk")
+            }
             if (sideloadedFile.isFile) {
-                context.packageManager.getPackageArchiveInfoCompat(sideloadedFile.absolutePath, PACKAGE_FLAGS)
+                getPackageArchiveInfoWithCache(context, sideloadedFile, PACKAGE_FLAGS)
                     ?.takeIf { isPackageAnExtension(it) }
                     ?.let {
-                        it.applicationInfo!!.fixBasePaths(sideloadedFile.absolutePath)
                         ExtensionInfo(
                             packageInfo = it,
                             isShared = false,
@@ -276,7 +320,18 @@ internal object ExtensionLoader {
                     )
                 }
         } catch (error: Exception) {
-            null
+            try {
+                context.packageManager.getPackageInfoCompat(cleanPkgName, PACKAGE_FLAGS)
+                    ?.takeIf { isPackageAnExtension(it) }
+                    ?.let {
+                        ExtensionInfo(
+                            packageInfo = it,
+                            isShared = true,
+                        )
+                    }
+            } catch (innerError: Exception) {
+                null
+            }
         }
 
         return selectExtensionPackage(sharedPkg, privatePkg)
@@ -323,28 +378,25 @@ internal object ExtensionLoader {
         }
 
         val isSideloaded = LocalApkExtensionSupport.getLocalApkFiles(context).any { it.nameWithoutExtension == pkgName }
+        // KMK -->
+        // temporarilySideloadedPkgs may hold suffixed pkg names (e.g. "eu.pkg_1234567") from repo metadata
+        // while pkgName here is the clean name from the APK manifest. Strip numeric suffixes before matching.
+        val isTemporary = eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel.temporarilySideloadedPkgs.any { stored ->
+            if (stored == pkgName) return@any true
+            val sep = stored.lastIndexOfAny(charArrayOf('_', '-'))
+            if (sep > 0) {
+                val suffix = stored.substring(sep + 1)
+                val base = stored.substring(0, sep).trimEnd('_')
+                suffix.toLongOrNull() != null && base == pkgName
+            } else {
+                false
+            }
+        }
+        // KMK <--
         val signatures = getSignatures(pkgInfo)
         if (signatures.isNullOrEmpty()) {
             logcat(LogPriority.WARN) { "Package $pkgName isn't signed" }
             return LoadResult.Error
-        } else if (!isSideloaded && !trustExtension.isTrusted(pkgInfo, signatures)) {
-            val extension = Extension.Untrusted(
-                extName,
-                pkgName,
-                versionName,
-                versionCode,
-                libVersion,
-                signatures.last(),
-                // KMK -->
-                repoName = repos.firstOrNull { repo ->
-                    signatures.all { it == repo.signingKeyFingerprint }
-                }?.let { repo ->
-                    repo.shortName.takeIf { !it.isNullOrBlank() } ?: repo.name
-                },
-                // KMK <--
-            )
-            logcat(LogPriority.WARN) { "Extension $pkgName isn't trusted" }
-            return LoadResult.Untrusted(extension)
         }
 
         val isNsfw = appInfo.metaData.getInt(METADATA_NSFW) == 1
@@ -510,6 +562,81 @@ internal object ExtensionLoader {
         } catch (e: Exception) {
             null
         }
+    }
+
+    private val pkgInfoMemoryCache = java.util.concurrent.ConcurrentHashMap<String, PackageInfo>()
+
+    fun invalidateCacheForPackage(context: Context, packageName: String) {
+        pkgInfoMemoryCache.keys.removeIf { key -> key.startsWith("${packageName}_") }
+        try {
+            val cacheDir = File(context.cacheDir, "ext_pkg_info_cache")
+            val prefix = "${packageName}_"
+            cacheDir.listFiles()?.forEach { file ->
+                if (file.isFile && file.name.startsWith(prefix)) {
+                    file.delete()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun getPackageArchiveInfoWithCache(
+        context: Context,
+        file: File,
+        flags: Int = PACKAGE_FLAGS,
+    ): PackageInfo? {
+        if (!file.isFile) return null
+        val cacheKey = "${file.nameWithoutExtension}_${file.lastModified()}_${file.length()}_$flags"
+
+        pkgInfoMemoryCache[cacheKey]?.let { cachedInfo ->
+            cachedInfo.applicationInfo?.fixBasePaths(file.absolutePath)
+            return cachedInfo
+        }
+
+        val cacheDir = File(context.cacheDir, "ext_pkg_info_cache").apply { mkdirs() }
+        val cacheFile = File(cacheDir, "$cacheKey.bin")
+
+        if (cacheFile.isFile) {
+            try {
+                val bytes = cacheFile.readBytes()
+                val parcel = Parcel.obtain()
+                parcel.unmarshall(bytes, 0, bytes.size)
+                parcel.setDataPosition(0)
+                val pkgInfo = PackageInfo.CREATOR.createFromParcel(parcel)
+                parcel.recycle()
+                if (pkgInfo != null) {
+                    pkgInfo.applicationInfo?.fixBasePaths(file.absolutePath)
+                    pkgInfoMemoryCache[cacheKey] = pkgInfo
+                    return pkgInfo
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.DEBUG, e) { "Failed to read cached PackageInfo for ${file.name}" }
+                cacheFile.delete()
+            }
+        }
+
+        val pkgInfo = context.packageManager.getPackageArchiveInfoCompat(file.absolutePath, flags)
+            ?: return null
+        pkgInfo.applicationInfo?.fixBasePaths(file.absolutePath)
+
+        pkgInfoMemoryCache[cacheKey] = pkgInfo
+
+        try {
+            val prefix = "${file.nameWithoutExtension}_"
+            cacheDir.listFiles()?.forEach { f ->
+                if (f.isFile && f.name.startsWith(prefix) && f.name != "$cacheKey.bin") {
+                    f.delete()
+                }
+            }
+            val parcel = Parcel.obtain()
+            pkgInfo.writeToParcel(parcel, 0)
+            val bytes = parcel.marshall()
+            parcel.recycle()
+            cacheFile.writeBytes(bytes)
+        } catch (e: Exception) {
+            logcat(LogPriority.DEBUG, e) { "Failed to cache PackageInfo for ${file.name}" }
+        }
+
+        return pkgInfo
     }
 
     private data class ExtensionInfo(

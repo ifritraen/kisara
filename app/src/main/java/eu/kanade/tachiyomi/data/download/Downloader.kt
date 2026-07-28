@@ -455,8 +455,7 @@ class Downloader(
 
                 download.status = Download.State.DOWNLOADED
 
-                val translationPreferences = Injekt.get<tachiyomi.domain.translation.TranslationPreferences>()
-                if (translationPreferences.autoTranslateAfterDownload().get() || download.manga.autoTranslateAfterDownload) {
+                if (download.manga.autoTranslateAfterDownload) {
                     try {
                         val translationManager = Injekt.get<eu.kanade.translation.TranslationManager>()
                         translationManager.translateChapter(download.manga, download.chapter)

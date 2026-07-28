@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -133,7 +134,7 @@ fun MangaCompactGridItem(
     val scope = rememberCoroutineScope()
 
     val rawTitle = title ?: manga?.title ?: ""
-    val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
+    val parsed = remember(manga, rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, rawTitle) }
     val cleanTitle = parsed.cleanTitle
     val artistAuthorText = remember(parsed) {
         val parts = mutableListOf<String>()
@@ -159,6 +160,27 @@ fun MangaCompactGridItem(
         if (hasUncensored) {
             UncensoredBadge()
         }
+    }
+
+    val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+    val normalStyleKey by uiPreferences.normalCardStyle().collectAsState()
+    val normalStyle = remember(normalStyleKey) { eu.kanade.presentation.components.cards.NormalCardStyle.fromKey(normalStyleKey) }
+    val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+
+    if (normalStyle != eu.kanade.presentation.components.cards.NormalCardStyle.DEFAULT) {
+        eu.kanade.presentation.components.cards.KisaraNormalCard(
+            style = normalStyle,
+            title = cleanTitle,
+            coverData = coverData,
+            subtitle = artistAuthorText,
+            coverBadgeStart = coverBadgeStart,
+            coverBadgeEnd = finalBadgeEnd,
+            coverTitleStyle = coverTitleStyleKey,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
     }
 
     GridItemSelectable(
@@ -219,24 +241,6 @@ fun MangaCompactGridItem(
                             .align(Alignment.BottomEnd),
                     )
                 }
-                if (parsed.isUncensored) {
-                    Box(
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .align(Alignment.BottomEnd)
-                            .then(
-                                if (onClickContinueReading != null) {
-                                    Modifier.padding(bottom = 32.dp)
-                                } else if (title != null) {
-                                    Modifier.padding(bottom = 48.dp)
-                                } else {
-                                    Modifier
-                                },
-                            ),
-                    ) {
-                        UncensoredBadge()
-                    }
-                }
             },
         )
     }
@@ -257,20 +261,19 @@ private fun BoxScope.CoverTextOverlay(
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+            .fillMaxWidth()
+            .fillMaxHeight(0.60f)
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        Color.Black.copy(alpha = 0.05f),
-                        Color.Black.copy(alpha = 0.35f),
-                        Color.Black.copy(alpha = 0.70f),
-                        Color.Black.copy(alpha = 0.85f),
+                        Color.Black.copy(alpha = 0.15f),
+                        Color.Black.copy(alpha = 0.55f),
+                        Color.Black.copy(alpha = 0.88f),
+                        Color.Black.copy(alpha = 0.96f),
                     ),
                 ),
             )
-            .fillMaxHeight(0.45f)
-            .fillMaxWidth()
             .align(Alignment.BottomCenter),
     )
     Row(
@@ -288,29 +291,58 @@ private fun BoxScope.CoverTextOverlay(
                     fontSize = (params.fontSize.value - 1f).coerceAtLeast(8f).sp,
                     lineHeight = params.lineHeight,
                     letterSpacing = params.letterSpacing,
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = Color.White.copy(alpha = 0.82f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall.copy(
                         shadow = Shadow(
-                            color = Color.Black,
-                            blurRadius = 4f,
+                            color = Color.Black.copy(alpha = 0.8f),
+                            blurRadius = 6f,
+                            offset = androidx.compose.ui.geometry.Offset(0f, 2f),
                         ),
                     ),
                 )
             }
-            GridItemTitle(
-                title = title,
-                style = MaterialTheme.typography.titleSmall.copy(
+            val numberMatch = remember(title) { Regex("(\\d+)$").find(title) }
+            val endingNumber = numberMatch?.groupValues?.get(1)
+            val cleanTitleText = remember(title, endingNumber) {
+                if (endingNumber != null && title.endsWith(endingNumber)) {
+                    title.substring(0, title.length - endingNumber.length).trim()
+                } else {
+                    title
+                }
+            }
+
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = cleanTitleText,
+                    fontSize = params.fontSize,
+                    lineHeight = params.lineHeight,
+                    letterSpacing = params.letterSpacing,
                     color = Color.White,
-                    shadow = Shadow(
-                        color = Color.Black,
-                        blurRadius = 4f,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.9f),
+                            blurRadius = 8f,
+                            offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+                        ),
                     ),
-                ),
-                minLines = 1,
-                titleStyleKey = titleStyleKey,
-            )
+                )
+                if (endingNumber != null) {
+                    Text(
+                        text = " $endingNumber",
+                        fontSize = params.fontSize,
+                        lineHeight = params.lineHeight,
+                        letterSpacing = params.letterSpacing,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                }
+            }
         }
         if (onClickContinueReading != null) {
             ContinueReadingButton(
@@ -358,7 +390,7 @@ fun MangaComfortableGridItem(
     val scope = rememberCoroutineScope()
 
     val rawTitle = title
-    val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
+    val parsed = remember(manga, rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, rawTitle) }
     val cleanTitle = parsed.cleanTitle
     val isNsfw = remember(manga, cleanTitle) { eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(manga, cleanTitle) }
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
@@ -386,11 +418,7 @@ fun MangaComfortableGridItem(
         }
         val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
         if (hasUncensored) {
-            tachiyomi.presentation.core.components.Badge(
-                text = "UNCENSORED",
-                color = MaterialTheme.colorScheme.tertiary,
-                textColor = MaterialTheme.colorScheme.onTertiary,
-            )
+            UncensoredBadge()
         }
     }
 
@@ -499,22 +527,6 @@ fun MangaComfortableGridItem(
                                 .padding(ContinueReadingButtonGridPadding)
                                 .align(Alignment.BottomEnd),
                         )
-                    }
-                    if (isNsfw) {
-                        Box(
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .align(Alignment.BottomEnd)
-                                .then(
-                                    if (onClickContinueReading != null) {
-                                        Modifier.padding(bottom = 32.dp)
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                        ) {
-                            UncensoredBadge()
-                        }
                     }
                 },
             )
@@ -736,9 +748,10 @@ fun MangaListItem(
     val scope = rememberCoroutineScope()
 
     val rawTitle = title
-    val parsed = remember(rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(rawTitle) }
+    val parsed = remember(manga, rawTitle) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, rawTitle) }
     val cleanTitle = parsed.cleanTitle
     val isNsfw = remember(manga, cleanTitle) { eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(manga, cleanTitle) }
+    val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
     val blurNsfwCovers by uiPreferences.kisaraBlurNsfwCovers().collectAsState()
     val shouldBlur = isNsfw && blurNsfwCovers
@@ -754,7 +767,7 @@ fun MangaListItem(
         if (parsed.isColorized) {
             ColorizedBadge()
         }
-        if (isNsfw) {
+        if (hasUncensored) {
             UncensoredBadge()
         }
     }

@@ -105,7 +105,7 @@ open class SourceFeedScreenModel(
     init {
         // KMK -->
         screenModelScope.launch {
-            var retry = 10
+            var retry = 50
             while (source !is CatalogueSource && retry-- > 0) {
                 // Sometime source is late to load, so we need to wait a bit
                 delay(100)

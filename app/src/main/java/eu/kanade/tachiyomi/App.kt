@@ -261,6 +261,8 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         initializeMigrator()
         scope.launchIO {
+            eu.kanade.tachiyomi.extension.util.ExtensionLoader.cleanTemporaryExtensions(this@App)
+            eu.kanade.tachiyomi.extension.JarExtensionManager.cleanTemporaryJars(this@App)
             delay(10000)
             eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this@App)
         }

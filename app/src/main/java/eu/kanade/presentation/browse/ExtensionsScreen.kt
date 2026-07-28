@@ -582,12 +582,16 @@ private fun ExtensionItemActions(
                     }
                     is Extension.Jar -> {}
                     is Extension.AvailableJar -> {
-                        IconButton(onClick = { onClickItemBrowseAvailableJar(extension) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Explore,
-                                contentDescription = "Browse",
-                            )
+                        // KMK --> browse button hidden for non-installed extensions (code kept for future use)
+                        if (false) {
+                            IconButton(onClick = { onClickItemBrowseAvailableJar(extension) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Explore,
+                                    contentDescription = "Browse",
+                                )
+                            }
                         }
+                        // KMK <--
                         IconButton(onClick = { onClickItemAction(extension) }) {
                             Icon(
                                 imageVector = Icons.Outlined.GetApp,
@@ -604,12 +608,16 @@ private fun ExtensionItemActions(
                         }
                     }
                     is Extension.Available -> {
-                        IconButton(onClick = { onClickItemBrowseAvailableExtension(extension) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Explore,
-                                contentDescription = "Browse",
-                            )
+                        // KMK --> browse button hidden for non-installed extensions (code kept for future use)
+                        if (false) {
+                            IconButton(onClick = { onClickItemBrowseAvailableExtension(extension) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Explore,
+                                    contentDescription = "Browse",
+                                )
+                            }
                         }
+                        // KMK <--
 
                         if (extension.sources.isNotEmpty()) {
                             IconButton(

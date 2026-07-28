@@ -417,7 +417,18 @@ object SettingsKisaraScreen : SearchableSettings {
                         )
                         OutlinedTextField(
                             value = newRepoUrl,
-                            onValueChange = { newRepoUrl = it },
+                            onValueChange = { url ->
+                                newRepoUrl = url
+                                if (newRepoName.isBlank() && url.isNotBlank()) {
+                                    val cleanUrl = url.trim().substringBefore('?')
+                                    val fileName = cleanUrl.substringAfterLast('/')
+                                    if (fileName.endsWith(".jar", ignoreCase = true)) {
+                                        newRepoName = fileName.removeSuffix(".jar")
+                                    } else if (fileName.endsWith(".json", ignoreCase = true)) {
+                                        newRepoName = fileName.removeSuffix(".json")
+                                    }
+                                }
+                            },
                             label = { Text("URL") },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -426,9 +437,22 @@ object SettingsKisaraScreen : SearchableSettings {
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            if (newRepoName.isNotBlank() && newRepoUrl.isNotBlank()) {
+                            val url = newRepoUrl.trim()
+                            var name = newRepoName.trim()
+                            if (name.isBlank() && url.isNotBlank()) {
+                                val cleanUrl = url.substringBefore('?')
+                                val fileName = cleanUrl.substringAfterLast('/')
+                                name = if (fileName.endsWith(".jar", ignoreCase = true)) {
+                                    fileName.removeSuffix(".jar")
+                                } else if (fileName.endsWith(".json", ignoreCase = true)) {
+                                    fileName.removeSuffix(".json")
+                                } else {
+                                    "JAR Repo"
+                                }
+                            }
+                            if (name.isNotBlank() && url.isNotBlank()) {
                                 val newRepos = jarExtensionRepos.toMutableSet()
-                                val repoString = "${newRepoName.trim()}|${newRepoUrl.trim()}"
+                                val repoString = "$name|$url"
                                 newRepos.add(repoString)
                                 jarExtensionReposPref.set(newRepos)
                                 showAddJarRepoDialog = false
@@ -930,6 +954,16 @@ object SettingsKisaraScreen : SearchableSettings {
                         onValueChanged = {
                             uiPreferences.duplicateMaxScanCount().set(it)
                         },
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
+                title = "Appearance & Customization",
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Advanced Theme Builder",
+                        subtitle = "Customize primary/secondary colors, gradients, glassmorphism & dark modes",
+                        onClick = { navigator.push(SettingsCustomThemeBuilderScreen()) },
                     ),
                 ),
             ),

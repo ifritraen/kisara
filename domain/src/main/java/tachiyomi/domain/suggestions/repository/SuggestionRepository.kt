@@ -3,6 +3,8 @@ package tachiyomi.domain.suggestions.repository
 import kotlinx.coroutines.flow.Flow
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.suggestions.model.Suggestion
+import tachiyomi.domain.suggestions.model.SuggestionArtist
+import tachiyomi.domain.suggestions.model.SuggestionAuthor
 import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
 
@@ -37,6 +39,26 @@ interface SuggestionRepository {
     suspend fun deleteSource(sourceId: Long)
 
     suspend fun clearSources()
+
+    fun observeAuthors(): Flow<List<SuggestionAuthor>>
+
+    suspend fun getAuthors(): List<SuggestionAuthor>
+
+    suspend fun insertAuthor(author: SuggestionAuthor)
+
+    suspend fun deleteAuthor(author: String)
+
+    suspend fun clearAuthors()
+
+    fun observeArtists(): Flow<List<SuggestionArtist>>
+
+    suspend fun getArtists(): List<SuggestionArtist>
+
+    suspend fun insertArtist(artist: SuggestionArtist)
+
+    suspend fun deleteArtist(artist: String)
+
+    suspend fun clearArtists()
 
     fun observeDismissed(): Flow<List<String>>
 

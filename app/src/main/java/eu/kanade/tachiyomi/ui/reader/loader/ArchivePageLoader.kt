@@ -2,10 +2,12 @@ package eu.kanade.tachiyomi.ui.reader.loader
 
 import android.app.Application
 import com.hippo.unifile.UniFile
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
+import eu.kanade.translation.ColorizerManager
 import eu.kanade.translation.model.PageTranslation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -24,12 +26,17 @@ import java.io.File
  */
 internal class ArchivePageLoader(
     private val reader: ArchiveReader,
+    private val chapterName: String,
+    private val scanlator: String?,
+    private val mangaTitle: String,
+    private val source: Source,
     private val translations: Map<String, PageTranslation> = emptyMap(),
 ) : PageLoader() {
     // SY -->
     private val mutex = Mutex()
     private val context: Application by injectLazy()
     private val readerPreferences: ReaderPreferences by injectLazy()
+    private val colorizerManager: ColorizerManager by injectLazy()
     private val tmpDir = File(context.externalCacheDir, "reader_${reader.archiveHashCode}").also {
         it.deleteRecursively()
     }
@@ -75,6 +82,16 @@ internal class ArchivePageLoader(
                 list.getOrNull(i)?.name?.let { entryName ->
                     page.translation = translations[entryName]
                     page.translationKey = entryName
+                    val colorizedFile = colorizerManager.getColorizedPageFile(
+                        chapterName = chapterName,
+                        scanlator = scanlator,
+                        mangaTitle = mangaTitle,
+                        source = source,
+                        pageName = entryName.substringAfterLast("/"),
+                    )
+                    if (colorizedFile != null && colorizedFile.exists()) {
+                        page.stream = { colorizedFile.openInputStream()!! }
+                    }
                 }
             }
             return pages
@@ -103,7 +120,20 @@ internal class ArchivePageLoader(
                 // SY <--
                 ReaderPage(i).apply {
                     // SY -->
-                    stream = { imageBytes?.copyOf()?.inputStream() ?: reader.getInputStream(entry.name)!! }
+                    stream = {
+                        val colorizedFile = colorizerManager.getColorizedPageFile(
+                            chapterName = chapterName,
+                            scanlator = scanlator,
+                            mangaTitle = mangaTitle,
+                            source = source,
+                            pageName = entry.name.substringAfterLast("/"),
+                        )
+                        if (colorizedFile != null && colorizedFile.exists()) {
+                            colorizedFile.openInputStream()!!
+                        } else {
+                            imageBytes?.copyOf()?.inputStream() ?: reader.getInputStream(entry.name)!!
+                        }
+                    }
                     // SY <--
                     status = Page.State.Ready
                     // KMK -->

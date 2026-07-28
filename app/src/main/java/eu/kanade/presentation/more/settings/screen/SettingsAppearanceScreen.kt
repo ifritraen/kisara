@@ -102,6 +102,11 @@ object SettingsAppearanceScreen : SearchableSettings {
                 },
                 // KMK -->
                 Preference.PreferenceItem.TextPreference(
+                    title = "Advanced Theme Builder",
+                    subtitle = "Customize colors, gradients, surface glassmorphism & dark modes",
+                    onClick = { navigator.push(SettingsCustomThemeBuilderScreen()) },
+                ),
+                Preference.PreferenceItem.TextPreference(
                     title = stringResource(KMR.strings.pref_custom_color),
                     subtitle = stringResource(KMR.strings.custom_color_description),
                     enabled = appTheme == AppTheme.CUSTOM,

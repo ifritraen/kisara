@@ -71,10 +71,16 @@ import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.domain.suggestions.interactor.GetSuggestionArtists
+import tachiyomi.domain.suggestions.interactor.GetSuggestionAuthors
 import tachiyomi.domain.suggestions.interactor.GetSuggestionSources
 import tachiyomi.domain.suggestions.interactor.GetSuggestionTags
+import tachiyomi.domain.suggestions.interactor.ModifySuggestionArtist
+import tachiyomi.domain.suggestions.interactor.ModifySuggestionAuthor
 import tachiyomi.domain.suggestions.interactor.ModifySuggestionSource
 import tachiyomi.domain.suggestions.interactor.ModifySuggestionTag
+import tachiyomi.domain.suggestions.model.SuggestionArtist
+import tachiyomi.domain.suggestions.model.SuggestionAuthor
 import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
 import tachiyomi.domain.suggestions.service.SuggestionsPreferences
@@ -96,28 +102,43 @@ class SettingsSuggestionsScreen : Screen() {
 
         val getSuggestionTags = remember { Injekt.get<GetSuggestionTags>() }
         val getSuggestionSources = remember { Injekt.get<GetSuggestionSources>() }
+        val getSuggestionAuthors = remember { Injekt.get<GetSuggestionAuthors>() }
+        val getSuggestionArtists = remember { Injekt.get<GetSuggestionArtists>() }
         val modifySuggestionTag = remember { Injekt.get<ModifySuggestionTag>() }
         val modifySuggestionSource = remember { Injekt.get<ModifySuggestionSource>() }
+        val modifySuggestionAuthor = remember { Injekt.get<ModifySuggestionAuthor>() }
+        val modifySuggestionArtist = remember { Injekt.get<ModifySuggestionArtist>() }
         val suggestionsPreferences = remember { Injekt.get<SuggestionsPreferences>() }
         val sourceManager = remember { Injekt.get<SourceManager>() }
 
         val tags by getSuggestionTags.subscribe().collectAsState(initial = emptyList())
         val sources by getSuggestionSources.subscribe().collectAsState(initial = emptyList())
+        val authors by getSuggestionAuthors.subscribe().collectAsState(initial = emptyList())
+        val artists by getSuggestionArtists.subscribe().collectAsState(initial = emptyList())
 
         var showAddTagDialog by remember { mutableStateOf(false) }
         var showAddSourceDialog by remember { mutableStateOf(false) }
+        var showAddAuthorDialog by remember { mutableStateOf(false) }
+        var showAddArtistDialog by remember { mutableStateOf(false) }
 
         var maxTagsToMatch by remember { mutableStateOf(suggestionsPreferences.maxTagsToMatch().get()) }
         var maxSourcesToFetch by remember { mutableStateOf(suggestionsPreferences.maxSourcesToFetch().get()) }
+        var maxSuggestionsToDisplay by remember { mutableStateOf(suggestionsPreferences.maxSuggestionsToDisplay().get()) }
         var suggestionsLoggingEnabled by remember { mutableStateOf(suggestionsPreferences.suggestionsLoggingEnabled().get()) }
 
         var isTagCountExpanded by remember { mutableStateOf(false) }
         var isSourceCountExpanded by remember { mutableStateOf(false) }
+        var isAuthorCountExpanded by remember { mutableStateOf(false) }
+        var isArtistCountExpanded by remember { mutableStateOf(false) }
         var isTagOrderExpanded by remember { mutableStateOf(true) }
         var isSourceOrderExpanded by remember { mutableStateOf(true) }
+        var isAuthorOrderExpanded by remember { mutableStateOf(true) }
+        var isArtistOrderExpanded by remember { mutableStateOf(true) }
 
         val tagCountList = remember(tags) { tags.sortedByDescending { it.count } }
         val sourceCountList = remember(sources) { sources.sortedByDescending { it.count } }
+        val authorCountList = remember(authors) { authors.sortedByDescending { it.count } }
+        val artistCountList = remember(artists) { artists.sortedByDescending { it.count } }
 
         val activeTags = remember(tags) {
             val nonBlocked = tags.filter { !it.isBlocked }
@@ -130,6 +151,20 @@ class SettingsSuggestionsScreen : Screen() {
             val nonBlocked = sources.filter { !it.isBlocked }
             val top5Sources = nonBlocked.sortedByDescending { it.count }.take(5).map { it.sourceId }.toSet()
             nonBlocked.filter { top5Sources.contains(it.sourceId) || it.isUserAdded }
+                .sortedBy { it.sortOrder }
+                .toMutableStateList()
+        }
+        val activeAuthors = remember(authors) {
+            val nonBlocked = authors.filter { !it.isBlocked }
+            val top5Authors = nonBlocked.sortedByDescending { it.count }.take(5).map { it.author }.toSet()
+            nonBlocked.filter { top5Authors.contains(it.author) || it.isUserAdded }
+                .sortedBy { it.sortOrder }
+                .toMutableStateList()
+        }
+        val activeArtists = remember(artists) {
+            val nonBlocked = artists.filter { !it.isBlocked }
+            val top5Artists = nonBlocked.sortedByDescending { it.count }.take(5).map { it.artist }.toSet()
+            nonBlocked.filter { top5Artists.contains(it.artist) || it.isUserAdded }
                 .sortedBy { it.sortOrder }
                 .toMutableStateList()
         }
@@ -172,6 +207,42 @@ class SettingsSuggestionsScreen : Screen() {
             }
         }
 
+        val reorderableAuthorsState = rememberReorderableLazyListState(lazyListState) { from, to ->
+            val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
+            val toKey = to.key as? String ?: return@rememberReorderableLazyListState
+            if (!fromKey.startsWith("author-") || !toKey.startsWith("author-")) return@rememberReorderableLazyListState
+            val fromAuthor = fromKey.removePrefix("author-")
+            val toAuthor = toKey.removePrefix("author-")
+            val fromIndex = activeAuthors.indexOfFirst { it.author == fromAuthor }
+            val toIndex = activeAuthors.indexOfFirst { it.author == toAuthor }
+            if (fromIndex != -1 && toIndex != -1) {
+                val item = activeAuthors[fromIndex]
+                activeAuthors.removeAt(fromIndex)
+                activeAuthors.add(toIndex, item)
+                scope.launch {
+                    modifySuggestionAuthor.reorder(activeAuthors)
+                }
+            }
+        }
+
+        val reorderableArtistsState = rememberReorderableLazyListState(lazyListState) { from, to ->
+            val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
+            val toKey = to.key as? String ?: return@rememberReorderableLazyListState
+            if (!fromKey.startsWith("artist-") || !toKey.startsWith("artist-")) return@rememberReorderableLazyListState
+            val fromArtist = fromKey.removePrefix("artist-")
+            val toArtist = toKey.removePrefix("artist-")
+            val fromIndex = activeArtists.indexOfFirst { it.artist == fromArtist }
+            val toIndex = activeArtists.indexOfFirst { it.artist == toArtist }
+            if (fromIndex != -1 && toIndex != -1) {
+                val item = activeArtists[fromIndex]
+                activeArtists.removeAt(fromIndex)
+                activeArtists.add(toIndex, item)
+                scope.launch {
+                    modifySuggestionArtist.reorder(activeArtists)
+                }
+            }
+        }
+
         Scaffold(
             topBar = { scrollBehavior ->
                 AppBar(
@@ -189,6 +260,8 @@ class SettingsSuggestionsScreen : Screen() {
                                 scope.launch {
                                     modifySuggestionTag.clear()
                                     modifySuggestionSource.clear()
+                                    modifySuggestionAuthor.clear()
+                                    modifySuggestionArtist.clear()
                                     // Trigger background recalculation worker
                                     val request = androidx.work.OneTimeWorkRequestBuilder<SuggestionsWorker>()
                                         .setInputData(androidx.work.workDataOf("is_manual" to true))
@@ -260,6 +333,22 @@ class SettingsSuggestionsScreen : Screen() {
                                     },
                                     valueRange = 2f..15f,
                                     steps = 13,
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = "Max Suggestions in Screen: $maxSuggestionsToDisplay",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Slider(
+                                    value = maxSuggestionsToDisplay.toFloat(),
+                                    onValueChange = {
+                                        maxSuggestionsToDisplay = it.toInt()
+                                        suggestionsPreferences.maxSuggestionsToDisplay().set(it.toInt())
+                                    },
+                                    valueRange = 50f..1000f,
+                                    steps = 19, // (1000-50)/50 = 19 steps
                                 )
 
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -495,6 +584,188 @@ class SettingsSuggestionsScreen : Screen() {
                         }
                     }
 
+                    // 2a. Author Count List Header
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isAuthorCountExpanded = !isAuthorCountExpanded }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Author Count List (${authorCountList.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = if (isAuthorCountExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                contentDescription = null,
+                            )
+                        }
+                    }
+
+                    if (isAuthorCountExpanded) {
+                        itemsIndexed(
+                            items = authorCountList,
+                            key = { _, item -> "count-author-${item.author}" },
+                        ) { _, item ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = item.author,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (item.isBlocked) FontWeight.Normal else FontWeight.Bold,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                    ) {
+                                        Text(
+                                            text = "${item.count} favs",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                    val isAuthorInOrderList = remember(activeAuthors, item.author) {
+                                        activeAuthors.any { it.author == item.author }
+                                    }
+                                    if (!item.isBlocked && !isAuthorInOrderList) {
+                                        IconButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    modifySuggestionAuthor.addAuthor(item.author)
+                                                }
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Add,
+                                                contentDescription = "Add to order list",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                modifySuggestionAuthor.toggleBlock(item.author)
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = if (item.isBlocked) Icons.Outlined.Check else Icons.Outlined.Block,
+                                            contentDescription = if (item.isBlocked) "Unblock" else "Block",
+                                            tint = if (item.isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2b. Artist Count List Header
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isArtistCountExpanded = !isArtistCountExpanded }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Artist Count List (${artistCountList.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = if (isArtistCountExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                contentDescription = null,
+                            )
+                        }
+                    }
+
+                    if (isArtistCountExpanded) {
+                        itemsIndexed(
+                            items = artistCountList,
+                            key = { _, item -> "count-artist-${item.artist}" },
+                        ) { _, item ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = item.artist,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (item.isBlocked) FontWeight.Normal else FontWeight.Bold,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                    ) {
+                                        Text(
+                                            text = "${item.count} favs",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                    val isArtistInOrderList = remember(activeArtists, item.artist) {
+                                        activeArtists.any { it.artist == item.artist }
+                                    }
+                                    if (!item.isBlocked && !isArtistInOrderList) {
+                                        IconButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    modifySuggestionArtist.addArtist(item.artist)
+                                                }
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Add,
+                                                contentDescription = "Add to order list",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                modifySuggestionArtist.toggleBlock(item.artist)
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = if (item.isBlocked) Icons.Outlined.Check else Icons.Outlined.Block,
+                                            contentDescription = if (item.isBlocked) "Unblock" else "Block",
+                                            tint = if (item.isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp)) }
 
                     // 3. Tag Order List Header
@@ -660,6 +931,152 @@ class SettingsSuggestionsScreen : Screen() {
                             }
                         }
                     }
+
+                    // 5. Author Order List Header
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isAuthorOrderExpanded = !isAuthorOrderExpanded }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Author Order List (Drag and Drop)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { showAddAuthorDialog = true }) {
+                                Icon(Icons.Outlined.Add, contentDescription = "Add Author")
+                            }
+                            Icon(
+                                imageVector = if (isAuthorOrderExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                contentDescription = null,
+                            )
+                        }
+                    }
+
+                    if (isAuthorOrderExpanded) {
+                        itemsIndexed(
+                            items = activeAuthors,
+                            key = { _, item -> "author-${item.author}" },
+                        ) { _, item ->
+                            ReorderableItem(
+                                state = reorderableAuthorsState,
+                                key = "author-${item.author}",
+                            ) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = CardDefaults.outlinedCardBorder(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DragHandle,
+                                            contentDescription = "Drag to reorder",
+                                            modifier = Modifier.draggableHandle(),
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = item.author,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (item.isUserAdded) {
+                                            IconButton(
+                                                onClick = {
+                                                    scope.launch {
+                                                        modifySuggestionAuthor.delete(item.author)
+                                                    }
+                                                },
+                                            ) {
+                                                Icon(Icons.Outlined.Delete, contentDescription = "Delete Author")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Artist Order List Header
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isArtistOrderExpanded = !isArtistOrderExpanded }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Artist Order List (Drag and Drop)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { showAddArtistDialog = true }) {
+                                Icon(Icons.Outlined.Add, contentDescription = "Add Artist")
+                            }
+                            Icon(
+                                imageVector = if (isArtistOrderExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                contentDescription = null,
+                            )
+                        }
+                    }
+
+                    if (isArtistOrderExpanded) {
+                        itemsIndexed(
+                            items = activeArtists,
+                            key = { _, item -> "artist-${item.artist}" },
+                        ) { _, item ->
+                            ReorderableItem(
+                                state = reorderableArtistsState,
+                                key = "artist-${item.artist}",
+                            ) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = CardDefaults.outlinedCardBorder(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DragHandle,
+                                            contentDescription = "Drag to reorder",
+                                            modifier = Modifier.draggableHandle(),
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = item.artist,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (item.isUserAdded) {
+                                            IconButton(
+                                                onClick = {
+                                                    scope.launch {
+                                                        modifySuggestionArtist.delete(item.artist)
+                                                    }
+                                                },
+                                            ) {
+                                                Icon(Icons.Outlined.Delete, contentDescription = "Delete Artist")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
         )
@@ -748,6 +1165,80 @@ class SettingsSuggestionsScreen : Screen() {
                 confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = { showAddSourceDialog = false }) {
+                        Text("Cancel")
+                    }
+                },
+            )
+        }
+
+        // Add Author Dialog
+        if (showAddAuthorDialog) {
+            var newAuthorText by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showAddAuthorDialog = false },
+                title = { Text(text = "Add Custom Author") },
+                text = {
+                    OutlinedTextField(
+                        value = newAuthorText,
+                        onValueChange = { newAuthorText = it },
+                        label = { Text("Author Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newAuthorText.isNotBlank()) {
+                                scope.launch {
+                                    modifySuggestionAuthor.addAuthor(newAuthorText)
+                                }
+                                showAddAuthorDialog = false
+                            }
+                        },
+                    ) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddAuthorDialog = false }) {
+                        Text("Cancel")
+                    }
+                },
+            )
+        }
+
+        // Add Artist Dialog
+        if (showAddArtistDialog) {
+            var newArtistText by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showAddArtistDialog = false },
+                title = { Text(text = "Add Custom Artist") },
+                text = {
+                    OutlinedTextField(
+                        value = newArtistText,
+                        onValueChange = { newArtistText = it },
+                        label = { Text("Artist Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newArtistText.isNotBlank()) {
+                                scope.launch {
+                                    modifySuggestionArtist.addArtist(newArtistText)
+                                }
+                                showAddArtistDialog = false
+                            }
+                        },
+                    ) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddArtistDialog = false }) {
                         Text("Cancel")
                     }
                 },

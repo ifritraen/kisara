@@ -63,6 +63,7 @@ fun MangaChapterListItem(
     downloadProgressProvider: () -> Int,
     // KMK -->
     translationStateProvider: () -> eu.kanade.translation.model.Translation.State = { eu.kanade.translation.model.Translation.State.NOT_TRANSLATED },
+    colorizerStateProvider: () -> eu.kanade.translation.model.Translation.State = { eu.kanade.translation.model.Translation.State.NOT_TRANSLATED },
     // KMK <--
     chapterSwipeStartAction: LibraryPreferences.ChapterSwipeAction,
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
@@ -72,6 +73,7 @@ fun MangaChapterListItem(
     onDownloadClick: ((ChapterDownloadAction) -> Unit)?,
     // KMK -->
     onTranslationClick: ((ChapterTranslationAction) -> Unit)? = null,
+    onColorizeClick: ((ChapterTranslationAction) -> Unit)? = null,
     // KMK <--
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -209,6 +211,12 @@ fun MangaChapterListItem(
 
             // KMK -->
             if (downloadStateProvider() == Download.State.DOWNLOADED) {
+                ChapterColorizerIndicator(
+                    enabled = true,
+                    modifier = Modifier.padding(start = 4.dp),
+                    colorizerStateProvider = colorizerStateProvider,
+                    onClick = { onColorizeClick?.invoke(it) },
+                )
                 ChapterTranslationIndicator(
                     enabled = true,
                     modifier = Modifier.padding(start = 4.dp),

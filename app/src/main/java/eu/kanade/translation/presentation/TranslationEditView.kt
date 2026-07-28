@@ -2,9 +2,10 @@ package eu.kanade.translation.presentation
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,7 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TranslationEditView(
     editState: TranslationEditState,
@@ -75,35 +79,40 @@ fun TranslationEditView(
 ) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var editingBubbleIndex by remember { mutableStateOf<Int?>(null) }
+    var editingTextVal by remember { mutableStateOf("") }
+    var showDebugBorders by remember { mutableStateOf(false) }
 
     LaunchedEffect(editState.page) {
         withContext(Dispatchers.IO) {
             try {
-                var tempWidth = 0
-                var tempHeight = 0
-                editState.page.stream?.invoke()?.use { input ->
-                    val options = BitmapFactory.Options().apply {
-                        inJustDecodeBounds = true
-                    }
-                    BitmapFactory.decodeStream(input, null, options)
-                    tempWidth = options.outWidth
-                    tempHeight = options.outHeight
-                }
+                // KMK -->
+                // Read bytes once into memory to avoid calling stream lambda twice
+                // (concurrent opens on ArchivePageLoader's zip reader cause native SIGSEGV)
+                val bytes = editState.page.stream?.invoke()?.use { it.readBytes() }
+                if (bytes != null && bytes.isNotEmpty()) {
+                    val tempWidth: Int
+                    val tempHeight: Int
+                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                    tempWidth = opts.outWidth
+                    tempHeight = opts.outHeight
 
-                if (tempWidth > 0 && tempHeight > 0) {
-                    val maxDim = 2048
-                    var sampleSize = 1
-                    while (tempWidth / sampleSize > maxDim || tempHeight / sampleSize > maxDim) {
-                        sampleSize *= 2
-                    }
-
-                    editState.page.stream?.invoke()?.use { input ->
-                        val options = BitmapFactory.Options().apply {
-                            inSampleSize = sampleSize
+                    if (tempWidth > 0 && tempHeight > 0) {
+                        val maxDim = 2048
+                        var sampleSize = 1
+                        while (tempWidth / sampleSize > maxDim || tempHeight / sampleSize > maxDim) {
+                            sampleSize *= 2
                         }
-                        bitmap = BitmapFactory.decodeStream(input, null, options)
+                        bitmap = BitmapFactory.decodeByteArray(
+                            bytes,
+                            0,
+                            bytes.size,
+                            BitmapFactory.Options().apply { inSampleSize = sampleSize },
+                        )
                     }
                 }
+                // KMK <--
             } catch (e: Exception) {
                 // Ignore
             } finally {
@@ -176,6 +185,35 @@ fun TranslationEditView(
                         contentScale = ContentScale.Fit,
                     )
 
+                    if (showDebugBorders) {
+                        editState.translation.blocks.forEach { origBlock ->
+                            val oXPx = origBlock.x * scale
+                            val oYPx = origBlock.y * scale
+                            val oWPx = origBlock.width * scale
+                            val oHPx = origBlock.height * scale
+
+                            val oXDp = with(LocalDensity.current) { oXPx.toDp() }
+                            val oYDp = with(LocalDensity.current) { oYPx.toDp() }
+                            val oWDp = with(LocalDensity.current) { oWPx.toDp() }
+                            val oHDp = with(LocalDensity.current) { oHPx.toDp() }
+
+                            Box(
+                                modifier = Modifier
+                                    .offset(oXDp, oYDp)
+                                    .size(oWDp, oHDp)
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color.Green.copy(alpha = 0.8f),
+                                        shape = if (origBlock.isBubble) CircleShape else RoundedCornerShape(4.dp),
+                                    )
+                                    .background(
+                                        Color.Green.copy(alpha = 0.15f),
+                                        shape = if (origBlock.isBubble) CircleShape else RoundedCornerShape(4.dp),
+                                    ),
+                            )
+                        }
+                    }
+
                     blocks.forEachIndexed { index, block ->
                         val isSelected = selectedIndex == index
                         val xPx = block.x * scale
@@ -201,6 +239,16 @@ fun TranslationEditView(
                                     color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.25f),
                                     shape = if (block.isBubble) CircleShape else RoundedCornerShape(4.dp),
                                 )
+                                .combinedClickable(
+                                    onClick = {
+                                        selectedIndex = index
+                                    },
+                                    onLongClick = {
+                                        selectedIndex = index
+                                        editingBubbleIndex = index
+                                        editingTextVal = block.translation
+                                    },
+                                )
                                 .pointerInput(index) {
                                     detectDragGestures(
                                         onDragStart = {
@@ -215,9 +263,6 @@ fun TranslationEditView(
                                             )
                                         },
                                     )
-                                }
-                                .clickable {
-                                    selectedIndex = index
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -291,6 +336,18 @@ fun TranslationEditView(
                 )
 
                 IconButton(
+                    onClick = { showDebugBorders = !showDebugBorders },
+                ) {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = "Toggle Debug Borders",
+                        tint = if (showDebugBorders) MaterialTheme.colorScheme.primary else Color.White,
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
                     onClick = {
                         val bmpW = bitmap?.width?.toFloat() ?: 800f
                         val bmpH = bitmap?.height?.toFloat() ?: 1200f
@@ -317,7 +374,13 @@ fun TranslationEditView(
 
                 Button(
                     onClick = {
-                        val finalTranslation = editState.translation.copy(blocks = blocks.toMutableList())
+                        val bmpW = bitmap?.width?.toFloat() ?: 0f
+                        val bmpH = bitmap?.height?.toFloat() ?: 0f
+                        val finalTranslation = editState.translation.copy(
+                            blocks = blocks.toMutableList(),
+                            imgWidth = if (editState.translation.imgWidth == 0f) bmpW else editState.translation.imgWidth,
+                            imgHeight = if (editState.translation.imgHeight == 0f) bmpH else editState.translation.imgHeight,
+                        )
                         onSave(finalTranslation)
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -487,6 +550,38 @@ fun TranslationEditView(
                     }
                 }
             }
+        }
+
+        if (editingBubbleIndex != null && editingBubbleIndex!! in blocks.indices) {
+            val blockIndex = editingBubbleIndex!!
+            AlertDialog(
+                onDismissRequest = { editingBubbleIndex = null },
+                title = { Text("Edit Translation Bubble") },
+                text = {
+                    OutlinedTextField(
+                        value = editingTextVal,
+                        onValueChange = { editingTextVal = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Translation") },
+                        maxLines = 5,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            blocks[blockIndex] = blocks[blockIndex].copy(translation = editingTextVal)
+                            editingBubbleIndex = null
+                        },
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { editingBubbleIndex = null }) {
+                        Text("Cancel")
+                    }
+                },
+            )
         }
     }
 }

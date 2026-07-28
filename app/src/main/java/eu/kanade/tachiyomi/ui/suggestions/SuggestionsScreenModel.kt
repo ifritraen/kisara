@@ -60,7 +60,7 @@ class SuggestionsScreenModel(
                     val progressData = activeWork?.progress
                     val progress = progressData?.getInt("progress", 0) ?: 0
                     val total = progressData?.getInt("total", 0) ?: 0
-                    
+
                     mutableState.update { state ->
                         state.copy(
                             isLoading = isRunning,
@@ -76,7 +76,7 @@ class SuggestionsScreenModel(
         val isRunning = SuggestionsWorker.isUpdateRunning(context)
         if (!isRunning) {
             initialCount = state.value.suggestions.size
-            
+
             val request = androidx.work.OneTimeWorkRequestBuilder<SuggestionsWorker>()
                 .setInputData(androidx.work.workDataOf("is_manual" to true))
                 .build()

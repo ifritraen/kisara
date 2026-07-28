@@ -267,8 +267,6 @@ class MainActivity : BaseActivity() {
             }
         }
 
-
-
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
         if (!isTaskRoot) {
             finish()
@@ -920,8 +918,6 @@ class MainActivity : BaseActivity() {
         ready = true
         return true
     }
-
-
 
     companion object {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"
