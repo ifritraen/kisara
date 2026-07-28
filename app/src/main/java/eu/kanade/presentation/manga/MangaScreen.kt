@@ -236,42 +236,8 @@ fun MangaScreen(
     onDeletePageBookmark: (Long) -> Unit = {},
     // KMK <--
 ) {
-    var selectedChapterTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
-    // For bottom action menu
-    onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
-    onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
-    onMarkPreviousAsReadClicked: (Chapter) -> Unit,
-    onMultiDeleteClicked: (List<Chapter>) -> Unit,
-    onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)? = null,
-
-    // For chapter swipe
-    onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
-
-    // Chapter selection
-    onChapterSelected: (ChapterList.Item, Boolean, Boolean) -> Unit,
-    onAllChapterSelected: (Boolean) -> Unit,
-    onInvertSelection: () -> Unit,
-
-    // KMK -->
-    getMangaState: @Composable (Manga) -> State<Manga>,
-    onClickSourceSettingsClicked: (() -> Unit)?,
-    onClickTranslationSettingsClicked: (() -> Unit)? = null,
-    onClickColorizerSettingsClicked: (() -> Unit)? = null,
-    onToggleAutoTranslate: (() -> Unit)? = null,
-    onClearManga: () -> Unit,
-    onOpenMangaFolder: (() -> Unit)?,
-    onRelatedMangasScreenClick: () -> Unit,
-    onRelatedMangaClick: (Manga) -> Unit,
-    onRelatedMangaLongClick: (Manga) -> Unit,
-    librarySearch: (query: String) -> Unit,
-    onSourceClick: () -> Unit,
-    onCoverLoaded: (MangaCover) -> Unit,
-    coverRatio: MutableFloatState,
-    onPaletteScreenClick: () -> Unit,
-    hazeState: HazeState,
-    // KMK <--
-) {
     val context = LocalContext.current
+    var selectedChapterTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
     val onCopyTagToClipboard: (tag: String) -> Unit = {
         if (it.isNotEmpty()) {
             context.copyToClipboard(it, it)

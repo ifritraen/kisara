@@ -3,15 +3,14 @@ package eu.kanade.domain.source.service
 import eu.kanade.domain.source.interactor.SetMigrateSorting
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SourceFilter
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import mihon.domain.migration.models.MigrationFlag
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.core.common.preference.getLongArray
 import tachiyomi.domain.library.model.LibraryDisplayMode
-
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import tachiyomi.domain.source.model.CustomSearchGroup
 
 class SourcePreferences(

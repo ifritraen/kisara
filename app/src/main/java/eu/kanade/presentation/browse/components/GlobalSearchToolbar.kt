@@ -20,8 +20,6 @@ import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FolderSpecial
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Shuffle
-import androidx.compose.ui.text.font.FontWeight
-import tachiyomi.i18n.kmk.KMR
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -41,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.SearchToolbar
@@ -51,6 +50,7 @@ import tachiyomi.domain.suggestions.interactor.GetSuggestionArtists
 import tachiyomi.domain.suggestions.interactor.GetSuggestionAuthors
 import tachiyomi.domain.suggestions.interactor.GetSuggestionTags
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
