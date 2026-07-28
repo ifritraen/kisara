@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import eu.kanade.domain.source.model.toDomainSource
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.source.CatalogueSource
@@ -357,7 +356,13 @@ private fun ExtensionSourceItem(
                         Spacer(modifier = Modifier.width(4.dp))
 
                         SourceIcon(
-                            source = source.toDomainSource(),
+                            source = tachiyomi.domain.source.model.Source(
+                                id = source.id,
+                                lang = source.lang,
+                                name = source.name,
+                                supportsLatest = source.supportsLatest,
+                                isStub = false,
+                            ),
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
