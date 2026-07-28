@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.domain.source.model.toDomainSource
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.source.CatalogueSource
@@ -354,7 +355,6 @@ private fun ExtensionSourceItem(
                             onCheckedChange = { checked -> onToggleSource(source.id, checked) },
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-import eu.kanade.domain.source.model.toDomainSource
 
                         SourceIcon(
                             source = source.toDomainSource(),
