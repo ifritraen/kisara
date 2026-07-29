@@ -89,6 +89,7 @@ data object HomeTab : Tab {
     val historyChecklistEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 
     fun showSubTab(index: Int) {
+        currentPageIndex = index
         subTabTargetChannel.trySend(index)
     }
 
@@ -134,7 +135,7 @@ data object HomeTab : Tab {
             eu.kanade.tachiyomi.ui.home.favorite.favoritesTab(),
         )
 
-        val state = rememberPagerState { tabs.size }
+        val state = rememberPagerState(initialPage = currentPageIndex) { tabs.size }
 
         LaunchedEffect(Unit) {
             subTabTargetChannel.receiveAsFlow().collectLatest {

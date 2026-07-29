@@ -213,9 +213,42 @@ object HomeScreen : Screen() {
         var categoryToEdit by remember { mutableStateOf<Category?>(null) }
         val categoriesState by remember { Injekt.get<GetCategories>().subscribe() }.collectAsState(initial = emptyList())
 
+        val startScreen = remember { uiPreferences.startScreen().get() }
+        val initialTab = remember {
+            when (startScreen) {
+                UiPreferences.StartScreen.HOME_LANDING -> {
+                    HomeTab.showSubTab(0)
+                    HomeTab
+                }
+                UiPreferences.StartScreen.HOME_FEED -> {
+                    HomeTab.showSubTab(1)
+                    HomeTab
+                }
+                UiPreferences.StartScreen.HOME_SUGGESTIONS -> {
+                    HomeTab.showSubTab(2)
+                    HomeTab
+                }
+                UiPreferences.StartScreen.HOME_UPDATES -> {
+                    HomeTab.showSubTab(3)
+                    HomeTab
+                }
+                UiPreferences.StartScreen.HOME_HISTORY -> {
+                    HomeTab.showSubTab(4)
+                    HomeTab
+                }
+                UiPreferences.StartScreen.HOME_FAVORITES -> {
+                    HomeTab.showSubTab(5)
+                    HomeTab
+                }
+                UiPreferences.StartScreen.BROWSE -> BrowseTab
+                UiPreferences.StartScreen.MORE -> MoreTab
+                UiPreferences.StartScreen.LIBRARY -> LibraryTab
+            }
+        }
+
         CompositionLocalProvider(LocalHazeState provides hazeState) {
             TabNavigator(
-                tab = LibraryTab,
+                tab = initialTab,
                 key = TAB_NAVIGATOR_KEY,
             ) { tabNavigator ->
                 LaunchedEffect(tabNavigator.current) {

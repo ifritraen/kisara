@@ -42,11 +42,26 @@ object LocalApkExtensionSupport {
         return internalDir
     }
 
+    private var cachedLocalApkFiles: List<File>? = null
+    private var lastLocalApkCheckTime: Long = 0
+
+    fun invalidateLocalApkCache() {
+        cachedLocalApkFiles = null
+        lastLocalApkCheckTime = 0
+    }
+
     fun getLocalApkFiles(context: Context): List<File> {
+        val now = System.currentTimeMillis()
+        if (cachedLocalApkFiles != null && (now - lastLocalApkCheckTime < 10000)) {
+            return cachedLocalApkFiles!!
+        }
         val root = getSideloadDir(context)
-        return root.listFiles()
+        val files = root.listFiles()
             ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
             .orEmpty()
+        cachedLocalApkFiles = files
+        lastLocalApkCheckTime = now
+        return files
     }
 
     fun getLocalPackageInfoOrNull(
@@ -120,6 +135,7 @@ object LocalApkExtensionSupport {
         sourceFile: File,
     ): File {
         deleteSideloadedApk(context, packageName)
+        invalidateLocalApkCache()
         val root = getSideloadDir(context)
         val targetFile = File(root, "$packageName.apk")
         sourceFile.copyTo(targetFile, overwrite = true)
@@ -131,6 +147,7 @@ object LocalApkExtensionSupport {
         context: Context,
         packageName: String,
     ): Boolean {
+        invalidateLocalApkCache()
         ExtensionLoader.invalidateCacheForPackage(context, packageName)
         val root = getSideloadDir(context)
         val cacheRoot = File(context.filesDir, LOAD_CACHE_DIR)

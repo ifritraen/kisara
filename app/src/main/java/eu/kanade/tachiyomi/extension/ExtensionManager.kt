@@ -88,7 +88,6 @@ class ExtensionManager(
 
     init {
         scope.launch(Dispatchers.IO) {
-            delay(5000)
             initExtensions()
         }
         ExtensionInstallReceiver(InstallationListener()).register(context)

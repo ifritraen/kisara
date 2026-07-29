@@ -58,7 +58,30 @@ object SettingsHomeScreen : SearchableSettings {
             "liquid_glass" to "Liquid Glass",
         )
 
+        val startScreenEntries = persistentMapOf(
+            UiPreferences.StartScreen.LIBRARY to "Library (Default)",
+            UiPreferences.StartScreen.HOME_LANDING to "Home > Landing Page",
+            UiPreferences.StartScreen.HOME_FEED to "Home > Feed",
+            UiPreferences.StartScreen.HOME_SUGGESTIONS to "Home > Suggestions",
+            UiPreferences.StartScreen.HOME_UPDATES to "Home > Updates",
+            UiPreferences.StartScreen.HOME_HISTORY to "Home > History",
+            UiPreferences.StartScreen.HOME_FAVORITES to "Home > Favorites",
+            UiPreferences.StartScreen.BROWSE to "Browse",
+            UiPreferences.StartScreen.MORE to "More / Settings",
+        )
+
         return listOf(
+            Preference.PreferenceGroup(
+                title = "App Landing Page Settings",
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.startScreen(),
+                        entries = startScreenEntries,
+                        title = "Start Screen / Landing Page",
+                        subtitle = "Select which tab opens when Kisara launches",
+                    ),
+                ),
+            ),
             Preference.PreferenceGroup(
                 title = "Card Style Settings",
                 preferenceItems = persistentListOf(

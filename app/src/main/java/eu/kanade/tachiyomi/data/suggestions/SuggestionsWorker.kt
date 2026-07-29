@@ -585,7 +585,7 @@ class SuggestionsWorker(
 
             androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
                 "SuggestionsSessionWork",
-                androidx.work.ExistingWorkPolicy.KEEP,
+                androidx.work.ExistingWorkPolicy.REPLACE,
                 request,
             )
         }

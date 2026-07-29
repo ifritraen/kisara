@@ -1004,6 +1004,22 @@ object SettingsKisaraScreen : SearchableSettings {
             Preference.PreferenceGroup(
                 title = stringResource(KMR.strings.pref_home_title),
                 preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.startScreen(),
+                        entries = persistentMapOf(
+                            UiPreferences.StartScreen.LIBRARY to "Library (Default)",
+                            UiPreferences.StartScreen.HOME_LANDING to "Home > Landing Page",
+                            UiPreferences.StartScreen.HOME_FEED to "Home > Feed",
+                            UiPreferences.StartScreen.HOME_SUGGESTIONS to "Home > Suggestions",
+                            UiPreferences.StartScreen.HOME_UPDATES to "Home > Updates",
+                            UiPreferences.StartScreen.HOME_HISTORY to "Home > History",
+                            UiPreferences.StartScreen.HOME_FAVORITES to "Home > Favorites",
+                            UiPreferences.StartScreen.BROWSE to "Browse",
+                            UiPreferences.StartScreen.MORE to "More / Settings",
+                        ).toImmutableMap(),
+                        title = "Start Screen / Landing Page",
+                        subtitle = "Select which tab opens when Kisara launches",
+                    ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(KMR.strings.pref_home_title),
                         subtitle = stringResource(KMR.strings.pref_home_summary),
