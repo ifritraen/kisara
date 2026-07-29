@@ -196,6 +196,8 @@ class UiPreferences(
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)
 
+    fun showNavHistory() = preferenceStore.getBoolean("pref_show_history_button", true)
+
     fun startScreen() = preferenceStore.getEnum("pref_start_screen_key", StartScreen.LIBRARY)
 
     enum class StartScreen {
