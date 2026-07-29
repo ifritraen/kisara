@@ -61,12 +61,15 @@ jobs:
           REF_NAME=$(echo "${GITHUB_REF}" | sed -e 's/refs\/[^\/]*\///g' | sed -e 's/[-\/]/_/g')
           COMMIT_COUNT=$(git rev-list --count HEAD)
           APK_NAME="Kisara-${REF_NAME}-r${COMMIT_COUNT}.apk"
-          
+          RELEASE_TAG="build-r${COMMIT_COUNT}"
+
           APK_FILE=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
           if [ -f "$APK_FILE" ]; then
             cp "$APK_FILE" "./$APK_NAME"
             echo "APK_PATH=./$APK_NAME" >> $GITHUB_OUTPUT
             echo "APK_NAME=$APK_NAME" >> $GITHUB_OUTPUT
+            echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+            echo "COMMIT_COUNT=$COMMIT_COUNT" >> $GITHUB_OUTPUT
             echo "Successfully packaged $APK_NAME"
           else
             echo "Error: No APK file generated." && exit 1
@@ -78,14 +81,13 @@ jobs:
           name: ${{ steps.package.outputs.APK_NAME }}
           path: ${{ steps.package.outputs.APK_PATH }}
 
-      - name: Create GitHub Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.package.outputs.APK_PATH }}
-          tag_name: ${{ github.ref_name }}
-          name: Kisara ${{ github.ref_name }}
+          tag_name: ${{ steps.package.outputs.RELEASE_TAG }}
+          name: Kisara build-r${{ steps.package.outputs.COMMIT_COUNT }}
           draft: false
-          prerelease: false
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
