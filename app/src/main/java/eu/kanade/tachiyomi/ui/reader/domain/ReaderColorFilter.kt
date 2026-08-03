@@ -5,14 +5,14 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 
 data class ReaderColorFilter(
-    val brightness: Float = 0.0f,       // -1.0f .. 1.0f (0.0 = default)
-    val contrast: Float = 0.0f,         // -1.0f .. 1.0f (0.0 = default)
-    val saturation: Float = 1.0f,       // 0.0f .. 2.0f (1.0 = default)
-    val gamma: Float = 1.0f,            // 0.5f .. 2.0f (1.0 = default)
-    val blackLevel: Float = 0.0f,       // 0.0f .. 0.5f (0.0 = default)
-    val whiteLevel: Float = 1.0f,       // 0.5f .. 1.0f (1.0 = default)
-    val warmth: Float = 0.0f,           // 0.0f .. 1.0f (0.0 = default)
-    val customTint: Int? = null,        // ARGB color or null
+    val brightness: Float = 0.0f, // -1.0f .. 1.0f (0.0 = default)
+    val contrast: Float = 0.0f, // -1.0f .. 1.0f (0.0 = default)
+    val saturation: Float = 1.0f, // 0.0f .. 2.0f (1.0 = default)
+    val gamma: Float = 1.0f, // 0.5f .. 2.0f (1.0 = default)
+    val blackLevel: Float = 0.0f, // 0.0f .. 0.5f (0.0 = default)
+    val whiteLevel: Float = 1.0f, // 0.5f .. 1.0f (1.0 = default)
+    val warmth: Float = 0.0f, // 0.0f .. 1.0f (0.0 = default)
+    val customTint: Int? = null, // ARGB color or null
     val customTintOpacity: Float = 0.3f, // 0.0f .. 1.0f
     val isInverted: Boolean = false,
     val isGrayscale: Boolean = false,
