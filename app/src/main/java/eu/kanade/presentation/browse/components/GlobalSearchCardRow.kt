@@ -81,7 +81,7 @@ internal fun MangaItem(
     manga: Manga? = null,
 ) {
     Box(
-        modifier = Modifier.width(96.dp),
+        modifier = Modifier.width(108.dp),
     ) {
         MangaCompactGridItem(
             title = title,

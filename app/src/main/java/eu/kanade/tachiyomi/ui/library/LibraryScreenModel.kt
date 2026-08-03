@@ -257,15 +257,22 @@ class LibraryScreenModel(
                     libraryPreferences.sortingMode().changes(),
                     libraryPreferences.showHiddenCategories().changes(),
                     libraryPreferences.showEmptyCategoriesSearch().changes(),
-                    ::Triple,
-                ),
+                    libraryPreferences.categorizedDisplaySettings().changes(),
+                ) { sort, showHiddenCategories, showEmptyCategoriesSearch, categorizedDisplay ->
+                    arrayOf(sort, showHiddenCategories, showEmptyCategoriesSearch, categorizedDisplay)
+                },
                 combine(
                     state.map { it.filterCategory }.distinctUntilChanged(),
                     state.map { it.includedCategories }.distinctUntilChanged(),
                     ::Pair,
                 ),
                 // KMK <--
-            ) { (data, groupType, noActiveFilterOrSearch), (sort, showHiddenCategories, showEmptyCategoriesSearch), (filterCategory, includedCategories) ->
+            ) { (data, groupType, noActiveFilterOrSearch), opts, (filterCategory, includedCategories) ->
+                val sort = opts[0] as LibrarySort
+                val showHiddenCategories = opts[1] as Boolean
+                val showEmptyCategoriesSearch = opts[2] as Boolean
+                val categorizedDisplay = opts[3] as Boolean
+
                 data.favorites
                     .applyGrouping(
                         data.categories,
@@ -283,7 +290,7 @@ class LibraryScreenModel(
                         data.tracksMap,
                         data.loggedInTrackerIds,
                         // SY -->
-                        sort.takeIf { groupType != LibraryGroup.BY_DEFAULT },
+                        sort.takeIf { groupType != LibraryGroup.BY_DEFAULT && !categorizedDisplay },
                         // SY <--
                     )
                     // KMK -->

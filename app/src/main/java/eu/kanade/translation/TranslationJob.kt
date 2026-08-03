@@ -32,7 +32,7 @@ class TranslationJob(private val context: Context, workerParams: WorkerParameter
             setContentText("Preparing translation queue")
             setSmallIcon(android.R.drawable.stat_sys_download)
             setColor(ContextCompat.getColor(applicationContext, R.color.ic_launcher))
-            setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.komikku))
+            setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.kisara))
             setOngoing(true)
         }.build()
         return ForegroundInfo(

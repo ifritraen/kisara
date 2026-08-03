@@ -28,8 +28,8 @@ android {
     defaultConfig {
         applicationId = "com.raen.kisara"
 
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 12114
+        versionName = "1.21.14"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")

@@ -1259,6 +1259,10 @@ class ReaderViewModel @JvmOverloads constructor(
         mutableState.update { it.copy(dialog = Dialog.Settings) }
     }
 
+    fun openColorFilterConfigDialog() {
+        mutableState.update { it.copy(dialog = Dialog.ColorFilterConfig) }
+    }
+
     fun closeDialog() {
         mutableState.update { it.copy(dialog = null) }
     }
@@ -1598,6 +1602,10 @@ class ReaderViewModel @JvmOverloads constructor(
         data object Settings : Dialog
         data object ReadingModeSelect : Dialog
         data object OrientationModeSelect : Dialog
+
+        // KMK -->
+        data object ColorFilterConfig : Dialog
+        // KMK <--
 
         // SY -->
         data object ChapterList : Dialog

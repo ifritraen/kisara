@@ -77,7 +77,9 @@ import eu.kanade.domain.manga.model.readingMode
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.reader.ChapterListDialog
 import eu.kanade.presentation.reader.DisplayRefreshHost
+import eu.kanade.presentation.reader.ColorFilterConfigDialog
 import eu.kanade.presentation.reader.OrientationSelectDialog
+import eu.kanade.tachiyomi.ui.reader.domain.ReaderColorFilter
 import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReaderPageIndicator
@@ -136,6 +138,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
@@ -180,6 +183,7 @@ class ReaderActivity : BaseActivity() {
                 // SY -->
                 putExtra("page", page)
                 // SY <--
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
         }
@@ -525,6 +529,51 @@ class ReaderActivity : BaseActivity() {
                         onShowMenus = { setMenuVisibility(true) },
                         onHideMenus = { setMenuVisibility(false) },
                         screenModel = settingsScreenModel,
+                    )
+                }
+
+                is ReaderViewModel.Dialog.ColorFilterConfig -> {
+                    val initialFilter = remember {
+                        ReaderColorFilter(
+                            brightness = readerPreferences.colorFilterBrightness().get(),
+                            contrast = readerPreferences.colorFilterContrast().get(),
+                            saturation = readerPreferences.colorFilterSaturation().get(),
+                            gamma = readerPreferences.colorFilterGamma().get(),
+                            blackLevel = readerPreferences.colorFilterBlackLevel().get(),
+                            whiteLevel = readerPreferences.colorFilterWhiteLevel().get(),
+                            warmth = readerPreferences.colorFilterWarmth().get(),
+                            isInverted = readerPreferences.invertedColors().get(),
+                            isGrayscale = readerPreferences.grayscale().get(),
+                            isBookBackground = readerPreferences.colorFilterBookEffect().get(),
+                        )
+                    }
+                    ColorFilterConfigDialog(
+                        initialFilter = initialFilter,
+                        onDismissRequest = onDismissRequest,
+                        onFilterChanged = { filter ->
+                            readerPreferences.colorFilterBrightness().set(filter.brightness)
+                            readerPreferences.colorFilterContrast().set(filter.contrast)
+                            readerPreferences.colorFilterSaturation().set(filter.saturation)
+                            readerPreferences.colorFilterGamma().set(filter.gamma)
+                            readerPreferences.colorFilterBlackLevel().set(filter.blackLevel)
+                            readerPreferences.colorFilterWhiteLevel().set(filter.whiteLevel)
+                            readerPreferences.colorFilterWarmth().set(filter.warmth)
+                            readerPreferences.invertedColors().set(filter.isInverted)
+                            readerPreferences.grayscale().set(filter.isGrayscale)
+                            readerPreferences.colorFilterBookEffect().set(filter.isBookBackground)
+                        },
+                        onReset = {
+                            readerPreferences.colorFilterBrightness().set(0f)
+                            readerPreferences.colorFilterContrast().set(0f)
+                            readerPreferences.colorFilterSaturation().set(1.0f)
+                            readerPreferences.colorFilterGamma().set(1.0f)
+                            readerPreferences.colorFilterBlackLevel().set(0f)
+                            readerPreferences.colorFilterWhiteLevel().set(1.0f)
+                            readerPreferences.colorFilterWarmth().set(0f)
+                            readerPreferences.invertedColors().set(false)
+                            readerPreferences.grayscale().set(false)
+                            readerPreferences.colorFilterBookEffect().set(false)
+                        },
                     )
                 }
 
@@ -1658,13 +1707,19 @@ class ReaderActivity : BaseActivity() {
                 .onEach(::setCustomBrightness)
                 .launchIn(lifecycleScope)
 
-            combine(
+            merge(
                 readerPreferences.grayscale().changes(),
                 readerPreferences.invertedColors().changes(),
-            ) { grayscale, invertedColors -> grayscale to invertedColors }
-                .onEach { (grayscale, invertedColors) ->
-                    setLayerPaint(grayscale, invertedColors)
-                }
+                readerPreferences.colorFilterBrightness().changes(),
+                readerPreferences.colorFilterContrast().changes(),
+                readerPreferences.colorFilterSaturation().changes(),
+                readerPreferences.colorFilterGamma().changes(),
+                readerPreferences.colorFilterBlackLevel().changes(),
+                readerPreferences.colorFilterWhiteLevel().changes(),
+                readerPreferences.colorFilterWarmth().changes(),
+                readerPreferences.colorFilterBookEffect().changes(),
+            )
+                .onEach { setLayerPaint() }
                 .launchIn(lifecycleScope)
 
             combine(
@@ -1785,8 +1840,25 @@ class ReaderActivity : BaseActivity() {
 
             viewModel.setBrightnessOverlayValue(value)
         }
-        private fun setLayerPaint(grayscale: Boolean, invertedColors: Boolean) {
-            val paint = if (grayscale || invertedColors) getCombinedPaint(grayscale, invertedColors) else null
+        private fun setLayerPaint() {
+            val filter = ReaderColorFilter(
+                brightness = readerPreferences.colorFilterBrightness().get(),
+                contrast = readerPreferences.colorFilterContrast().get(),
+                saturation = readerPreferences.colorFilterSaturation().get(),
+                gamma = readerPreferences.colorFilterGamma().get(),
+                blackLevel = readerPreferences.colorFilterBlackLevel().get(),
+                whiteLevel = readerPreferences.colorFilterWhiteLevel().get(),
+                warmth = readerPreferences.colorFilterWarmth().get(),
+                isInverted = readerPreferences.invertedColors().get(),
+                isGrayscale = readerPreferences.grayscale().get(),
+                isBookBackground = readerPreferences.colorFilterBookEffect().get(),
+            )
+            val colorFilter = filter.toColorFilter()
+            val paint = if (colorFilter != null) {
+                Paint().apply { this.colorFilter = colorFilter }
+            } else {
+                null
+            }
             binding.viewerContainer.setLayerType(LAYER_TYPE_HARDWARE, paint)
         }
     }

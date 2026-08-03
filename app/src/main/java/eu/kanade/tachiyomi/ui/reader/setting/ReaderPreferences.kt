@@ -145,6 +145,28 @@ class ReaderPreferences(
 
     fun invertedColors() = preferenceStore.getBoolean("pref_inverted_colors", false)
 
+    // KMK -->
+    fun colorFilterBrightness() = preferenceStore.getFloat("pref_color_filter_brightness_key", 0.0f)
+
+    fun colorFilterContrast() = preferenceStore.getFloat("pref_color_filter_contrast_key", 0.0f)
+
+    fun colorFilterSaturation() = preferenceStore.getFloat("pref_color_filter_saturation_key", 1.0f)
+
+    fun colorFilterGamma() = preferenceStore.getFloat("pref_color_filter_gamma_key", 1.0f)
+
+    fun colorFilterBlackLevel() = preferenceStore.getFloat("pref_color_filter_black_level_key", 0.0f)
+
+    fun colorFilterWhiteLevel() = preferenceStore.getFloat("pref_color_filter_white_level_key", 1.0f)
+
+    fun colorFilterWarmth() = preferenceStore.getFloat("pref_color_filter_warmth_key", 0.0f)
+
+    fun colorFilterCustomTint() = preferenceStore.getInt("pref_color_filter_custom_tint_key", 0)
+
+    fun colorFilterCustomTintOpacity() = preferenceStore.getFloat("pref_color_filter_custom_tint_opacity_key", 0.3f)
+
+    fun colorFilterBookEffect() = preferenceStore.getBoolean("pref_color_filter_book_effect_key", false)
+    // KMK <--
+
     // endregion
 
     // region Controls

@@ -43,8 +43,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.manga.components.MangaCover
@@ -494,30 +497,34 @@ fun KisaraNormalCard(
         }
     }
 
+    val primaryColor = MaterialTheme.colorScheme.primary
     val titleRow: @Composable (Color, Int) -> Unit = { textColor, maxLines ->
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = cleanTitleText,
-                fontSize = titleParams.fontSize,
-                lineHeight = titleParams.lineHeight,
-                letterSpacing = titleParams.letterSpacing,
-                color = textColor,
-                fontWeight = FontWeight.Bold,
-                maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            if (endingNumber != null) {
-                Text(
-                    text = " $endingNumber",
-                    fontSize = titleParams.fontSize,
-                    lineHeight = titleParams.lineHeight,
-                    letterSpacing = titleParams.letterSpacing,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+        val annotatedTitle = remember(cleanTitleText, endingNumber, primaryColor) {
+            buildAnnotatedString {
+                append(cleanTitleText)
+                if (endingNumber != null) {
+                    append(" ")
+                    withStyle(
+                        SpanStyle(
+                            color = primaryColor,
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                    ) {
+                        append(endingNumber)
+                    }
+                }
             }
         }
+        Text(
+            text = annotatedTitle,
+            fontSize = titleParams.fontSize,
+            lineHeight = titleParams.lineHeight,
+            letterSpacing = titleParams.letterSpacing,
+            color = textColor,
+            fontWeight = FontWeight.Bold,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 
     val badgesOverlay: @Composable BoxScope.() -> Unit = {

@@ -55,9 +55,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -313,36 +316,41 @@ private fun BoxScope.CoverTextOverlay(
                 }
             }
 
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = cleanTitleText,
-                    fontSize = params.fontSize,
-                    lineHeight = params.lineHeight,
-                    letterSpacing = params.letterSpacing,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.9f),
-                            blurRadius = 8f,
-                            offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-                        ),
-                    ),
-                )
-                if (endingNumber != null) {
-                    Text(
-                        text = " $endingNumber",
-                        fontSize = params.fontSize,
-                        lineHeight = params.lineHeight,
-                        letterSpacing = params.letterSpacing,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
+            val primaryColor = MaterialTheme.colorScheme.primary
+            val annotatedTitle = remember(cleanTitleText, endingNumber, primaryColor) {
+                buildAnnotatedString {
+                    append(cleanTitleText)
+                    if (endingNumber != null) {
+                        append(" ")
+                        withStyle(
+                            SpanStyle(
+                                color = primaryColor,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                        ) {
+                            append(endingNumber)
+                        }
+                    }
                 }
             }
+
+            Text(
+                text = annotatedTitle,
+                fontSize = params.fontSize,
+                lineHeight = params.lineHeight,
+                letterSpacing = params.letterSpacing,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.9f),
+                        blurRadius = 8f,
+                        offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+                    ),
+                ),
+            )
         }
         if (onClickContinueReading != null) {
             ContinueReadingButton(

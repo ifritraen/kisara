@@ -37,6 +37,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Close
@@ -237,9 +238,13 @@ data object LibraryTab : Tab {
         }
 
         // KMK -->
-        var activeSubcategoryId by remember { mutableStateOf<Long?>(null) }
+        var activeSubcategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+        var previousCategoryIndex by rememberSaveable { mutableStateOf<Int?>(null) }
         LaunchedEffect(state.activeCategoryIndex) {
-            activeSubcategoryId = null
+            if (previousCategoryIndex != null && previousCategoryIndex != state.activeCategoryIndex) {
+                activeSubcategoryId = null
+            }
+            previousCategoryIndex = state.activeCategoryIndex
         }
 
         val kisaraShowSubcategoriesInMainBar = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.kisaraShowSubcategoriesInMainBar().collectAsState().value
@@ -1128,10 +1133,15 @@ data object LibraryTab : Tab {
             val onDismissRequest = screenModel::closeDialog
             when (val dialog = state.dialog) {
                 is LibraryScreenModel.Dialog.SettingsSheet -> run {
+                    val activeCategoryForSettings = if (activeSubcategoryId != null) {
+                        state.libraryData.categories.find { it.id == activeSubcategoryId } ?: state.activeCategory
+                    } else {
+                        state.activeCategory
+                    }
                     LibrarySettingsDialog(
                         onDismissRequest = onDismissRequest,
                         screenModel = settingsScreenModel,
-                        category = state.activeCategory,
+                        category = activeCategoryForSettings,
                         // SY -->
                         hasCategories = state.libraryData.categories.fastAny { !it.isSystemCategory },
                         // SY <--

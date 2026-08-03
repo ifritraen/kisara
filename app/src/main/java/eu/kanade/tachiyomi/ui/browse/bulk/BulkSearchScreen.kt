@@ -30,12 +30,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -66,6 +68,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.components.InLibraryBadge
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.library.components.CommonMangaItemDefaults
+import eu.kanade.presentation.library.components.MangaCompactGridItem
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen
@@ -74,6 +78,7 @@ import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.CheckboxState
+import tachiyomi.core.common.util.QueryTransformer
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.model.Manga
@@ -352,34 +357,52 @@ data class BulkSearchScreen(
                     val oldQuery = queryToEdit!!
                     AlertDialog(
                         onDismissRequest = { queryToEdit = null },
-                        title = { Text("Edit Search Query") },
+                        shape = RoundedCornerShape(20.dp),
+                        title = { Text("Edit Search Query", fontWeight = FontWeight.Bold) },
                         text = {
                             Column {
-                                Text("Edit search query details:")
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Modify search query text:")
+                                Spacer(modifier = Modifier.height(10.dp))
                                 OutlinedTextField(
                                     value = editQueryText,
                                     onValueChange = { editQueryText = it },
                                     label = { Text("Search Query") },
                                     singleLine = true,
+                                    shape = RoundedCornerShape(14.dp),
+                                    trailingIcon = {
+                                        if (editQueryText.isNotEmpty()) {
+                                            IconButton(onClick = { editQueryText = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Clear,
+                                                    contentDescription = "Clear",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         },
                         confirmButton = {
-                            TextButton(
+                            Button(
                                 onClick = {
                                     if (editQueryText.isNotBlank()) {
                                         screenModel.editQuery(oldQuery, editQueryText.trim())
                                         queryToEdit = null
                                     }
                                 },
+                                enabled = editQueryText.isNotBlank(),
+                                shape = RoundedCornerShape(10.dp),
                             ) {
                                 Text("Save")
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { queryToEdit = null }) {
+                            TextButton(
+                                onClick = { queryToEdit = null },
+                                shape = RoundedCornerShape(10.dp),
+                            ) {
                                 Text("Cancel")
                             }
                         },
@@ -411,30 +434,30 @@ fun ResultMangaCard(
     }
 
     Column(
-        modifier = modifier
-            .width(120.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            ),
+        modifier = modifier.width(108.dp),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            MangaCover.Book(
-                data = manga.asMangaCover(),
-                modifier = Modifier.fillMaxSize(),
+            MangaCompactGridItem(
+                title = manga.title,
+                coverData = manga.asMangaCover(),
+                coverBadgeStart = {
+                    InLibraryBadge(enabled = isInLibrary)
+                },
+                isSelected = isSelected,
+                manga = manga,
+                coverAlpha = if (isInLibrary) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                onClick = onClick,
+                onLongClick = onLongClick,
             )
 
             // Selection indicator/overlay
             if (isMultiSelectActive) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(8.dp))
                         .background(
                             if (isSelected) {
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
@@ -468,65 +491,8 @@ fun ResultMangaCard(
                     }
                 }
             }
-
-            // In library badge
-            if (isInLibrary) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp),
-                ) {
-                    InLibraryBadge(enabled = true)
-                }
-            }
-
-            // Author & Artist overlay
-            if (!cleaned.author.isNullOrBlank() && !cleaned.artist.isNullOrBlank()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "${cleaned.author} / ${cleaned.artist}",
-                        color = androidx.compose.ui.graphics.Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
         }
-        Spacer(modifier = Modifier.height(2.dp))
-        var displayTitle by remember(cleaned.title) { mutableStateOf(cleaned.title) }
-        Text(
-            text = displayTitle,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            onTextLayout = { textLayoutResult ->
-                if (textLayoutResult.hasVisualOverflow) {
-                    val numberMatch = Regex("(\\d+)$").find(cleaned.title)
-                    if (numberMatch != null) {
-                        val numbers = numberMatch.groupValues[1]
-                        val lastLineIndex = (textLayoutResult.lineCount - 1).coerceAtMost(1)
-                        if (lastLineIndex >= 0) {
-                            val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex)
-                            val safeCut = (lastLineEndIndex - numbers.length - 3).coerceAtLeast(0)
-                            val newTitle = cleaned.title.substring(0, safeCut) + "…" + numbers
-                            if (newTitle != displayTitle) {
-                                displayTitle = newTitle
-                            }
-                        }
-                    }
-                }
-            },
-        )
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = source.name,
             fontSize = 10.sp,
@@ -534,6 +500,7 @@ fun ResultMangaCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 2.dp),
         )
         Text(
             text = subtitleText,
@@ -542,12 +509,14 @@ fun ResultMangaCard(
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 2.dp),
         )
     }
 }
 
 fun cleanMangaTitle(title: String): CleanedTitle {
-    val normalized = title.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'").trim()
+    val fixed = QueryTransformer.fixMissingLeadingBracket(title)
+    val normalized = fixed.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'").trim()
 
     var sequel: String? = null
     var workingTitle = normalized

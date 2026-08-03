@@ -130,6 +130,7 @@ fun GlassSurface(
 
     // Base color formula from Kototoro
     val baseColor = when {
+        isReaderSurface -> Color(0xFF1C1C1E)
         adjustedContainerAlpha >= 0.86f -> colorScheme.surfaceContainerHigh
         adjustedContainerAlpha >= 0.80f -> colorScheme.surfaceContainer
         else -> colorScheme.surfaceContainerLow
@@ -164,9 +165,13 @@ fun GlassSurface(
 
     val border = BorderStroke(
         width = 1.dp,
-        color = colorScheme.outlineVariant.copy(
-            alpha = if (isDarkTheme) style.borderAlpha.coerceIn(0.16f, 0.28f) else style.borderAlpha.coerceAtMost(0.18f),
-        ),
+        color = if (isReaderSurface) {
+            Color.White.copy(alpha = 0.12f)
+        } else {
+            colorScheme.outlineVariant.copy(
+                alpha = if (isDarkTheme) style.borderAlpha.coerceIn(0.16f, 0.28f) else style.borderAlpha.coerceAtMost(0.18f),
+            )
+        },
     )
 
     val hazeBypass = LocalHazeBypass.current
@@ -185,7 +190,7 @@ fun GlassSurface(
     }
 
     val hazeBackgroundColor = if (dialogSurface) Color.Transparent else containerColor
-    val surfaceColor = if (useRuntimeHaze && !isReaderSurface && !dialogSurface) Color.Transparent else containerColor
+    val surfaceColor = if (useRuntimeHaze && !dialogSurface) Color.Transparent else containerColor
 
     CompositionLocalProvider(LocalAbsoluteTonalElevation provides 0.dp) {
         Surface(

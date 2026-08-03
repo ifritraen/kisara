@@ -4,11 +4,47 @@ package tachiyomi.core.common.util
 object QueryTransformer {
 
     /**
+     * Fix missing opening brackets at the beginning of a query string (e.g. from OCR/Google Lens copy).
+     * e.g. "abc] title" -> "[abc] title", "author (artist)] title" -> "[author (artist)] title"
+     */
+    fun fixMissingLeadingBracket(input: String): String {
+        var result = input.trim()
+        if (result.isEmpty()) return result
+
+        var squareDepth = 0
+        for (char in result) {
+            if (char == '[') squareDepth++
+            else if (char == ']') {
+                squareDepth--
+                if (squareDepth < 0) {
+                    result = "[$result"
+                    break
+                }
+            }
+        }
+
+        var parenDepth = 0
+        for (char in result) {
+            if (char == '(') parenDepth++
+            else if (char == ')') {
+                parenDepth--
+                if (parenDepth < 0) {
+                    result = "($result"
+                    break
+                }
+            }
+        }
+
+        return result
+    }
+
+    /**
      * Clean mode: strip bracket-enclosed content, remove non-letter/space/digit chars, lowercase.
      * e.g. "[x (y)] Abc dEf - 2? [English] [Uncensored] [DCscan]" → "abc def 2"
      */
     fun clean(query: String): String {
-        return query
+        val fixed = fixMissingLeadingBracket(query)
+        return fixed
             .replace(Regex("\\(.*?\\)"), "")
             .replace(Regex("\\[.*?\\]"), "")
             .replace(Regex("\\{.*?\\}"), "")
@@ -20,7 +56,8 @@ object QueryTransformer {
 
     fun format(query: String, mode: Int = 1): String {
         if (mode == 0) return query
-        val normalized = query
+        val fixed = fixMissingLeadingBracket(query)
+        val normalized = fixed
             .replace("\u201c", "\"").replace("\u201d", "\"")
             .replace("\u2018", "'").replace("\u2019", "'")
 

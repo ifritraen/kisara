@@ -10,25 +10,25 @@
 
 
 # Keep common dependencies used in extensions
--keep,allowoptimization class androidx.preference.** { public protected *; }
--keep,allowoptimization class kotlin.** { public protected *; }
--keep,allowoptimization class kotlinx.coroutines.** { public protected *; }
--keep,allowoptimization class kotlinx.serialization.** { public protected *; }
--keep,allowoptimization class kotlin.time.** { public protected *; }
--keep,allowoptimization class okhttp3.** { public protected *; }
--keep,allowoptimization class okio.** { public protected *; }
--keep,allowoptimization class org.jsoup.** { public protected *; }
--keep,allowoptimization class rx.** { public protected *; }
--keep,allowoptimization class app.cash.quickjs.** { public protected *; }
--keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
+-keep class androidx.preference.** { *; }
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+-keep class kotlinx.serialization.** { *; }
+-keep class kotlin.time.** { *; }
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
+-keep class org.jsoup.** { *; }
+-keep class rx.** { *; }
+-keep class app.cash.quickjs.** { *; }
+-keep class uy.kohesive.injekt.** { *; }
 
 # From extensions-lib
--keep,allowoptimization class eu.kanade.tachiyomi.network.interceptor.RateLimitInterceptorKt { public protected *; }
--keep,allowoptimization class eu.kanade.tachiyomi.network.interceptor.SpecificHostRateLimitInterceptorKt { public protected *; }
--keep,allowoptimization class eu.kanade.tachiyomi.network.NetworkHelper { public protected *; }
--keep,allowoptimization class eu.kanade.tachiyomi.network.OkHttpExtensionsKt { public protected *; }
--keep,allowoptimization class eu.kanade.tachiyomi.network.RequestsKt { public protected *; }
--keep,allowoptimization class eu.kanade.tachiyomi.AppInfo { public protected *; }
+-keep class eu.kanade.tachiyomi.network.interceptor.RateLimitInterceptorKt { *; }
+-keep class eu.kanade.tachiyomi.network.interceptor.SpecificHostRateLimitInterceptorKt { *; }
+-keep class eu.kanade.tachiyomi.network.NetworkHelper { *; }
+-keep class eu.kanade.tachiyomi.network.OkHttpExtensionsKt { *; }
+-keep class eu.kanade.tachiyomi.network.RequestsKt { *; }
+-keep class eu.kanade.tachiyomi.AppInfo { *; }
 
 # Debug functions
 -keep,allowoptimization class exh.debug.DebugFunctions { public *; }
@@ -280,9 +280,9 @@
 
 # R8 full mode
  -keepattributes Signature
- -keep,allowoptimization class kotlin.coroutines.Continuation
- -keep,allowoptimization class * extends uy.kohesive.injekt.api.TypeReference
- -keep,allowoptimization public class io.requery.android.database.sqlite.SQLiteConnection { *; }
+ -keep class kotlin.coroutines.Continuation { *; }
+ -keep class * extends uy.kohesive.injekt.api.TypeReference { *; }
+ -keep public class io.requery.android.database.sqlite.SQLiteConnection { *; }
 
  # Keep apache http client
  -keep class org.apache.http.** { *; }

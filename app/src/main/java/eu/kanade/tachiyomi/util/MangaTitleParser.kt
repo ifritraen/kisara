@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.util
 
+import tachiyomi.core.common.util.QueryTransformer
 import tachiyomi.domain.manga.model.Manga
 
 object MangaTitleParser {
@@ -65,7 +66,7 @@ object MangaTitleParser {
     }
 
     private fun doParse(rawTitle: String): ParsedTitle {
-        var title = rawTitle.trim()
+        var title = QueryTransformer.fixMissingLeadingBracket(rawTitle.trim())
         val normalized = title.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
         title = normalized
 
