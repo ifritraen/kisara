@@ -13,8 +13,9 @@ object QueryTransformer {
 
         var squareDepth = 0
         for (char in result) {
-            if (char == '[') squareDepth++
-            else if (char == ']') {
+            if (char == '[') {
+                squareDepth++
+            } else if (char == ']') {
                 squareDepth--
                 if (squareDepth < 0) {
                     result = "[$result"
@@ -25,8 +26,9 @@ object QueryTransformer {
 
         var parenDepth = 0
         for (char in result) {
-            if (char == '(') parenDepth++
-            else if (char == ')') {
+            if (char == '(') {
+                parenDepth++
+            } else if (char == ')') {
                 parenDepth--
                 if (parenDepth < 0) {
                     result = "($result"
