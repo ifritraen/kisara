@@ -337,7 +337,9 @@ fun LibraryContent(
 
             val activeParentForSwipe = if (showParentFilters && parentCategories.isNotEmpty()) {
                 parentCategories.getOrNull(pagerState.currentPage)
-            } else null
+            } else {
+                null
+            }
             val subcategoriesForSwipe = activeParentForSwipe?.let { childrenByParent[it.id] }.orEmpty()
 
             Box(

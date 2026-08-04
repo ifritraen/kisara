@@ -1124,7 +1124,9 @@ class SettingsSuggestionsScreen : Screen() {
                             modifySuggestionTag.delete(tagToCustomize.tag)
                         }
                     }
-                } else null,
+                } else {
+                    null
+                },
             )
         }
 

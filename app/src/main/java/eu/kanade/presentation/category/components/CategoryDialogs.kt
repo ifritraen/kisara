@@ -496,7 +496,7 @@ fun ChangeCategoryDialog(
                                                 is CheckboxState.State -> subEntry.isChecked
                                             }
 
-                                             androidx.compose.material3.Surface(
+                                            androidx.compose.material3.Surface(
                                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                                                 color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                                 contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
