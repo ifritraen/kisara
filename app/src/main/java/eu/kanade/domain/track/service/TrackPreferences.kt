@@ -54,5 +54,16 @@ class TrackPreferences(
 
     // KMK -->
     fun autoSyncProgressFromTrackers() = preferenceStore.getBoolean("pref_auto_sync_progress_from_trackers_key", true)
+
+    fun primaryTracker() = preferenceStore.getLong("pref_primary_tracker_id", -1L)
+
+    fun getPrimaryTracker(trackerManager: eu.kanade.tachiyomi.data.track.TrackerManager): Tracker? {
+        val loggedInTrackers = trackerManager.loggedInTrackers()
+        if (loggedInTrackers.isEmpty()) return null
+        if (loggedInTrackers.size == 1) return loggedInTrackers.first()
+
+        val selectedId = primaryTracker().get()
+        return loggedInTrackers.find { it.id == selectedId } ?: loggedInTrackers.first()
+    }
     // KMK <--
 }

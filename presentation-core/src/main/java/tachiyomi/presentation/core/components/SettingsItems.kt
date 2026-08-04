@@ -160,6 +160,30 @@ fun CheckboxItem(label: String, checked: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+fun SwitchItem(label: String, pref: Preference<Boolean>) {
+    val checked by pref.collectAsState()
+    SwitchItem(
+        label = label,
+        checked = checked,
+        onClick = { pref.toggle() },
+    )
+}
+
+@Composable
+fun SwitchItem(label: String, checked: Boolean, onClick: () -> Unit) {
+    BaseSettingsItem(
+        label = label,
+        widget = {
+            androidx.compose.material3.Switch(
+                checked = checked,
+                onCheckedChange = null,
+            )
+        },
+        onClick = onClick,
+    )
+}
+
+@Composable
 fun RadioItem(label: String, selected: Boolean, onClick: () -> Unit) {
     BaseSettingsItem(
         label = label,

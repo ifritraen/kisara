@@ -210,6 +210,9 @@ class LandingScreenModel(
             updateManga.awaitUpdateFavorite(manga.id, true)
             val setMangaCategories = Injekt.get<SetMangaCategories>()
             setMangaCategories.await(manga.id, categories)
+            if (categories.isNotEmpty()) {
+                Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+            }
             updateLocalFavoriteState(manga.id, true)
             dismissDialog()
         }

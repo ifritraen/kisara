@@ -42,10 +42,12 @@ fun LibraryPager(
     onClickManga: (Category, LibraryManga) -> Unit,
     onLongClickManga: (Category, LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
+    userScrollEnabled: Boolean = false,
 ) {
     HorizontalPager(
         modifier = Modifier.fillMaxSize(),
         state = state,
+        userScrollEnabled = userScrollEnabled,
         verticalAlignment = Alignment.Top,
     ) { page ->
         if (page !in ((state.currentPage - 1)..(state.currentPage + 1))) {

@@ -149,6 +149,18 @@ object SettingsTrackingScreen : SearchableSettings {
                 preference = trackPreferences.autoSyncProgressFromTrackers(),
                 title = stringResource(KMR.strings.pref_auto_sync_progress_from_trackers),
             ),
+            // Primary Tracker Selection
+            run {
+                val loggedInTrackers = trackerManager.loggedInTrackers()
+                if (loggedInTrackers.size > 1) {
+                    Preference.PreferenceItem.ListPreference(
+                        preference = trackPreferences.primaryTracker(),
+                        entries = loggedInTrackers.associate { it.id to it.name }.toPersistentMap(),
+                        title = "Primary Tracker",
+                        subtitle = "Selected tracker used for auto-adding manga when categories are set",
+                    )
+                } else null
+            }.let { listOfNotNull(it) }.firstOrNull() ?: Preference.PreferenceItem.InfoPreference(""),
             // KMK <--
             // SY -->
             Preference.PreferenceItem.SwitchPreference(

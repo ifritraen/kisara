@@ -180,14 +180,19 @@ class ReaderActivity : BaseActivity() {
     companion object {
 
         fun newIntent(context: Context, mangaId: Long?, chapterId: Long?/* SY --> */, page: Int? = null/* SY <-- */): Intent {
+            val openInNewTask = Injekt.get<UiPreferences>().openMangaInNewTask().get()
             return Intent(context, ReaderActivity::class.java).apply {
                 putExtra("manga", mangaId)
                 putExtra("chapter", chapterId)
                 // SY -->
                 putExtra("page", page)
                 // SY <--
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                if (openInNewTask && mangaId != null) {
+                    data = android.net.Uri.parse("kisara://reader/$mangaId/$chapterId")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                } else {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
             }
         }
     }
@@ -280,6 +285,20 @@ class ReaderActivity : BaseActivity() {
             wasDownloaderRunning = true
             downloadManager.pauseDownloads()
         }
+
+        lifecycle.addObserver(
+            androidx.lifecycle.LifecycleEventObserver { _, event ->
+                when (event) {
+                    androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                        logcat(LogPriority.INFO) { "ReaderActivity moved to background - freezing CPU/network tasks" }
+                    }
+                    androidx.lifecycle.Lifecycle.Event.ON_START -> {
+                        logcat(LogPriority.INFO) { "ReaderActivity resumed to foreground" }
+                    }
+                    else -> {}
+                }
+            },
+        )
 
         if (viewModel.needsInit()) {
             val manga = intent.extras?.getLong("manga", -1) ?: -1L

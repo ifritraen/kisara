@@ -335,11 +335,7 @@ fun LibraryContent(
             var totalDragX by remember { mutableFloatStateOf(0f) }
             var isDragHandled by remember { mutableStateOf(false) }
 
-            val activeParentForSwipe = if (showParentFilters && parentCategories.isNotEmpty()) {
-                parentCategories.getOrNull(pagerState.currentPage)
-            } else {
-                null
-            }
+            val activeParentForSwipe = tabCategories.getOrNull(pagerState.currentPage)
             val subcategoriesForSwipe = activeParentForSwipe?.let { childrenByParent[it.id] }.orEmpty()
 
             Box(

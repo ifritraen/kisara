@@ -1026,6 +1026,9 @@ class MangaScreenModel(
     private fun moveMangaToCategory(categoryIds: List<Long>) {
         screenModelScope.launchIO {
             setMangaCategories.await(mangaId, categoryIds)
+            if (categoryIds.isNotEmpty()) {
+                uy.kohesive.injekt.Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(mangaId)
+            }
         }
     }
 

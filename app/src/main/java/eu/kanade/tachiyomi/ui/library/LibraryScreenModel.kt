@@ -1185,6 +1185,9 @@ class LibraryScreenModel(
                     .toList()
 
                 setMangaCategories.await(manga.id, categoryIds)
+                if (categoryIds.isNotEmpty()) {
+                    uy.kohesive.injekt.Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+                }
             }
         }
     }

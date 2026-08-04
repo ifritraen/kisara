@@ -152,9 +152,9 @@
         <activity
             android:name=".ui.reader.ReaderActivity"
             android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="${applicationId}.reader"
-            android:documentLaunchMode="always">
+            android:documentLaunchMode="always"
+            android:launchMode="standard"
+            android:taskAffinity="${applicationId}.reader">
             <intent-filter>
                 <action android:name="com.samsung.android.support.REMOTE_ACTION" />
             </intent-filter>

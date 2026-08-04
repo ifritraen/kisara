@@ -171,6 +171,9 @@ class SuggestionsScreenModel(
             updateManga.awaitUpdateFavorite(manga.id, true)
             val setMangaCategories = Injekt.get<SetMangaCategories>()
             setMangaCategories.await(manga.id, categoryIds)
+            if (categoryIds.isNotEmpty()) {
+                Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+            }
             updateLocalFavoriteState(manga.id, true)
             dismissDialog()
         }

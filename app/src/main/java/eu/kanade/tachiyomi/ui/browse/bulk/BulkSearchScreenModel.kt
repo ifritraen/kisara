@@ -139,6 +139,9 @@ class BulkSearchScreenModel(
             mangas.forEach { manga ->
                 updateManga.awaitUpdateFavorite(manga.id, true)
                 setMangaCategories.await(manga.id, categoryIds)
+                if (categoryIds.isNotEmpty()) {
+                    Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+                }
             }
         }
     }
@@ -152,6 +155,9 @@ class BulkSearchScreenModel(
             } else {
                 updateManga.awaitUpdateFavorite(manga.id, true)
                 setMangaCategories.await(manga.id, categoryIds)
+                if (categoryIds.isNotEmpty()) {
+                    Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+                }
             }
         }
     }

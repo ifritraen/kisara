@@ -13,45 +13,27 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences.Companion.ColorFi
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
+import tachiyomi.presentation.core.components.SwitchItem
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 
 @Composable
 internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
-    // 1. Toggles (Grayscale, Inverted, Sepia/Book)
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_grayscale),
-        pref = screenModel.preferences.grayscale(),
-    )
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_inverted_colors),
-        pref = screenModel.preferences.invertedColors(),
-    )
-    CheckboxItem(
-        label = "Book / Sepia Mode",
-        pref = screenModel.preferences.colorFilterBookEffect(),
-    )
-
-    // 2. Custom Brightness
-    val customBrightness by screenModel.preferences.customBrightness().collectAsState()
-    CheckboxItem(
+    // 1. Brightness & Contrast Sliders
+    val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
+    SliderItem(
+        value = customBrightnessValue,
+        valueRange = -75..100,
+        steps = 0,
         label = stringResource(MR.strings.pref_custom_brightness),
-        pref = screenModel.preferences.customBrightness(),
+        onChange = {
+            screenModel.preferences.customBrightness().set(it != 0)
+            screenModel.preferences.customBrightnessValue().set(it)
+        },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
-    if (customBrightness) {
-        val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
-        SliderItem(
-            value = customBrightnessValue,
-            valueRange = -75..100,
-            steps = 0,
-            label = stringResource(MR.strings.pref_custom_brightness),
-            onChange = { screenModel.preferences.customBrightnessValue().set(it) },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-    }
 
     // 3. Image Processing Sliders
     val contrast by screenModel.preferences.colorFilterContrast().collectAsState()
@@ -114,14 +96,8 @@ internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
         pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 
-    // 4. Custom Color Filter (AT THE VERY END)
-    val colorFilter by screenModel.preferences.colorFilter().collectAsState()
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_custom_color_filter),
-        pref = screenModel.preferences.colorFilter(),
-    )
-    if (colorFilter) {
-        val colorFilterValue by screenModel.preferences.colorFilterValue().collectAsState()
+    // 4. Custom Color Filter Channels (RGBA)
+    val colorFilterValue by screenModel.preferences.colorFilterValue().collectAsState()
         SliderItem(
             value = colorFilterValue.red,
             valueRange = 0..255,
@@ -181,7 +157,6 @@ internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
                 )
             }
         }
-    }
 }
 
 private fun getColorValue(currentColor: Int, color: Int, mask: Long, bitShift: Int): Int {

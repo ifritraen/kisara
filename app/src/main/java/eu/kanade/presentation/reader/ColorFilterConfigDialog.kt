@@ -89,17 +89,33 @@ fun ColorFilterConfigDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Quick Toggles
-                ToggleRow(label = "Invert Colors", checked = isInverted) {
-                    isInverted = it
+                // Special Effects Sliders
+                Text("Special Effects", style = MaterialTheme.typography.titleMedium)
+                SliderItem(
+                    label = "Invert Colors",
+                    value = if (isInverted) 1.0f else 0.0f,
+                    range = 0.0f..1.0f,
+                    valueText = if (isInverted) "100%" else "0%",
+                ) {
+                    isInverted = it >= 0.5f
                     notifyChanged()
                 }
-                ToggleRow(label = "Grayscale", checked = isGrayscale) {
-                    isGrayscale = it
+                SliderItem(
+                    label = "Grayscale",
+                    value = if (isGrayscale) 1.0f else 0.0f,
+                    range = 0.0f..1.0f,
+                    valueText = if (isGrayscale) "100%" else "0%",
+                ) {
+                    isGrayscale = it >= 0.5f
                     notifyChanged()
                 }
-                ToggleRow(label = "Sepia / Book Mode", checked = isBookBackground) {
-                    isBookBackground = it
+                SliderItem(
+                    label = "Sepia / Book Mode",
+                    value = if (isBookBackground) 1.0f else 0.0f,
+                    range = 0.0f..1.0f,
+                    valueText = if (isBookBackground) "100%" else "0%",
+                ) {
+                    isBookBackground = it >= 0.5f
                     notifyChanged()
                 }
 

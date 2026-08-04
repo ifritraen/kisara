@@ -51,6 +51,7 @@ class KMKDomainModule : InjektModule {
 
         // AutoTrack
         addFactory { eu.kanade.domain.track.interactor.AutoTrack(get(), get(), get()) }
+        addFactory { eu.kanade.domain.track.interactor.TrackOnCategorySet(get(), get(), get(), get()) }
 
         // Content Filter
         addFactory { tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent(get(), get(), get(), get()) }

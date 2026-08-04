@@ -276,6 +276,9 @@ class BulkFavoriteScreenModel(
     private fun moveMangaToCategory(mangaId: Long, categoryIds: List<Long>) {
         screenModelScope.launchIO {
             setMangaCategories.await(mangaId, categoryIds)
+            if (categoryIds.isNotEmpty()) {
+                Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(mangaId)
+            }
         }
     }
 
