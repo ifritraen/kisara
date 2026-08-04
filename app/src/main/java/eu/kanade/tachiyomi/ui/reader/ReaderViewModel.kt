@@ -504,7 +504,7 @@ class ReaderViewModel @JvmOverloads constructor(
 
                     // KMK -->
                     viewModelScope.launchIO {
-                        val autoTrackResults = autoTrack.execute(manga)
+                        val autoTrackResults = autoTrack.execute(manga, isReading = true)
                         if (autoTrackResults.isNotEmpty()) {
                             val firstResult = autoTrackResults.first()
                             mutableState.update {

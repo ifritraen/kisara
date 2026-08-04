@@ -37,12 +37,14 @@ android {
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
         buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
 
+        resValue("string", "app_name", "Kisara")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         val debug by getting {
             applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Kisara Dev")
             isPseudoLocalesEnabled = true
         }
         val release by getting {
@@ -60,6 +62,7 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".rt"
+            resValue("string", "app_name", "Kisara RT")
             isMinifyEnabled = false
             isShrinkResources = false
 
@@ -69,6 +72,7 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".foss"
+            resValue("string", "app_name", "Kisara FOSS")
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
         }
@@ -76,6 +80,7 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".beta"
+            resValue("string", "app_name", "Kisara Beta")
             signingConfig = debug.signingConfig
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
@@ -86,6 +91,7 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".alpha"
+            resValue("string", "app_name", "Kisara Alpha")
             signingConfig = debug.signingConfig
 
             matchingFallbacks.addAll(commonMatchingFallbacks)

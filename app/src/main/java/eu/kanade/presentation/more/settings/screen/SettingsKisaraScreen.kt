@@ -83,6 +83,7 @@ object SettingsKisaraScreen : SearchableSettings {
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val downloadPreferences = remember { Injekt.get<DownloadPreferences>() }
         // KMK -->
+        val trackPreferences = remember { Injekt.get<eu.kanade.domain.track.service.TrackPreferences>() }
         val sourcePrefs = remember { Injekt.get<eu.kanade.domain.source.service.SourcePreferences>() }
         val fuzzyThresholdPref = sourcePrefs.searchFuzzyThreshold()
         val fuzzyThreshold by fuzzyThresholdPref.collectAsState()
@@ -471,6 +472,21 @@ object SettingsKisaraScreen : SearchableSettings {
         }
 
         val allPreferences = listOf(
+            Preference.PreferenceGroup(
+                title = "Auto-Tracking Options",
+                preferenceItems = kotlinx.collections.immutable.persistentListOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = trackPreferences.trackOnAddToLibrary(),
+                        title = "Auto-track on adding to library",
+                        subtitle = "Automatically search and bind to primary tracker when adding manga to library or setting categories",
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = trackPreferences.trackOnStartReading(),
+                        title = "Auto-track on start reading",
+                        subtitle = "Automatically promote tracker status to Reading when starting to read a manga",
+                    ),
+                ),
+            ),
             Preference.PreferenceGroup(
                 title = "Layout & Appearance",
                 preferenceItems = buildList {

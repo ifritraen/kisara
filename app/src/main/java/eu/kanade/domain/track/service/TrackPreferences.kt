@@ -55,6 +55,10 @@ class TrackPreferences(
     // KMK -->
     fun autoSyncProgressFromTrackers() = preferenceStore.getBoolean("pref_auto_sync_progress_from_trackers_key", true)
 
+    fun trackOnAddToLibrary() = preferenceStore.getBoolean("pref_auto_track_on_add_to_library_key", true)
+
+    fun trackOnStartReading() = preferenceStore.getBoolean("pref_auto_track_on_start_reading_key", true)
+
     fun primaryTracker() = preferenceStore.getLong("pref_primary_tracker_id", -1L)
 
     fun getPrimaryTracker(trackerManager: eu.kanade.tachiyomi.data.track.TrackerManager): Tracker? {

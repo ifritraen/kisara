@@ -50,7 +50,7 @@ class KMKDomainModule : InjektModule {
         addFactory { tachiyomi.domain.pagebookmark.interactor.DeletePageBookmark(get()) }
 
         // AutoTrack
-        addFactory { eu.kanade.domain.track.interactor.AutoTrack(get(), get(), get()) }
+        addFactory { eu.kanade.domain.track.interactor.AutoTrack(get(), get(), get(), get(), get()) }
         addFactory { eu.kanade.domain.track.interactor.TrackOnCategorySet(get(), get(), get(), get()) }
 
         // Content Filter

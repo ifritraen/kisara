@@ -517,6 +517,14 @@ class MangaScreen(
                         onDismissRequest()
                         navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(dialog.manga.id))
                     },
+                    onDeleteManga = {
+                        screenModel.toggleFavorite(onRemoved = {}, checkDuplicate = false)
+                    },
+                    manga = dialog.manga,
+                    onOpenTrackerSearch = {
+                        onDismissRequest()
+                        navigator.push(eu.kanade.tachiyomi.ui.manga.track.TrackInfoDialogHomeScreen(mangaId = dialog.manga.id, mangaTitle = dialog.manga.title, sourceId = dialog.manga.source))
+                    },
                 )
             }
             is MangaScreenModel.Dialog.DeleteChapters -> {

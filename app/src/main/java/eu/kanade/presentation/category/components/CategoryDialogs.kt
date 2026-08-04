@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CopyAll
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -43,19 +44,30 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.core.preference.asToggleableState
+import eu.kanade.domain.track.interactor.AddTracks
+import eu.kanade.domain.track.model.toDbTrack
+import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.category.buildCategoryHierarchy
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
+import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.data.track.TrackerManager
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
+import logcat.LogPriority
 import tachiyomi.core.common.preference.CheckboxState
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.track.interactor.GetTracks
+import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -323,6 +335,9 @@ fun ChangeCategoryDialog(
     onConfirm: (List<Long>, List<Long>) -> Unit,
     // KMK -->
     onDuplicateCheck: (() -> Unit)? = null,
+    onDeleteManga: (() -> Unit)? = null,
+    manga: tachiyomi.domain.manga.model.Manga? = null,
+    onOpenTrackerSearch: (() -> Unit)? = null,
     // KMK <--
 ) {
     if (initialSelection.isEmpty()) {
@@ -349,6 +364,50 @@ fun ChangeCategoryDialog(
     }
 
     var selection by remember { mutableStateOf(initialSelection) }
+
+    val trackerManager = remember { Injekt.get<TrackerManager>() }
+    val trackPreferences = remember { Injekt.get<TrackPreferences>() }
+    val getTracks = remember { Injekt.get<GetTracks>() }
+    val insertTrack = remember { Injekt.get<InsertTrack>() }
+    val addTracks = remember { Injekt.get<AddTracks>() }
+    val primaryTracker: Tracker? = remember { trackPreferences.getPrimaryTracker(trackerManager) }
+
+    var trackerTitle by remember { mutableStateOf<String?>(null) }
+    var currentTrack by remember { mutableStateOf<tachiyomi.domain.track.model.Track?>(null) }
+    var trackerStatus by remember { mutableStateOf<Long?>(null) }
+    var showStatusDropdown by remember { mutableStateOf(false) }
+
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    LaunchedEffect(manga, primaryTracker) {
+        val pTracker = primaryTracker
+        val currentManga = manga
+        if (pTracker != null && pTracker.isLoggedIn && currentManga != null) {
+            val tracks = try {
+                getTracks.await(currentManga.id)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val existing = tracks.find { it.trackerId == pTracker.id }
+            if (existing != null) {
+                currentTrack = existing
+                trackerTitle = existing.title.ifBlank { currentManga.title }
+                trackerStatus = existing.status
+            } else {
+                try {
+                    val searchResults = pTracker.search(currentManga.title)
+                    val match = searchResults.firstOrNull { it.title.equals(currentManga.title, ignoreCase = true) }
+                        ?: searchResults.firstOrNull()
+                    if (match != null) {
+                        trackerTitle = match.title
+                        trackerStatus = pTracker.getReadingStatus()
+                    }
+                } catch (e: Exception) {
+                    // Ignore search errors
+                }
+            }
+        }
+    }
 
     val parents = remember(selection) {
         selection.filter { it.value.parentId == null }
@@ -409,12 +468,118 @@ fun ChangeCategoryDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = stringResource(MR.strings.action_move_category),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
+                        if (primaryTracker != null && primaryTracker.isLoggedIn && trackerTitle != null) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Box 1: Title
+                                androidx.compose.material3.Surface(
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(
+                                        text = trackerTitle.orEmpty(),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    )
+                                }
+
+                                // Box 2: Status
+                                Box {
+                                    val statusList = remember(primaryTracker) { primaryTracker.getStatusList() }
+                                    val currentRes = trackerStatus?.let { primaryTracker.getStatus(it) }
+                                    val statusText = if (currentRes != null) stringResource(currentRes) else "Plan to read"
+
+                                    androidx.compose.material3.Surface(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.clickable { showStatusDropdown = true },
+                                    ) {
+                                        Text(
+                                            text = statusText,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        )
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showStatusDropdown,
+                                        onDismissRequest = { showStatusDropdown = false },
+                                    ) {
+                                        statusList.forEach { statusId ->
+                                            val stringRes = primaryTracker.getStatus(statusId) ?: return@forEach
+                                            val label = stringResource(stringRes)
+                                            DropdownMenuItem(
+                                                text = { Text(label) },
+                                                onClick = {
+                                                    showStatusDropdown = false
+                                                    trackerStatus = statusId
+                                                    val existing = currentTrack
+                                                    val currentManga = manga
+                                                    if (existing != null) {
+                                                        tachiyomi.core.common.util.lang.launchIO {
+                                                            try {
+                                                                val dbTrack = existing.toDbTrack()
+                                                                primaryTracker.setRemoteStatus(dbTrack, statusId)
+                                                                insertTrack.await(existing.copy(status = statusId))
+                                                            } catch (e: Exception) {
+                                                                logcat(LogPriority.WARN, e) { "Failed status update" }
+                                                            }
+                                                        }
+                                                    } else if (currentManga != null) {
+                                                        tachiyomi.core.common.util.lang.launchIO {
+                                                            try {
+                                                                val searchResults = primaryTracker.search(currentManga.title)
+                                                                val match = searchResults.firstOrNull() ?: return@launchIO
+                                                                match.manga_id = currentManga.id
+                                                                addTracks.bind(primaryTracker, match, currentManga.id)
+                                                                val newTracks = getTracks.await(currentManga.id)
+                                                                val newlyAdded = newTracks.find { it.trackerId == primaryTracker.id }
+                                                                if (newlyAdded != null) {
+                                                                    primaryTracker.setRemoteStatus(newlyAdded.toDbTrack(), statusId)
+                                                                    insertTrack.await(newlyAdded.copy(status = statusId))
+                                                                    currentTrack = newlyAdded
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                logcat(LogPriority.WARN, e) { "Failed to bind and set status" }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Edit / Search Button
+                                if (onOpenTrackerSearch != null) {
+                                    IconButton(
+                                        onClick = onOpenTrackerSearch,
+                                        modifier = Modifier.size(32.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = androidx.compose.material.icons.Icons.Outlined.Edit,
+                                            contentDescription = "Edit Tracker",
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(MR.strings.action_move_category),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+
                         if (onDuplicateCheck != null) {
                             IconButton(onClick = onDuplicateCheck) {
                                 Icon(
@@ -509,18 +674,26 @@ fun ChangeCategoryDialog(
                                                 ) {
                                                     when (subEntry) {
                                                         is CheckboxState.TriState -> {
-                                                            TriStateCheckbox(
-                                                                state = subEntry.asToggleableState(),
-                                                                onClick = { onChange(subEntry) },
-                                                                modifier = Modifier.size(24.dp),
-                                                            )
+                                                            androidx.compose.runtime.CompositionLocalProvider(
+                                                                androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp,
+                                                            ) {
+                                                                TriStateCheckbox(
+                                                                    state = subEntry.asToggleableState(),
+                                                                    onClick = { onChange(subEntry) },
+                                                                    modifier = Modifier.size(16.dp),
+                                                                )
+                                                            }
                                                         }
                                                         is CheckboxState.State -> {
-                                                            Checkbox(
-                                                                checked = subEntry.isChecked,
-                                                                onCheckedChange = { onChange(subEntry) },
-                                                                modifier = Modifier.size(24.dp),
-                                                            )
+                                                            androidx.compose.runtime.CompositionLocalProvider(
+                                                                androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp,
+                                                            ) {
+                                                                Checkbox(
+                                                                    checked = subEntry.isChecked,
+                                                                    onCheckedChange = { onChange(subEntry) },
+                                                                    modifier = Modifier.size(16.dp),
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                     Text(
@@ -546,6 +719,18 @@ fun ChangeCategoryDialog(
                             onEditCategories()
                         }) {
                             Text(text = stringResource(MR.strings.action_edit))
+                        }
+                        if (onDeleteManga != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            tachiyomi.presentation.core.components.material.TextButton(onClick = {
+                                onDismissRequest()
+                                onDeleteManga()
+                            }) {
+                                Text(
+                                    text = stringResource(MR.strings.action_delete),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.weight(1f))
                         tachiyomi.presentation.core.components.material.TextButton(onClick = onDismissRequest) {

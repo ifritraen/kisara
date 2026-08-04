@@ -26,7 +26,19 @@ import tachiyomi.domain.logbook.model.LogbookEntry
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class LogbookTabScreen : Screen() {
+class LogbookTabScreen : eu.kanade.presentation.more.settings.screen.SearchableSettings {
+
+    @Composable
+    @androidx.compose.runtime.ReadOnlyComposable
+    override fun getTitleRes(): dev.icerock.moko.resources.StringResource = tachiyomi.i18n.kmk.KMR.strings.label_logbook
+
+    @Composable
+    override fun getPreferences(): List<eu.kanade.presentation.more.settings.Preference> = listOf(
+        eu.kanade.presentation.more.settings.Preference.PreferenceItem.TextPreference(
+            title = tachiyomi.presentation.core.i18n.stringResource(tachiyomi.i18n.kmk.KMR.strings.label_logbook),
+            subtitle = "View app activity logs and history",
+        ),
+    )
 
     @Composable
     override fun Content() {

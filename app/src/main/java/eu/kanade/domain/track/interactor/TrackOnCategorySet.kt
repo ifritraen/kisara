@@ -26,6 +26,7 @@ class TrackOnCategorySet(
     }
 
     suspend fun execute(manga: Manga) = withIOContext {
+        if (!trackPreferences.trackOnAddToLibrary().get()) return@withIOContext
         val primaryTracker = trackPreferences.getPrimaryTracker(trackerManager) ?: return@withIOContext
         if (!primaryTracker.isLoggedIn) return@withIOContext
 

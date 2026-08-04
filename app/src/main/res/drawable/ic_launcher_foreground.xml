@@ -1,14 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-  <!-- Red Sun -->
-  <path
-      android:fillColor="#E63946"
-      android:pathData="M54,46 m-20,0 a20,20 0 1,1 40,0 a20,20 0 1,1 -40,0"/>
-  <!-- Black Cloud -->
-  <path
-      android:fillColor="#1A1A1A"
-      android:pathData="M32,68 h44 c6,0 8,-10 0,-12 c0,-16 -20,-16 -22,0 c-2,-14 -20,-10 -20,6 c-4,0 -4,6 -2,6 z"/>
-</vector>
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/kisara"
+    android:inset="18%" />

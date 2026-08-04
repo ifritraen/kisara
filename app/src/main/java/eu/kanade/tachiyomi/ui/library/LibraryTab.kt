@@ -1151,6 +1151,7 @@ data object LibraryTab : Tab {
                     )
                 }
                 is LibraryScreenModel.Dialog.ChangeCategory -> {
+                    val targetManga = dialog.manga.firstOrNull()
                     ChangeCategoryDialog(
                         initialSelection = dialog.initialSelection,
                         onDismissRequest = onDismissRequest,
@@ -1167,6 +1168,16 @@ data object LibraryTab : Tab {
                         onDuplicateCheck = {
                             onDismissRequest()
                             navigator.push(DuplicateMangaScreen(dialog.manga.map { it.id }))
+                        },
+                        onDeleteManga = {
+                            screenModel.removeMangas(dialog.manga, deleteFromLibrary = true, deleteChapters = false)
+                        },
+                        manga = targetManga,
+                        onOpenTrackerSearch = {
+                            if (targetManga != null) {
+                                onDismissRequest()
+                                navigator.push(eu.kanade.tachiyomi.ui.manga.track.TrackInfoDialogHomeScreen(mangaId = targetManga.id, mangaTitle = targetManga.title, sourceId = targetManga.source))
+                            }
                         },
                     )
                 }
