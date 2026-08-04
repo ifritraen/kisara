@@ -54,6 +54,15 @@ jobs:
           fi
           ./gradlew assemblePreview $FLAGS
 
+      - name: Sign APK with Persistent Keystore
+        uses: rnhmjoj/android-sign-action@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/preview
+          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
+          alias: ${{ secrets.RELEASE_KEYSTORE_ALIAS }}
+          keyStorePassword: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
       - name: Package & Rename Output APK
         id: package
         run: |

@@ -6,12 +6,15 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,6 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +40,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -323,27 +330,104 @@ fun LibraryContent(
                 }
             }
 
-            LibraryPager(
-                state = pagerState,
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
-                hasActiveFilters = hasActiveFilters,
-                selection = selection,
-                searchQuery = searchQuery,
-                onGlobalSearchClicked = onGlobalSearchClicked,
-                getCategoryForPage = { page -> tabCategories[page] },
-                getDisplayMode = getDisplayMode,
-                getColumnsForOrientation = getColumnsForOrientation,
-                getItemsForCategory = wrappedGetItemsForCategory,
-                onClickManga = { category, manga ->
-                    if (selection.isNotEmpty()) {
-                        onToggleSelection(category, manga)
-                    } else {
-                        onClickManga(manga.manga.id)
-                    }
-                },
-                onLongClickManga = onToggleRangeSelection,
-                onClickContinueReading = onContinueReadingClicked,
-            )
+            var containerHeight by remember { mutableIntStateOf(0) }
+            var touchY by remember { mutableFloatStateOf(0f) }
+            var totalDragX by remember { mutableFloatStateOf(0f) }
+            var isDragHandled by remember { mutableStateOf(false) }
+
+            val activeParentForSwipe = if (showParentFilters && parentCategories.isNotEmpty()) {
+                parentCategories.getOrNull(pagerState.currentPage)
+            } else null
+            val subcategoriesForSwipe = activeParentForSwipe?.let { childrenByParent[it.id] }.orEmpty()
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { containerHeight = it.height }
+                    .pointerInput(pagerState.currentPage, activeSubcategoryId, subcategoriesForSwipe) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                touchY = offset.y
+                                totalDragX = 0f
+                                isDragHandled = false
+                            },
+                            onDragEnd = {
+                                totalDragX = 0f
+                                isDragHandled = false
+                            },
+                            onDragCancel = {
+                                totalDragX = 0f
+                                isDragHandled = false
+                            },
+                            onHorizontalDrag = { _, dragAmount ->
+                                totalDragX += dragAmount
+                                if (!isDragHandled && kotlin.math.abs(totalDragX) > 60f) {
+                                    isDragHandled = true
+                                    val isTopHalf = touchY < (containerHeight / 2f)
+                                    val isLeftSwipe = totalDragX < 0
+
+                                    if (isTopHalf) {
+                                        // Top Half: Direct parent category swipe
+                                        scope.launch {
+                                            if (isLeftSwipe && pagerState.currentPage < pagerState.pageCount - 1) {
+                                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                            } else if (!isLeftSwipe && pagerState.currentPage > 0) {
+                                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                            }
+                                        }
+                                    } else {
+                                        // Bottom Half: Subcategory swipe
+                                        scope.launch {
+                                            val subcategoryList = listOf<Long?>(null) + subcategoriesForSwipe.map { it.id }
+                                            val currentIndex = subcategoryList.indexOf(activeSubcategoryId).coerceAtLeast(0)
+
+                                            if (isLeftSwipe) {
+                                                if (currentIndex < subcategoryList.lastIndex) {
+                                                    onSubcategorySelected(subcategoryList[currentIndex + 1])
+                                                } else if (pagerState.currentPage < pagerState.pageCount - 1) {
+                                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                                    onSubcategorySelected(null)
+                                                }
+                                            } else {
+                                                if (currentIndex > 0) {
+                                                    onSubcategorySelected(subcategoryList[currentIndex - 1])
+                                                } else if (pagerState.currentPage > 0) {
+                                                    val targetPage = pagerState.currentPage - 1
+                                                    val prevParent = tabCategories.getOrNull(targetPage)
+                                                    val prevSubs = prevParent?.let { childrenByParent[it.id] }.orEmpty()
+                                                    pagerState.animateScrollToPage(targetPage)
+                                                    onSubcategorySelected(prevSubs.lastOrNull()?.id)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    },
+            ) {
+                LibraryPager(
+                    state = pagerState,
+                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                    hasActiveFilters = hasActiveFilters,
+                    selection = selection,
+                    searchQuery = searchQuery,
+                    onGlobalSearchClicked = onGlobalSearchClicked,
+                    getCategoryForPage = { page -> tabCategories[page] },
+                    getDisplayMode = getDisplayMode,
+                    getColumnsForOrientation = getColumnsForOrientation,
+                    getItemsForCategory = wrappedGetItemsForCategory,
+                    onClickManga = { category, manga ->
+                        if (selection.isNotEmpty()) {
+                            onToggleSelection(category, manga)
+                        } else {
+                            onClickManga(manga.manga.id)
+                        }
+                    },
+                    onLongClickManga = onToggleRangeSelection,
+                    onClickContinueReading = onContinueReadingClicked,
+                )
+            }
         }
 
         LaunchedEffect(pagerState.currentPage) {

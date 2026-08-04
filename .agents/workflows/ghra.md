@@ -15,28 +15,44 @@ description: Push project to GitHub under `ifritraen` identity, auto-sanitize cr
 - **Sanitization Checklist**:
   - Scan staged files, commit messages, code comments, and metadata.
   - Instantly purge/remove any occurrences of `akhlak` or `akhla`.
-- Configure Git credentials:
+- Configure Git credentials & active account:
   ```powershell
+  gh auth switch --user ifritraen
   git config user.name "ifritraen"
   git config user.email "ifrit.raen@gmail.com"
   ```
 
 ## 2. Version Bump Engine (Single Source of Truth)
-- Always sync versioning from `pubspec.yaml` so tag, title, and APK filenames match 100%.
+- Always sync versioning from `pubspec.yaml` or `build.gradle.kts` so tag, title, and APK filenames match 100%.
 - Inspect prompt to determine increment tier:
   - **New Major Version** (contains 'new version' or 'v2'): `+1.0.0`
   - **Feature Update** (contains 'major' or 'big'): `+0.1.0`
   - **Patch Update** (default): `+0.0.1`
-- Update `pubspec.yaml` version line (`version: X.Y.Z+B`).
+- Update `pubspec.yaml` version line (`version: X.Y.Z+B`) or `build.gradle.kts` version variables (`major`, `minor`, `patch`).
 
-## 3. Persistent Keystore & CI/CD Workflow Audit
-- Verify `.github/workflows/build.yml` exists. If missing or inconsistent, write full CI/CD configuration:
-  - Trigger on push to `master`, `main` and `v*` tags.
-  - Dynamically extract version string from `pubspec.yaml` or `build.gradle.kts`.
-  - **Build Signature Consistency (CRITICAL)**: Always restore and decode persistent release keystore Base64 (`PS_RELEASE_KEY_FILE` or `GH_RELEASE_KEYSTORE_PATH`) before compilation so that both release and CI workflows produce identically signed release APKs (`<AppName>_v<Version>-release.apk`).
-  - Run code analysis/checks prior to build.
-  - Build signed release APKs/AABs.
-  - Publish GitHub Release via `softprops/action-gh-release@v2`.
+## 3. Persistent Keystore & CI/CD Workflow Audit (STRICT)
+- Verify `.github/workflows/build.yml` exists. If missing or inconsistent, write full CI/CD configuration.
+- **Persistent Build Signature Creation & Management (CRITICAL)**:
+  1. **Local Keystore Generation**: If a persistent release keystore does not exist for the project, generate a 10,000-day valid RSA keystore (e.g. `.aaa/<app_name>-release.keystore` with alias and password). Ensure `.aaa/` and `*.jks` are in `.gitignore`.
+  2. **Base64 Conversion & Secret Upload**:
+     - Convert the keystore file to Base64: `[System.Convert]::ToBase64String([IO.File]::ReadAllBytes("<path_to_keystore>"))`.
+     - Upload to GitHub Repo secrets via `gh secret set`:
+       - `KEYSTORE_BASE64` (Base64-encoded keystore file content)
+       - `RELEASE_KEYSTORE_PASSWORD` (keystore password)
+       - `RELEASE_KEYSTORE_ALIAS` (key alias name)
+       - `RELEASE_KEY_PASSWORD` (key password)
+  3. **CI Workflow Signing Step**: Ensure `.github/workflows/build.yml` contains a dedicated signing step using `rnhmjoj/android-sign-action@v1` (or equivalent) that decodes `KEYSTORE_BASE64` and signs compiled APKs before packaging/release:
+     ```yaml
+     - name: Sign APK with Persistent Keystore
+       uses: rnhmjoj/android-sign-action@v1
+       with:
+         releaseDirectory: app/build/outputs/apk/preview
+         signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
+         alias: ${{ secrets.RELEASE_KEYSTORE_ALIAS }}
+         keyStorePassword: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+         keyPassword: ${{ secrets.RELEASE_KEY_PASSWORD }}
+     ```
+  4. **Signature Consistency**: All release and CI builds MUST produce identically signed APKs so users can update without encountering package conflict / signature mismatch errors.
 
 ## 4. Commit & Push
 - Stage specific changed files (never `git add .`).

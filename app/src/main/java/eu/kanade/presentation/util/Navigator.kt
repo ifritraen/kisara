@@ -26,6 +26,8 @@ import logcat.LogPriority
 import logcat.logcat
 import soup.compose.material.motion.animation.materialSharedAxisX
 import soup.compose.material.motion.animation.rememberSlideDistance
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * For invoking back press to the parent activity
@@ -61,6 +63,15 @@ val ScreenModel.ioCoroutineScope: CoroutineScope
 
 interface AssistContentScreen {
     fun onProvideAssistUrl(): String?
+}
+
+fun Navigator?.openManga(context: android.content.Context, mangaId: Long, fromSource: Boolean = false) {
+    val uiPreferences = uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>()
+    if (uiPreferences.openMangaInNewTask().get()) {
+        context.startActivity(eu.kanade.tachiyomi.ui.manga.MangaActivity.newIntent(context, mangaId, fromSource))
+    } else {
+        this?.push(eu.kanade.tachiyomi.ui.manga.MangaScreen(mangaId, fromSource))
+    }
 }
 
 @Composable

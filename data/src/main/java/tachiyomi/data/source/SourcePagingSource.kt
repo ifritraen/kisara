@@ -83,12 +83,16 @@ abstract class BaseSourcePagingSource(
         }
         // SY <--
 
+        val filterMangaByBlockedContent = Injekt.get<tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent>()
+        val filters = filterMangaByBlockedContent.getBlockedFilters()
+
         val manga = mangasPage.mangas
             // SY -->
             .mapIndexed { index, sManga -> sManga.toDomainManga(source.id) to metadata.getOrNull(index) }
             .filter { seenManga.add(it.first.url) }
             // KMK -->
             .let { pairs -> networkToLocalManga(pairs.map { it.first }).zip(pairs.map { it.second }) }
+            .filterNot { (mangaItem, _) -> filterMangaByBlockedContent.isMangaBlocked(mangaItem, filters) }
         // KMK <--
         // SY <--
 

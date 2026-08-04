@@ -409,6 +409,10 @@ internal object ExtensionLoader {
         } else {
             appInfo.sourceDir
         }
+        val loadFile = java.io.File(loadPath)
+        if (loadFile.exists()) {
+            loadFile.setReadOnly()
+        }
         val classLoader = try {
             ChildFirstPathClassLoader(loadPath, null, context.classLoader)
         } catch (e: Exception) {

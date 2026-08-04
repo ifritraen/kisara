@@ -136,6 +136,7 @@ class UiPreferences(
     fun bottomBarVerticalPadding() = preferenceStore.getInt("kisara_bottom_bar_vertical_padding", 2)
     fun bottomBarCornerRadius() = preferenceStore.getInt("kisara_bottom_bar_corner_radius", 24)
     fun bottomBarButtonSize() = preferenceStore.getInt("kisara_bottom_bar_button_size_dp", 32)
+    fun openMangaInNewTask() = preferenceStore.getBoolean("kisara_open_manga_in_new_task", true)
 
     // Standard Bottom Bar Customizations
     fun standardBottomBarHeight() = preferenceStore.getInt("kisara_standard_bottom_bar_height", 80)

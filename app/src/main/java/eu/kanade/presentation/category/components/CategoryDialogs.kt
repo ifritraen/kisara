@@ -496,32 +496,37 @@ fun ChangeCategoryDialog(
                                                 is CheckboxState.State -> subEntry.isChecked
                                             }
 
-                                            androidx.compose.material3.Surface(
+                                             androidx.compose.material3.Surface(
                                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                                                 color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                                 contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.clickable { onChange(subEntry) },
+                                                modifier = Modifier.clickable { onDirectAdd(sub.id) },
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                 ) {
+                                                    when (subEntry) {
+                                                        is CheckboxState.TriState -> {
+                                                            TriStateCheckbox(
+                                                                state = subEntry.asToggleableState(),
+                                                                onClick = { onChange(subEntry) },
+                                                                modifier = Modifier.size(24.dp),
+                                                            )
+                                                        }
+                                                        is CheckboxState.State -> {
+                                                            Checkbox(
+                                                                checked = subEntry.isChecked,
+                                                                onCheckedChange = { onChange(subEntry) },
+                                                                modifier = Modifier.size(24.dp),
+                                                            )
+                                                        }
+                                                    }
                                                     Text(
                                                         text = sub.visualName,
                                                         style = MaterialTheme.typography.bodyMedium,
                                                     )
-                                                    androidx.compose.material3.IconButton(
-                                                        onClick = { onDirectAdd(sub.id) },
-                                                        modifier = Modifier.size(20.dp),
-                                                    ) {
-                                                        androidx.compose.material3.Icon(
-                                                            imageVector = Icons.Default.Add,
-                                                            contentDescription = "Direct Add",
-                                                            modifier = Modifier.size(12.dp),
-                                                            tint = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
-                                                        )
-                                                    }
                                                 }
                                             }
                                         }

@@ -1,7 +1,9 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -120,6 +122,7 @@ class SettingsSuggestionsScreen : Screen() {
         var showAddSourceDialog by remember { mutableStateOf(false) }
         var showAddAuthorDialog by remember { mutableStateOf(false) }
         var showAddArtistDialog by remember { mutableStateOf(false) }
+        var selectedCustomizationTag by remember { mutableStateOf<SuggestionTag?>(null) }
 
         var maxTagsToMatch by remember { mutableStateOf(suggestionsPreferences.maxTagsToMatch().get()) }
         var maxSourcesToFetch by remember { mutableStateOf(suggestionsPreferences.maxSourcesToFetch().get()) }
@@ -412,7 +415,12 @@ class SettingsSuggestionsScreen : Screen() {
                             key = { _, item -> "count-tag-${item.tag}" },
                         ) { _, item ->
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = { selectedCustomizationTag = item },
+                                    ),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)),
                             ) {
                                 Row(
@@ -803,7 +811,12 @@ class SettingsSuggestionsScreen : Screen() {
                                 key = "tag-${item.tag}",
                             ) {
                                 Card(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClick = {},
+                                            onLongClick = { selectedCustomizationTag = item },
+                                        ),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                     border = CardDefaults.outlinedCardBorder(),
                                 ) {
@@ -1081,6 +1094,40 @@ class SettingsSuggestionsScreen : Screen() {
             },
         )
 
+        // Tag Customization Dialog on Hold
+        val tagToCustomize = selectedCustomizationTag
+        if (tagToCustomize != null) {
+            val isTagInOrderList = remember(activeTags, tagToCustomize.tag) {
+                activeTags.any { it.tag == tagToCustomize.tag }
+            }
+            TagCustomizationDialog(
+                tag = tagToCustomize,
+                isInOrderList = isTagInOrderList,
+                onDismissRequest = { selectedCustomizationTag = null },
+                onToggleBlock = {
+                    scope.launch {
+                        modifySuggestionTag.toggleBlock(tagToCustomize.tag)
+                    }
+                },
+                onToggleOrder = {
+                    scope.launch {
+                        if (isTagInOrderList) {
+                            modifySuggestionTag.delete(tagToCustomize.tag)
+                        } else {
+                            modifySuggestionTag.addTag(tagToCustomize.tag)
+                        }
+                    }
+                },
+                onDelete = if (tagToCustomize.isUserAdded) {
+                    {
+                        scope.launch {
+                            modifySuggestionTag.delete(tagToCustomize.tag)
+                        }
+                    }
+                } else null,
+            )
+        }
+
         // Add Tag Dialog
         if (showAddTagDialog) {
             var newTagText by remember { mutableStateOf("") }
@@ -1339,4 +1386,102 @@ private fun SuggestionsReportPreference() {
             },
         )
     }
+}
+
+@Composable
+private fun TagCustomizationDialog(
+    tag: SuggestionTag,
+    isInOrderList: Boolean,
+    onDismissRequest: () -> Unit,
+    onToggleBlock: () -> Unit,
+    onToggleOrder: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(text = "Tag: ${tag.tag}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Favorites Count: ${tag.count}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onToggleBlock()
+                            onDismissRequest()
+                        }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (tag.isBlocked) Icons.Outlined.Check else Icons.Outlined.Block,
+                        contentDescription = null,
+                        tint = if (tag.isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = if (tag.isBlocked) "Unblock Tag" else "Block Tag",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onToggleOrder()
+                            onDismissRequest()
+                        }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (isInOrderList) Icons.Outlined.Delete else Icons.Outlined.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = if (isInOrderList) "Remove from Order List" else "Add to Order List",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+
+                if (onDelete != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onDelete()
+                                onDismissRequest()
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Delete Custom Tag",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_ok))
+            }
+        },
+    )
 }

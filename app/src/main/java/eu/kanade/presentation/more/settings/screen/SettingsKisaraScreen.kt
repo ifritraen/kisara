@@ -807,6 +807,11 @@ object SettingsKisaraScreen : SearchableSettings {
                         subtitle = "Include subcategories inside the main category bar alongside parent categories",
                     ),
                     Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.openMangaInNewTask(),
+                        title = "Open manga in separate tasks",
+                        subtitle = "Opens each manga in its own Android Recents task window (Kotatsu style multi-tasking)",
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
                         preference = showTopTabBarPref,
                         title = stringResource(KMR.strings.pref_kisara_show_top_tab_bar),
                         subtitle = stringResource(KMR.strings.pref_kisara_show_top_tab_bar_summary),

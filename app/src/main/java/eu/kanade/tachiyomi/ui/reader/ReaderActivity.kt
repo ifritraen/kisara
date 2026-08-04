@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -83,6 +84,8 @@ import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReaderPageIndicator
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
+import eu.kanade.presentation.components.NavigatorAdaptiveSheet
+import eu.kanade.tachiyomi.ui.manga.track.TrackInfoDialogHomeScreen
 import eu.kanade.presentation.reader.appbars.NavBarType
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
@@ -652,6 +655,8 @@ class ReaderActivity : BaseActivity() {
                                 startTranslationEditMode(page)
                             }
                         },
+                        onClickColorFilter = viewModel::openColorFilterConfigDialog,
+                        screenModel = settingsScreenModel,
                     )
                 }
 
@@ -733,9 +738,47 @@ class ReaderActivity : BaseActivity() {
                     title = { Text(text = stringResource(SYMR.strings.eh_retry_all_help)) },
                     text = { Text(text = stringResource(SYMR.strings.eh_retry_all_help_message)) },
                 )
+                ReaderViewModel.Dialog.TrackSheet -> {
+                    val manga = state.manga
+                    if (manga != null) {
+                        NavigatorAdaptiveSheet(
+                            screen = TrackInfoDialogHomeScreen(
+                                mangaId = manga.id,
+                                mangaTitle = manga.title,
+                                sourceId = manga.source,
+                            ),
+                            enableSwipeDismiss = { it.lastItem is TrackInfoDialogHomeScreen },
+                            onDismissRequest = onDismissRequest,
+                        )
+                    }
+                }
                 // SY <--
                 null -> {}
             }
+
+            // KMK -->
+            val autoTrackNotification = state.autoTrackNotification
+            if (autoTrackNotification != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(bottom = 16.dp),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    AutoTrackBanner(
+                        notification = autoTrackNotification,
+                        onChange = {
+                            viewModel.dismissAutoTrackNotification()
+                            viewModel.openTrackSheet()
+                        },
+                        onDismiss = {
+                            viewModel.dismissAutoTrackNotification()
+                        },
+                    )
+                }
+            }
+            // KMK <--
         }
     }
 
@@ -1958,3 +2001,60 @@ data class TranslationEditState(
     val page: ReaderPage,
     val translation: PageTranslation,
 )
+
+// KMK -->
+@Composable
+private fun AutoTrackBanner(
+    notification: AutoTrackNotification,
+    onChange: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.runtime.LaunchedEffect(notification) {
+        kotlinx.coroutines.delay(6000)
+        onDismiss()
+    }
+
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Added to ${notification.trackerName}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = notification.trackTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+
+            TextButton(onClick = onChange) {
+                Text(
+                    text = "Change",
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+// KMK <--

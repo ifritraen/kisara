@@ -144,6 +144,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val getPageBookmarks: tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks = Injekt.get(),
     private val togglePageBookmarkInteractor: tachiyomi.domain.pagebookmark.interactor.TogglePageBookmark = Injekt.get(),
     private val deletePageBookmarkInteractor: tachiyomi.domain.pagebookmark.interactor.DeletePageBookmark = Injekt.get(),
+    private val autoTrack: eu.kanade.domain.track.interactor.AutoTrack = Injekt.get(),
     // KMK <--
 ) : ViewModel() {
 
@@ -500,6 +501,25 @@ class ReaderViewModel @JvmOverloads constructor(
                             // SY <--
                         )
                     }
+
+                    // KMK -->
+                    viewModelScope.launchIO {
+                        val autoTrackResults = autoTrack.execute(manga)
+                        if (autoTrackResults.isNotEmpty()) {
+                            val firstResult = autoTrackResults.first()
+                            mutableState.update {
+                                it.copy(
+                                    autoTrackNotification = AutoTrackNotification(
+                                        trackerName = firstResult.trackerName,
+                                        trackTitle = firstResult.trackTitle,
+                                        mangaId = firstResult.mangaId,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    // KMK <--
+
                     if (chapterId == -1L) chapterId = initialChapterId
 
                     val context = Injekt.get<Application>()
@@ -1588,6 +1608,7 @@ class ReaderViewModel @JvmOverloads constructor(
         // SY <--
         // KMK -->
         val pageBookmarks: List<tachiyomi.domain.pagebookmark.model.PageBookmark> = emptyList(),
+        val autoTrackNotification: AutoTrackNotification? = null,
         // KMK <--
     ) {
         val currentChapter: ReaderChapter?
@@ -1597,6 +1618,16 @@ class ReaderViewModel @JvmOverloads constructor(
             get() = currentChapter?.pages?.size ?: -1
     }
 
+    // KMK -->
+    fun dismissAutoTrackNotification() {
+        mutableState.update { it.copy(autoTrackNotification = null) }
+    }
+
+    fun openTrackSheet() {
+        mutableState.update { it.copy(dialog = Dialog.TrackSheet) }
+    }
+    // KMK <--
+
     sealed interface Dialog {
         data object Loading : Dialog
         data object Settings : Dialog
@@ -1605,6 +1636,7 @@ class ReaderViewModel @JvmOverloads constructor(
 
         // KMK -->
         data object ColorFilterConfig : Dialog
+        data object TrackSheet : Dialog
         // KMK <--
 
         // SY -->
@@ -1642,3 +1674,11 @@ class ReaderViewModel @JvmOverloads constructor(
         data class CopyImage(val uri: Uri) : Event
     }
 }
+
+// KMK -->
+data class AutoTrackNotification(
+    val trackerName: String,
+    val trackTitle: String,
+    val mangaId: Long,
+)
+// KMK <--

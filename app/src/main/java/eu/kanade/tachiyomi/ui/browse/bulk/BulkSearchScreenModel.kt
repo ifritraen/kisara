@@ -88,9 +88,11 @@ class BulkSearchScreenModel(
                                         supportsLatest = source.supportsLatest,
                                         isStub = false,
                                     )
-                                    val mangas = searchResult.mangas.map { smanga ->
+                                    val filterMangaByBlockedContent = Injekt.get<tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent>()
+                                    val rawMangas = searchResult.mangas.map { smanga ->
                                         networkToLocalManga(smanga.toDomainManga(source.id))
                                     }
+                                    val mangas = filterMangaByBlockedContent.filterList(rawMangas)
                                     synchronized(allResults) {
                                         mangas.forEach { allResults.add(it to domainSource) }
                                     }

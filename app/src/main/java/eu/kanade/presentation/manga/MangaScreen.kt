@@ -1591,7 +1591,7 @@ private fun MangaScreenLargeImpl(
                                 )
                             }
 
-                            if (selectedChapterTab == 1 && state.pageBookmarks.isNotEmpty()) {
+                            if (selectedChapterTab == 1) {
                                 item(key = "page_bookmarks_tab_content") {
                                     PageBookmarksSection(
                                         bookmarks = state.pageBookmarks,

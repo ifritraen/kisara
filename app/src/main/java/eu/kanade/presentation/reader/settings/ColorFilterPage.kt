@@ -21,18 +21,26 @@ import tachiyomi.presentation.core.util.collectAsState
 
 @Composable
 internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
+    // 1. Toggles (Grayscale, Inverted, Sepia/Book)
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_grayscale),
+        pref = screenModel.preferences.grayscale(),
+    )
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_inverted_colors),
+        pref = screenModel.preferences.invertedColors(),
+    )
+    CheckboxItem(
+        label = "Book / Sepia Mode",
+        pref = screenModel.preferences.colorFilterBookEffect(),
+    )
+
+    // 2. Custom Brightness
     val customBrightness by screenModel.preferences.customBrightness().collectAsState()
     CheckboxItem(
         label = stringResource(MR.strings.pref_custom_brightness),
         pref = screenModel.preferences.customBrightness(),
     )
-
-    /*
-     * Sets the brightness of the screen. Range is [-75, 100].
-     * From -75 to -1 a semi-transparent black view is shown at the top with the minimum brightness.
-     * From 1 to 100 it sets that value as brightness.
-     * 0 sets system brightness and hides the overlay.
-     */
     if (customBrightness) {
         val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
         SliderItem(
@@ -45,6 +53,68 @@ internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
         )
     }
 
+    // 3. Image Processing Sliders
+    val contrast by screenModel.preferences.colorFilterContrast().collectAsState()
+    SliderItem(
+        value = (contrast * 100).toInt(),
+        valueRange = -100..100,
+        steps = 0,
+        label = "Contrast",
+        onChange = { screenModel.preferences.colorFilterContrast().set(it / 100f) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val saturation by screenModel.preferences.colorFilterSaturation().collectAsState()
+    SliderItem(
+        value = (saturation * 100).toInt(),
+        valueRange = 0..200,
+        steps = 0,
+        label = "Saturation",
+        onChange = { screenModel.preferences.colorFilterSaturation().set(it / 100f) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val gamma by screenModel.preferences.colorFilterGamma().collectAsState()
+    SliderItem(
+        value = (gamma * 100).toInt(),
+        valueRange = 50..200,
+        steps = 0,
+        label = "Gamma Midtones",
+        onChange = { screenModel.preferences.colorFilterGamma().set(it / 100f) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val blackLevel by screenModel.preferences.colorFilterBlackLevel().collectAsState()
+    SliderItem(
+        value = (blackLevel * 100).toInt(),
+        valueRange = 0..50,
+        steps = 0,
+        label = "Line Art Boost (Blacks)",
+        onChange = { screenModel.preferences.colorFilterBlackLevel().set(it / 100f) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val whiteLevel by screenModel.preferences.colorFilterWhiteLevel().collectAsState()
+    SliderItem(
+        value = (whiteLevel * 100).toInt(),
+        valueRange = 50..100,
+        steps = 0,
+        label = "Paper Cleaner (Whites)",
+        onChange = { screenModel.preferences.colorFilterWhiteLevel().set(it / 100f) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val warmth by screenModel.preferences.colorFilterWarmth().collectAsState()
+    SliderItem(
+        value = (warmth * 100).toInt(),
+        valueRange = 0..100,
+        steps = 0,
+        label = "Warmth Eye Comfort",
+        onChange = { screenModel.preferences.colorFilterWarmth().set(it / 100f) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    // 4. Custom Color Filter (AT THE VERY END)
     val colorFilter by screenModel.preferences.colorFilter().collectAsState()
     CheckboxItem(
         label = stringResource(MR.strings.pref_custom_color_filter),
@@ -112,82 +182,6 @@ internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
             }
         }
     }
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_grayscale),
-        pref = screenModel.preferences.grayscale(),
-    )
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_inverted_colors),
-        pref = screenModel.preferences.invertedColors(),
-    )
-
-    // KMK -->
-    CheckboxItem(
-        label = "Book / Sepia Mode",
-        pref = screenModel.preferences.colorFilterBookEffect(),
-    )
-
-    val contrast by screenModel.preferences.colorFilterContrast().collectAsState()
-    SliderItem(
-        value = (contrast * 100).toInt(),
-        valueRange = -100..100,
-        steps = 0,
-        label = "Contrast",
-        onChange = { screenModel.preferences.colorFilterContrast().set(it / 100f) },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-
-    val saturation by screenModel.preferences.colorFilterSaturation().collectAsState()
-    SliderItem(
-        value = (saturation * 100).toInt(),
-        valueRange = 0..200,
-        steps = 0,
-        label = "Saturation",
-        onChange = { screenModel.preferences.colorFilterSaturation().set(it / 100f) },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-
-    val gamma by screenModel.preferences.colorFilterGamma().collectAsState()
-    SliderItem(
-        value = (gamma * 100).toInt(),
-        valueRange = 50..200,
-        steps = 0,
-        label = "Gamma Midtones",
-        onChange = { screenModel.preferences.colorFilterGamma().set(it / 100f) },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-
-    val blackLevel by screenModel.preferences.colorFilterBlackLevel().collectAsState()
-    SliderItem(
-        value = (blackLevel * 100).toInt(),
-        valueRange = 0..50,
-        steps = 0,
-        label = "Line Art Boost (Blacks)",
-        onChange = { screenModel.preferences.colorFilterBlackLevel().set(it / 100f) },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-
-    val whiteLevel by screenModel.preferences.colorFilterWhiteLevel().collectAsState()
-    SliderItem(
-        value = (whiteLevel * 100).toInt(),
-        valueRange = 50..100,
-        steps = 0,
-        label = "Paper Cleaner (Whites)",
-        onChange = { screenModel.preferences.colorFilterWhiteLevel().set(it / 100f) },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-
-    val warmth by screenModel.preferences.colorFilterWarmth().collectAsState()
-    SliderItem(
-        value = (warmth * 100).toInt(),
-        valueRange = 0..100,
-        steps = 0,
-        label = "Warmth Eye Comfort",
-        onChange = { screenModel.preferences.colorFilterWarmth().set(it / 100f) },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-    // KMK <--
 }
 
 private fun getColorValue(currentColor: Int, color: Int, mask: Long, bitShift: Int): Int {

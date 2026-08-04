@@ -76,6 +76,7 @@ class LandingScreenModel(
     private val sourceManager: SourceManager = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
+    private val filterMangaByBlockedContent: tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent = Injekt.get(),
 ) : StateScreenModel<LandingScreenModel.State>(State()) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -303,6 +304,7 @@ class LandingScreenModel(
                     onlineSources.firstOrNull { it.id == suggestionSrc.sourceId } as? CatalogueSource
                 }
 
+                val blockedFilters = filterMangaByBlockedContent.getBlockedFilters()
                 val fetchJobs = targetSources.map { source ->
                     async {
                         try {
@@ -312,20 +314,24 @@ class LandingScreenModel(
                                 source.getPopularManga(1)
                             }
 
-                            val mangas = mangaPage.mangas.take(feedItemLimit).map { smanga ->
+                            val mangas = mangaPage.mangas.mapNotNull { smanga ->
                                 val networkManga = smanga.toDomainManga(source.id)
                                 val localManga = networkToLocalManga(networkManga)
-                                CachedFeedManga(
-                                    id = localManga.id,
-                                    sourceId = source.id,
-                                    title = localManga.title,
-                                    thumbnailUrl = localManga.thumbnailUrl,
-                                    favorite = localManga.favorite,
-                                    coverLastModified = localManga.coverLastModified,
-                                    sourceName = source.name,
-                                    fetchTime = now,
-                                )
-                            }
+                                if (filterMangaByBlockedContent.isMangaBlocked(localManga, blockedFilters)) {
+                                    null
+                                } else {
+                                    CachedFeedManga(
+                                        id = localManga.id,
+                                        sourceId = source.id,
+                                        title = localManga.title,
+                                        thumbnailUrl = localManga.thumbnailUrl,
+                                        favorite = localManga.favorite,
+                                        coverLastModified = localManga.coverLastModified,
+                                        sourceName = source.name,
+                                        fetchTime = now,
+                                    )
+                                }
+                            }.take(feedItemLimit)
                             mangas
                         } catch (e: Exception) {
                             logcat(LogPriority.WARN, e) { "Failed to fetch feed updates for source: ${source.name}" }

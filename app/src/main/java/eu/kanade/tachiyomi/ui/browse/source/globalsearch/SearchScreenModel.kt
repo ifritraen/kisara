@@ -260,10 +260,12 @@ abstract class SearchScreenModel(
                             source.getSearchManga(1, transformedQuery.sanitize(), source.getFilterList())
                         }
 
+                        val filterMangaByBlockedContent = Injekt.get<tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent>()
                         val titles = page.mangas
                             .map { it.toDomainManga(source.id) }
                             .distinctBy { it.url }
                             .let { networkToLocalManga(it) }
+                            .let { filterMangaByBlockedContent.filterList(it) }
 
                         if (isActive) {
                             updateItem(source, SearchItemResult.Success(titles))

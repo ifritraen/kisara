@@ -13,6 +13,8 @@
 -keep class androidx.preference.** { *; }
 -keep class kotlin.** { *; }
 -keep class kotlinx.coroutines.** { *; }
+-keepclassmembers class kotlinx.coroutines.** { *; }
+-keepclassmembers class kotlinx.coroutines.BuildersKt { *; }
 -keep class kotlinx.serialization.** { *; }
 -keep class kotlin.time.** { *; }
 -keep class okhttp3.** { *; }

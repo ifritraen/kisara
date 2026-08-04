@@ -48,5 +48,11 @@ class KMKDomainModule : InjektModule {
         addFactory { tachiyomi.domain.pagebookmark.interactor.GetPageBookmarks(get()) }
         addFactory { tachiyomi.domain.pagebookmark.interactor.TogglePageBookmark(get()) }
         addFactory { tachiyomi.domain.pagebookmark.interactor.DeletePageBookmark(get()) }
+
+        // AutoTrack
+        addFactory { eu.kanade.domain.track.interactor.AutoTrack(get(), get(), get()) }
+
+        // Content Filter
+        addFactory { tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent(get(), get(), get(), get()) }
     }
 }

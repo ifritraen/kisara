@@ -95,6 +95,7 @@ object LocalApkExtensionSupport {
         val targetFile = File(cacheRoot, uniqueName)
 
         if (targetFile.exists()) {
+            targetFile.setReadOnly()
             return targetFile.absolutePath
         }
 

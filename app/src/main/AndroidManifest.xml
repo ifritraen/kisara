@@ -165,6 +165,14 @@
         </activity>
 
         <activity
+            android:name=".ui.manga.MangaActivity"
+            android:exported="false"
+            android:documentLaunchMode="always"
+            android:launchMode="standard"
+            android:taskAffinity="${applicationId}.manga"
+            android:theme="@style/Theme.Tachiyomi" />
+
+        <activity
             android:name=".ui.security.UnlockActivity"
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
