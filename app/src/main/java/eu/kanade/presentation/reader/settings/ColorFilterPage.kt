@@ -98,65 +98,65 @@ internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
 
     // 4. Custom Color Filter Channels (RGBA)
     val colorFilterValue by screenModel.preferences.colorFilterValue().collectAsState()
-        SliderItem(
-            value = colorFilterValue.red,
-            valueRange = 0..255,
-            steps = 0,
-            label = stringResource(MR.strings.color_filter_r_value),
-            onChange = { newRValue ->
-                screenModel.preferences.colorFilterValue().getAndSet {
-                    getColorValue(it, newRValue, RED_MASK, 16)
-                }
-            },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-        SliderItem(
-            value = colorFilterValue.green,
-            valueRange = 0..255,
-            steps = 0,
-            label = stringResource(MR.strings.color_filter_g_value),
-            onChange = { newGValue ->
-                screenModel.preferences.colorFilterValue().getAndSet {
-                    getColorValue(it, newGValue, GREEN_MASK, 8)
-                }
-            },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-        SliderItem(
-            value = colorFilterValue.blue,
-            valueRange = 0..255,
-            steps = 0,
-            label = stringResource(MR.strings.color_filter_b_value),
-            onChange = { newBValue ->
-                screenModel.preferences.colorFilterValue().getAndSet {
-                    getColorValue(it, newBValue, BLUE_MASK, 0)
-                }
-            },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-        SliderItem(
-            value = colorFilterValue.alpha,
-            valueRange = 0..255,
-            steps = 0,
-            label = stringResource(MR.strings.color_filter_a_value),
-            onChange = { newAValue ->
-                screenModel.preferences.colorFilterValue().getAndSet {
-                    getColorValue(it, newAValue, ALPHA_MASK, 24)
-                }
-            },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-
-        val colorFilterMode by screenModel.preferences.colorFilterMode().collectAsState()
-        SettingsChipRow(MR.strings.pref_color_filter_mode) {
-            ColorFilterMode.mapIndexed { index, it ->
-                FilterChip(
-                    selected = colorFilterMode == index,
-                    onClick = { screenModel.preferences.colorFilterMode().set(index) },
-                    label = { Text(stringResource(it.first)) },
-                )
+    SliderItem(
+        value = colorFilterValue.red,
+        valueRange = 0..255,
+        steps = 0,
+        label = stringResource(MR.strings.color_filter_r_value),
+        onChange = { newRValue ->
+            screenModel.preferences.colorFilterValue().getAndSet {
+                getColorValue(it, newRValue, RED_MASK, 16)
             }
+        },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+    SliderItem(
+        value = colorFilterValue.green,
+        valueRange = 0..255,
+        steps = 0,
+        label = stringResource(MR.strings.color_filter_g_value),
+        onChange = { newGValue ->
+            screenModel.preferences.colorFilterValue().getAndSet {
+                getColorValue(it, newGValue, GREEN_MASK, 8)
+            }
+        },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+    SliderItem(
+        value = colorFilterValue.blue,
+        valueRange = 0..255,
+        steps = 0,
+        label = stringResource(MR.strings.color_filter_b_value),
+        onChange = { newBValue ->
+            screenModel.preferences.colorFilterValue().getAndSet {
+                getColorValue(it, newBValue, BLUE_MASK, 0)
+            }
+        },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+    SliderItem(
+        value = colorFilterValue.alpha,
+        valueRange = 0..255,
+        steps = 0,
+        label = stringResource(MR.strings.color_filter_a_value),
+        onChange = { newAValue ->
+            screenModel.preferences.colorFilterValue().getAndSet {
+                getColorValue(it, newAValue, ALPHA_MASK, 24)
+            }
+        },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val colorFilterMode by screenModel.preferences.colorFilterMode().collectAsState()
+    SettingsChipRow(MR.strings.pref_color_filter_mode) {
+        ColorFilterMode.mapIndexed { index, it ->
+            FilterChip(
+                selected = colorFilterMode == index,
+                onClick = { screenModel.preferences.colorFilterMode().set(index) },
+                label = { Text(stringResource(it.first)) },
+            )
         }
+    }
 }
 
 private fun getColorValue(currentColor: Int, color: Int, mask: Long, bitShift: Int): Int {

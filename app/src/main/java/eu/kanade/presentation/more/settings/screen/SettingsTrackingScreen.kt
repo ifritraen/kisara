@@ -159,7 +159,9 @@ object SettingsTrackingScreen : SearchableSettings {
                         title = "Primary Tracker",
                         subtitle = "Selected tracker used for auto-adding manga when categories are set",
                     )
-                } else null
+                } else {
+                    null
+                }
             }.let { listOfNotNull(it) }.firstOrNull() ?: Preference.PreferenceItem.InfoPreference(""),
             // KMK <--
             // SY -->
