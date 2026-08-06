@@ -18,7 +18,13 @@ class ExtensionRepoRestorer(
         val existingReposBySHA = dbRepos.associateBy { it.signingKeyFingerprint }
         val existingReposByUrl = dbRepos.associateBy { it.baseUrl }
 
-        val urlExists = existingReposByUrl[backupRepo.baseUrl]
+        // KMK -->
+        val baseUrl = backupRepo.baseUrl.removeSuffix("/index.min.json")
+            .removeSuffix("/index.json")
+            .removeSuffix("/repo.json") + "/repo.json"
+        // KMK <--
+
+        val urlExists = existingReposByUrl[baseUrl]
         val shaExists = existingReposBySHA[backupRepo.signingKeyFingerprint]
 
         if (urlExists != null && urlExists.signingKeyFingerprint != backupRepo.signingKeyFingerprint) {
@@ -28,7 +34,7 @@ class ExtensionRepoRestorer(
         } else {
             handler.await {
                 extension_reposQueries.insert(
-                    backupRepo.baseUrl,
+                    baseUrl,
                     backupRepo.name,
                     backupRepo.shortName,
                     backupRepo.website,

@@ -18,11 +18,16 @@ class TrustExtensionRepositoryMigration : Migration {
             migrationContext.get<ExtensionRepoRepository>() ?: return@withIOContext false
         for ((index, source) in sourcePreferences.extensionRepos().get().withIndex()) {
             try {
+                // KMK -->
+                val baseUrl = source.removeSuffix("/index.min.json")
+                    .removeSuffix("/index.json")
+                    .removeSuffix("/repo.json") + "/repo.json"
+                // KMK <--
                 extensionRepositoryRepository.upsertRepo(
-                    source,
+                    baseUrl,
                     "Repo #${index + 1}",
                     null,
-                    source,
+                    baseUrl,
                     "NOFINGERPRINT-${index + 1}",
                 )
             } catch (e: SaveExtensionRepoException) {

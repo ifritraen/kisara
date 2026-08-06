@@ -13,7 +13,7 @@ import eu.kanade.tachiyomi.source.online.all.MangaDex
 import eu.kanade.tachiyomi.source.online.all.MergedSource
 import eu.kanade.tachiyomi.source.online.all.NHentai
 import eu.kanade.tachiyomi.source.online.english.EightMuses
-import eu.kanade.tachiyomi.source.online.english.Pururin
+import eu.kanade.tachiyomi.source.online.all.Pururin
 import exh.log.xLogD
 import exh.source.BlacklistedSources
 import exh.source.DelegatedHttpSource
@@ -167,16 +167,13 @@ class AndroidSourceManager(
     ): Source? {
         // EXH -->
         val sourceQName = this::class.qualifiedName
-        val factories = DELEGATED_SOURCES.entries
-            .filter { it.value.factory }
-            .map { it.value.originalSourceQualifiedClassName }
         val delegate = if (sourceQName != null) {
-            val matched = factories.find { sourceQName.startsWith(it) }
-            if (matched != null) {
-                DELEGATED_SOURCES[matched]
-            } else {
-                DELEGATED_SOURCES[sourceQName]
+            // KMK -->
+            DELEGATED_SOURCES.firstOrNull { delegated ->
+                sourceQName == delegated.originalSourceQualifiedClassName ||
+                    (delegated.factory && sourceQName.startsWith(delegated.originalSourceQualifiedClassName))
             }
+            // KMK <--
         } else {
             null
         }
@@ -290,19 +287,23 @@ class AndroidSourceManager(
     // SY -->
     companion object {
         private const val fillInSourceId = Long.MAX_VALUE
+        /*
+         * If an extension is declaring sub-classes based on the main class, then set `factory=true` and
+         * only put the package without the class name. For example:
+         * "eu.kanade.tachiyomi.extension.all.mangadex" instead of "eu.kanade.tachiyomi.extension.all.mangadex.MangaDex"
+         */
         val DELEGATED_SOURCES = listOf(
             DelegatedSource(
                 "Pururin",
-                PURURIN_SOURCE_ID,
-                "eu.kanade.tachiyomi.extension.en.pururin.Pururin",
+                fillInSourceId,
+                "eu.kanade.tachiyomi.extension.all.pururin.Pururin",
                 Pururin::class,
             ),
             DelegatedSource(
                 "MangaDex",
                 fillInSourceId,
-                "eu.kanade.tachiyomi.extension.all.mangadex",
+                "eu.kanade.tachiyomi.extension.all.mangadex.MangaDex",
                 MangaDex::class,
-                true,
             ),
             DelegatedSource(
                 "8Muses",
@@ -315,16 +316,14 @@ class AndroidSourceManager(
                 fillInSourceId,
                 "eu.kanade.tachiyomi.extension.all.nhentai.NHentai",
                 NHentai::class,
-                true,
             ),
             DelegatedSource(
                 "LANraragi",
                 fillInSourceId,
                 "eu.kanade.tachiyomi.extension.all.lanraragi.LANraragi",
                 Lanraragi::class,
-                true,
             ),
-        ).associateBy { it.originalSourceQualifiedClassName }
+        )
 
         val currentDelegatedSources: MutableMap<Long, DelegatedSource> =
             ListenMutableMap(mutableMapOf(), ::handleSourceLibrary)
