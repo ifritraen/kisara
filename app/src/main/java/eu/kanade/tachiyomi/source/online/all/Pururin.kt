@@ -28,6 +28,7 @@ class Pururin(delegate: HttpSource, val context: Context) :
     MetadataSource<PururinSearchMetadata, Document>,
     UrlImportableSource,
     NamespaceSource {
+    override val lang = delegate.lang
 
     /**
      * The class of the metadata used by this source
