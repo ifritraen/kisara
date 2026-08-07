@@ -21,6 +21,7 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.catch
@@ -63,10 +64,26 @@ class SourcesScreenModel(
     val useNewSourceNavigation by uiPreferences.useNewSourceNavigation().asState(screenModelScope)
 
     init {
+        // KMK -->
+        combine(
+            sourcePreferences.customSourceTags().changes(),
+            sourcePreferences.sourceTagMappings().changes(),
+        ) { tags, mappings ->
+            Pair(tags, mappings)
+        }.onEach { (tags, mappings) ->
+            mutableState.update {
+                it.copy(
+                    allTags = tags.toImmutableSet(),
+                    sourceTagMappings = mappings.toImmutableSet(),
+                )
+            }
+        }.launchIn(screenModelScope)
+        // KMK <--
+
         // SY -->
         combine(
             // KMK -->
-            state.map { Pair(it.searchQuery, it.nsfwOnly) }
+            state.map { Triple(it.searchQuery, it.nsfwOnly, it.selectedTag) }
                 .distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
             // KMK <--
             getEnabledSources.subscribe(),
@@ -96,7 +113,7 @@ class SourcesScreenModel(
 
     private fun collectLatestSources(
         // KMK -->
-        filters: Pair<String?, Boolean>,
+        filters: Triple<String?, Boolean, String?>,
         unfilteredSources: List<Source>,
         // sources: List<Source>,
         // KMK <--
@@ -107,6 +124,8 @@ class SourcesScreenModel(
         // KMK -->
         val searchQuery = filters.first
         val nsfwOnly = filters.second
+        val selectedTag = filters.third
+        val tagMappings = sourcePreferences.sourceTagMappings().get()
         val queryFilter: (String?) -> ((Source) -> Boolean) = { query ->
             filter@{ source ->
                 if (query.isNullOrBlank()) return@filter true
@@ -119,9 +138,18 @@ class SourcesScreenModel(
                 }
             }
         }
+        val tagFilter: (Source) -> Boolean = { source ->
+            if (selectedTag == null) {
+                true
+            } else {
+                val prefix = "${source.id}:"
+                tagMappings.contains("$prefix$selectedTag")
+            }
+        }
         val sources = unfilteredSources
             .filter { !nsfwOnly || it.installedExtension?.isNsfw != false }
             .filter(queryFilter(searchQuery))
+            .filter(tagFilter)
         // KMK <--
         mutableState.update { state ->
             val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
@@ -254,6 +282,12 @@ class SourcesScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
+    var dialog: Dialog?
+        get() = state.value.dialog
+        set(value) {
+            mutableState.update { it.copy(dialog = value) }
+        }
+
     // KMK -->
     fun search(query: String?) {
         mutableState.update {
@@ -275,6 +309,7 @@ class SourcesScreenModel(
     sealed class Dialog {
         data class SourceLongClick(val source: Source) : Dialog()
         data class SourceCategories(val source: Source) : Dialog()
+        data class SourceTags(val source: Source) : Dialog()
     }
 
     @Immutable
@@ -291,9 +326,36 @@ class SourcesScreenModel(
         // KMK -->
         val searchQuery: String? = null,
         val nsfwOnly: Boolean = false,
+        val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"),
+        val selectedTag: String? = null,
+        val sourceTagMappings: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         // KMK <--
     ) {
         val isEmpty = items.isEmpty()
+    }
+
+    fun setSelectedTag(tag: String?) {
+        mutableState.update { it.copy(selectedTag = tag) }
+    }
+
+    fun saveSourceTags(sourceId: Long, selectedTags: Set<String>, newTag: String?) {
+        val currentAllTags = sourcePreferences.customSourceTags().get().toMutableSet()
+        if (newTag != null) {
+            currentAllTags.add(newTag)
+            sourcePreferences.customSourceTags().set(currentAllTags)
+        }
+
+        val prefix = "$sourceId:"
+        val currentMappings = sourcePreferences.sourceTagMappings().get().filterNot { it.startsWith(prefix) }.toMutableSet()
+        selectedTags.forEach { tag ->
+            currentMappings.add("$prefix$tag")
+        }
+        sourcePreferences.sourceTagMappings().set(currentMappings)
+    }
+
+    fun uninstallExtension(source: Source) {
+        val extension = source.installedExtension ?: return
+        Injekt.get<eu.kanade.tachiyomi.extension.ExtensionManager>().uninstallExtension(extension)
     }
 
     companion object {

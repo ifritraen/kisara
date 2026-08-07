@@ -91,7 +91,7 @@ import eu.kanade.presentation.components.UpdatingBannerBackgroundColor
 import eu.kanade.presentation.more.settings.screen.ConfigureExhDialog
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen.Companion.getReleaseNotes
 import eu.kanade.presentation.more.settings.screen.about.WhatsNewDialog
-import eu.kanade.presentation.more.settings.screen.browse.ExtensionReposScreen
+import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.presentation.util.AssistContentScreen
 import eu.kanade.presentation.util.DefaultNavigatorScreenTransition
@@ -160,6 +160,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -397,6 +398,7 @@ class MainActivity : BaseActivity() {
                     },
                     contentWindowInsets = scaffoldInsets,
                 ) { contentPadding ->
+                    val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsStateWithLifecycle()
                     // Consume insets already used by app state banners
                     Box {
                         // Shows current screen
@@ -405,7 +407,7 @@ class MainActivity : BaseActivity() {
                             modifier = Modifier
                                 .padding(contentPadding)
                                 .consumeWindowInsets(contentPadding)
-                                .hazeSource(hazeState),
+                                .then(if (frostedGlass) Modifier.hazeSource(hazeState) else Modifier),
                         )
 
                         // Translation Progress Overlay Banner (floating card / ball)
@@ -903,7 +905,7 @@ class MainActivity : BaseActivity() {
                 else if (intent.scheme == "tachiyomi" && intent.data?.host == "add-repo") {
                     intent.data?.getQueryParameter("url")?.let { repoUrl ->
                         navigator.popUntilRoot()
-                        navigator.push(ExtensionReposScreen(repoUrl))
+                        navigator.push(ExtensionStoresScreen(repoUrl))
                     }
                 }
                 null

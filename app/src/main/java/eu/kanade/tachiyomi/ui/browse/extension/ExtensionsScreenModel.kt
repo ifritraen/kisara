@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.source.JarCatalogueSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -109,6 +110,20 @@ class ExtensionsScreenModel(
 
         screenModelScope.launchIO {
             combine(
+                preferences.customSourceTags().changes(),
+                preferences.sourceTagMappings().changes(),
+            ) { tags, mappings ->
+                Pair(tags, mappings)
+            }.onEach { (tags, mappings) ->
+                mutableState.update {
+                    it.copy(
+                        allTags = tags.toImmutableSet(),
+                        extensionTagMappings = mappings.toImmutableSet(),
+                    )
+                }
+            }.launchIn(screenModelScope)
+
+            combine(
                 state.map { it.searchQuery }
                     .distinctUntilChanged()
                     .debounce(SEARCH_DEBOUNCE_MILLIS)
@@ -116,12 +131,24 @@ class ExtensionsScreenModel(
                 state.map { it.nsfwOnly }
                     .distinctUntilChanged()
                     .debounce(SEARCH_DEBOUNCE_MILLIS),
+                state.map { it.selectedTag }
+                    .distinctUntilChanged(),
                 currentDownloads,
                 extensionsFlow,
-            ) { predicate: (Extension) -> Boolean, nsfwOnly: Boolean, downloads: Map<String, InstallStep>, extensionsData: ExtensionsData ->
+            ) { predicate: (Extension) -> Boolean, nsfwOnly: Boolean, selectedTag: String?, downloads: Map<String, InstallStep>, extensionsData: ExtensionsData ->
                 val extensions: eu.kanade.domain.extension.model.Extensions = extensionsData.extensions
                 val jarAvailables: List<Extension.AvailableJar> = extensionsData.jarAvailables
                 val jarSources: List<JarCatalogueSource> = extensionsData.jarSources
+
+                val tagMappings = preferences.sourceTagMappings().get()
+                val tagFilter: (Extension) -> Boolean = { ext ->
+                    if (selectedTag == null) {
+                        true
+                    } else {
+                        val prefix = "ext_${ext.pkgName}:"
+                        tagMappings.contains("$prefix$selectedTag")
+                    }
+                }
 
                 val updatesList: List<Extension.Installed> = extensions.updates.filter { !temporarilySideloadedPkgs.contains(it.pkgName) }
                 val installedList: List<Extension.Installed> = extensions.installed.filter { !temporarilySideloadedPkgs.contains(it.pkgName) }
@@ -129,7 +156,7 @@ class ExtensionsScreenModel(
                 val untrustedList: List<Extension.Untrusted> = extensions.untrusted.filter { !temporarilySideloadedPkgs.contains(it.pkgName) }
                 val enabledLanguages = preferences.enabledLanguages().get()
                 buildMap<ExtensionUiModel.Header, List<ExtensionUiModel.Item>> {
-                    val updates = updatesList.filter(predicate).map(extensionMapper(downloads))
+                    val updates = updatesList.filter(predicate).filter(tagFilter).map(extensionMapper(downloads))
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
@@ -137,11 +164,11 @@ class ExtensionsScreenModel(
                         put(ExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending), updates)
                     }
 
-                    val installed = installedList.filter(predicate).map(extensionMapper(downloads))
+                    val installed = installedList.filter(predicate).filter(tagFilter).map(extensionMapper(downloads))
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
-                    val untrusted = untrustedList.filter(predicate).map(extensionMapper(downloads))
+                    val untrusted = untrustedList.filter(predicate).filter(tagFilter).map(extensionMapper(downloads))
                         // KMK -->
                         .filter { !nsfwOnly || it.extension.isNsfw }
                     // KMK <--
@@ -177,7 +204,7 @@ class ExtensionsScreenModel(
                                 lang = "all",
                                 isNsfw = false,
                                 filename = plugin.jarName,
-                                repoName = repoName,
+                                storeName = repoName,
                                 sources = pluginSources,
                                 hasUpdate = hasUpdate,
                             )
@@ -196,7 +223,7 @@ class ExtensionsScreenModel(
                     val availableJarsToDisplay = jarAvailables.filter { it.pkgName !in installedJarPkgs }
                         .filter(predicate)
 
-                    val availableJarsByRepo = availableJarsToDisplay.groupBy { it.repoName ?: "Unknown JAR Repo" }
+                    val availableJarsByRepo = availableJarsToDisplay.groupBy { it.storeName ?: "Unknown JAR Repo" }
                     for ((repoName, avails) in availableJarsByRepo) {
                         val repoItems = avails.map { avail ->
                             ExtensionUiModel.Item(
@@ -215,6 +242,7 @@ class ExtensionsScreenModel(
 
                     val languagesWithExtensions = availableList
                         .filter(predicate)
+                        .filter(tagFilter)
                         // KMK -->
                         .filter { !nsfwOnly || it.isNsfw }
                         // KMK <--
@@ -484,7 +512,7 @@ class ExtensionsScreenModel(
                                 libVersion = 1.0,
                                 lang = null,
                                 isNsfw = false,
-                                repoName = repoName,
+                                storeName = repoName,
                                 url = info.url,
                                 iconUrl = info.iconUrl,
                                 repoUrl = repoUrl,
@@ -508,7 +536,7 @@ class ExtensionsScreenModel(
                 context = context,
                 url = extension.url,
                 filename = filename,
-                repoName = extension.repoName,
+                repoName = extension.storeName,
             )
             removeDownloadState(extension)
             if (success) {
@@ -534,7 +562,7 @@ class ExtensionsScreenModel(
             try {
                 temporarilySideloadedPkgs.add(extension.pkgName)
                 addDownloadState(extension, InstallStep.Downloading)
-                val apkUrl = "${extension.repoUrl}/apk/${extension.apkName}"
+                val apkUrl = extension.apkUrl
                 val request = Request.Builder().url(apkUrl).build()
                 val client = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().client
                 client.newCall(request).execute().use { response ->
@@ -610,7 +638,7 @@ class ExtensionsScreenModel(
                     context = context,
                     url = extension.url,
                     filename = filename,
-                    repoName = extension.repoName,
+                    repoName = extension.storeName,
                     isTemporary = true,
                 )
                 removeDownloadState(extension)
@@ -671,8 +699,13 @@ class ExtensionsScreenModel(
     }
     // KMK <--
 
+    sealed class Dialog {
+        data class ExtensionTags(val extension: Extension) : Dialog()
+    }
+
     @Immutable
     data class State(
+        val dialog: Dialog? = null,
         val isLoading: Boolean = true,
         val isRefreshing: Boolean = false,
         val items: ItemGroups = mutableMapOf(),
@@ -681,9 +714,35 @@ class ExtensionsScreenModel(
         val searchQuery: String? = null,
         // KMK -->
         val nsfwOnly: Boolean = false,
+        val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"),
+        val selectedTag: String? = null,
+        val extensionTagMappings: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         // KMK <--
     ) {
         val isEmpty = items.isEmpty()
+    }
+
+    fun setSelectedTag(tag: String?) {
+        mutableState.update { it.copy(selectedTag = tag) }
+    }
+
+    fun setDialog(dialog: Dialog?) {
+        mutableState.update { it.copy(dialog = dialog) }
+    }
+
+    fun saveExtensionTags(pkgName: String, selectedTags: Set<String>, newTag: String?) {
+        val currentAllTags = preferences.customSourceTags().get().toMutableSet()
+        if (newTag != null) {
+            currentAllTags.add(newTag)
+            preferences.customSourceTags().set(currentAllTags)
+        }
+
+        val prefix = "ext_$pkgName:"
+        val currentMappings = preferences.sourceTagMappings().get().filterNot { it.startsWith(prefix) }.toMutableSet()
+        selectedTags.forEach { tag ->
+            currentMappings.add("$prefix$tag")
+        }
+        preferences.sourceTagMappings().set(currentMappings)
     }
 
     fun cleanupTemporaryExtensions() {

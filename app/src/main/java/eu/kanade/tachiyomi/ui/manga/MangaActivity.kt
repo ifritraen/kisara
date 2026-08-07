@@ -53,15 +53,21 @@ class MangaActivity : BaseActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     companion object {
         private const val EXTRA_MANGA_ID = "manga_id"
         private const val EXTRA_FROM_SOURCE = "from_source"
 
         fun newIntent(context: Context, mangaId: Long, fromSource: Boolean = false): Intent {
             return Intent(context, MangaActivity::class.java).apply {
+                data = android.net.Uri.parse("kisara://manga/$mangaId")
                 putExtra(EXTRA_MANGA_ID, mangaId)
                 putExtra(EXTRA_FROM_SOURCE, fromSource)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
         }
     }

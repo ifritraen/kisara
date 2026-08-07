@@ -66,7 +66,7 @@ import eu.kanade.presentation.browse.components.ExtensionIcon
 import eu.kanade.presentation.browse.components.SourceIcon
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.manga.components.DotSeparatorNoSpaceText
-import eu.kanade.presentation.more.settings.screen.browse.ExtensionReposScreen
+import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen
 import eu.kanade.presentation.util.animateItemFastScroll
 import eu.kanade.presentation.util.rememberRequestPackageInstallsPermissionState
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -118,6 +118,7 @@ fun ExtensionScreen(
     onUpdateJar: (Extension.Jar) -> Unit = {},
     onBrowseAvailableJar: (Extension.AvailableJar) -> Unit = {},
     onBrowseAvailableExtension: (Extension.Available) -> Unit = {},
+    onSelectTag: (String?) -> Unit = {},
 ) {
     val navigator = LocalNavigator.currentOrThrow
 
@@ -141,7 +142,7 @@ fun ExtensionScreen(
                         EmptyScreenAction(
                             stringRes = MR.strings.label_extension_repos,
                             icon = Icons.Outlined.Settings,
-                            onClick = { navigator.push(ExtensionReposScreen()) },
+                            onClick = { navigator.push(ExtensionStoresScreen()) },
                         ),
                     ),
                 )
@@ -167,6 +168,7 @@ fun ExtensionScreen(
                     onUpdateJar = onUpdateJar,
                     onBrowseAvailableJar = onBrowseAvailableJar,
                     onBrowseAvailableExtension = onBrowseAvailableExtension,
+                    onSelectTag = onSelectTag,
                 )
             }
         }
@@ -194,6 +196,7 @@ private fun ExtensionContent(
     onUpdateJar: (Extension.Jar) -> Unit = {},
     onBrowseAvailableJar: (Extension.AvailableJar) -> Unit = {},
     onBrowseAvailableExtension: (Extension.Available) -> Unit = {},
+    onSelectTag: (String?) -> Unit = {},
 ) {
     val context = LocalContext.current
     var trustState by remember { mutableStateOf<Extension.Untrusted?>(null) }
@@ -205,6 +208,13 @@ private fun ExtensionContent(
     FastScrollLazyColumn(
         contentPadding = contentPadding + topSmallPaddingValues,
     ) {
+        item(key = "extension-tag-filter-bar") {
+            TagFilterChipBar(
+                tags = state.allTags.toList(),
+                selectedTag = state.selectedTag,
+                onSelectTag = onSelectTag,
+            )
+        }
         if (!installGranted && state.installer?.requiresSystemPermission == true) {
             item(key = "extension-permissions-warning") {
                 WarningBanner(
@@ -240,7 +250,7 @@ private fun ExtensionContent(
                                 // KMK -->
                                 KMR.strings.extensions_page_more -> {
                                     {
-                                        Button(onClick = { navigator?.push(ExtensionReposScreen()) }) {
+                                        Button(onClick = { navigator?.push(ExtensionStoresScreen()) }) {
                                             Text(
                                                 text = stringResource(MR.strings.action_add_repo),
                                                 style = LocalTextStyle.current.copy(
@@ -473,7 +483,7 @@ private fun ExtensionItemContent(
                 }
 
                 // KMK -->
-                Text(text = extension.repoName?.let { "@$it" } ?: "(?)")
+                Text(text = extension.storeName?.let { "@$it" } ?: "(?)")
                 // KMK <--
 
                 val warning = when {
@@ -724,11 +734,11 @@ private fun ExtensionItemContentPreview() {
         libVersion = 1.0,
         isNsfw = true,
         signatureHash = "900000",
-        repoName = "Repository",
+        storeName = "Repository",
         sources = emptyList(),
-        apkName = "Test",
+        apkUrl = "",
         iconUrl = "",
-        repoUrl = "",
+        store = mihon.domain.extension.model.ExtensionStore("https://repo", "Repository", "", "900000", mihon.domain.extension.model.ExtensionStore.Contact("", ""), false, null),
     )
     val extInstalled = Extension.Installed(
         name = "Tachiyomi",
@@ -739,9 +749,8 @@ private fun ExtensionItemContentPreview() {
         libVersion = 1.0,
         isNsfw = true,
         signatureHash = "900000",
-        repoName = "Repository",
+        storeName = "Repository",
         sources = emptyList(),
-        repoUrl = "",
         pkgFactory = null,
         icon = null,
         hasUpdate = false,
@@ -753,17 +762,16 @@ private fun ExtensionItemContentPreview() {
         name = "Tachiyomi",
         pkgName = "com.tachiyomi.test",
         versionName = "1.2.3",
-        lang = "en",
         versionCode = 1,
         libVersion = 1.0,
         isNsfw = true,
         signatureHash = "900000",
-        repoName = "Repository",
+        storeName = "Repository",
     )
     Column {
         ExtensionItemContent(
             extension = extAvail.copy(
-                repoName = "Repository extensions minion multiple languages various sources",
+                storeName = "Repository extensions minion multiple languages various sources",
             ),
             installStep = InstallStep.Idle,
         )
@@ -839,7 +847,7 @@ private fun JarExtensionItem(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "JAR Extension • ${extension.repoName ?: "Local"} • ${extension.sources.size} source(s)",
+                    text = "JAR Extension • ${extension.storeName ?: "Local"} • ${extension.sources.size} source(s)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

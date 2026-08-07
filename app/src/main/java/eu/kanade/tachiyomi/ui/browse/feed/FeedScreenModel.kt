@@ -328,7 +328,7 @@ open class FeedScreenModel(
                         } else {
                             emptyList()
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         emptyList()
                     }
 

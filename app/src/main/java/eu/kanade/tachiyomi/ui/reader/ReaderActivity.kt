@@ -64,6 +64,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
@@ -169,6 +171,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
@@ -189,10 +192,23 @@ class ReaderActivity : BaseActivity() {
                 // SY <--
                 if (openInNewTask && mangaId != null) {
                     data = android.net.Uri.parse("kisara://reader/$mangaId/$chapterId")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 } else {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val manga = intent.extras?.getLong("manga", -1) ?: -1L
+        val chapter = intent.extras?.getLong("chapter", -1) ?: -1L
+        val page = intent.extras?.getInt("page", -1).takeUnless { it == -1 }
+        if (manga != -1L && chapter != -1L) {
+            lifecycleScope.launchNonCancellable {
+                viewModel.init(manga, chapter, page)
             }
         }
     }
@@ -243,6 +259,8 @@ class ReaderActivity : BaseActivity() {
 
     private var wasDownloaderRunning = false
 
+    private var lastBackPressedTime: Long = 0L
+
     /**
      * Called when the activity is created. Initializes the presenter and configuration.
      */
@@ -266,6 +284,23 @@ class ReaderActivity : BaseActivity() {
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
         super.onCreate(savedInstanceState)
+
+        // KMK -->
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    val now = System.currentTimeMillis()
+                    if (now - lastBackPressedTime < 2000) {
+                        finish()
+                    } else {
+                        lastBackPressedTime = now
+                        toast(KMR.strings.confirm_exit_reader)
+                    }
+                }
+            },
+        )
+        // KMK <--
 
         binding = ReaderActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -291,6 +326,11 @@ class ReaderActivity : BaseActivity() {
                 when (event) {
                     androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
                         logcat(LogPriority.INFO) { "ReaderActivity moved to background - freezing CPU/network tasks" }
+                        viewModel.state.value.viewer?.let { v ->
+                            if (v is eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer) {
+                                v.recycler.stopScroll()
+                            }
+                        }
                     }
                     androidx.lifecycle.Lifecycle.Event.ON_START -> {
                         logcat(LogPriority.INFO) { "ReaderActivity resumed to foreground" }
@@ -334,12 +374,14 @@ class ReaderActivity : BaseActivity() {
         preferences.incognitoMode().changes()
             .drop(1)
             .onEach { if (!it) finish() }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
 
         viewModel.state
             .map { it.isLoadingAdjacentChapter }
             .distinctUntilChanged()
             .onEach(::setProgressDialog)
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
 
         viewModel.state
@@ -347,6 +389,7 @@ class ReaderActivity : BaseActivity() {
             .distinctUntilChanged()
             .filterNotNull()
             .onEach { updateViewer() }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
 
         viewModel.state
@@ -354,6 +397,7 @@ class ReaderActivity : BaseActivity() {
             .distinctUntilChanged()
             .filterNotNull()
             .onEach(::setChapters)
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
 
         viewModel.eventFlow
@@ -382,6 +426,7 @@ class ReaderActivity : BaseActivity() {
                     }
                 }
             }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
     }
 
@@ -410,10 +455,11 @@ class ReaderActivity : BaseActivity() {
             }
 
             val uiPreferences = remember { Injekt.get<UiPreferences>() }
-            val readerLoadingStyle by uiPreferences.readerLoadingStyle().collectAsState()
+            val readerLoadingStyle by uiPreferences.readerLoadingStyle().collectAsStateWithLifecycle()
+            val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsStateWithLifecycle()
 
-            val state by viewModel.state.collectAsState()
-            val showPageNumber by readerPreferences.showPageNumber().collectAsState()
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            val showPageNumber by readerPreferences.showPageNumber().collectAsStateWithLifecycle()
             val settingsScreenModel = remember {
                 ReaderSettingsScreenModel(
                     readerState = viewModel.state,
@@ -429,7 +475,7 @@ class ReaderActivity : BaseActivity() {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .hazeSource(state = hazeState),
+                        .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
                 ) {
                     if (!state.menuVisible && showPageNumber) {
                         ReaderPageIndicator(
@@ -994,11 +1040,11 @@ class ReaderActivity : BaseActivity() {
 
     @Composable
     private fun ContentOverlay(state: ReaderViewModel.State) {
-        val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsState()
+        val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsStateWithLifecycle()
 
-        val colorOverlayEnabled by readerPreferences.colorFilter().collectAsState()
-        val colorOverlay by readerPreferences.colorFilterValue().collectAsState()
-        val colorOverlayMode by readerPreferences.colorFilterMode().collectAsState()
+        val colorOverlayEnabled by readerPreferences.colorFilter().collectAsStateWithLifecycle()
+        val colorOverlay by readerPreferences.colorFilterValue().collectAsStateWithLifecycle()
+        val colorOverlayMode by readerPreferences.colorFilterMode().collectAsStateWithLifecycle()
         val colorOverlayBlendMode = remember(colorOverlayMode) {
             ReaderPreferences.ColorFilterMode.getOrNull(colorOverlayMode)?.second
         }
@@ -1016,19 +1062,19 @@ class ReaderActivity : BaseActivity() {
 
     @Composable
     fun AppBars(state: ReaderViewModel.State) {
-        if (!ifSourcesLoaded()) {
+        if (!ifSourcesLoaded() || !state.menuVisible) {
             return
         }
 
         val isHttpSource = viewModel.getSource() is HttpSource
 
-        val cropBorderPaged by readerPreferences.cropBorders().collectAsState()
-        val cropBorderWebtoon by readerPreferences.cropBordersWebtoon().collectAsState()
+        val cropBorderPaged by readerPreferences.cropBorders().collectAsStateWithLifecycle()
+        val cropBorderWebtoon by readerPreferences.cropBordersWebtoon().collectAsStateWithLifecycle()
         // SY -->
         val readingMode = viewModel.getMangaReadingMode()
         val isPagerType = ReadingMode.isPagerType(readingMode)
         val isWebtoon = ReadingMode.WEBTOON.flagValue == readingMode
-        val cropBorderContinuousVertical by readerPreferences.cropBordersContinuousVertical().collectAsState()
+        val cropBorderContinuousVertical by readerPreferences.cropBordersContinuousVertical().collectAsStateWithLifecycle()
         val cropEnabled = if (isPagerType) {
             cropBorderPaged
         } else if (isWebtoon) {
@@ -1037,12 +1083,12 @@ class ReaderActivity : BaseActivity() {
             cropBorderContinuousVertical
         }
         val readerBottomButtons by readerPreferences.readerBottomButtons().changes().map { it.toImmutableSet() }
-            .collectAsState(persistentSetOf())
-        val dualPageSplitPaged by readerPreferences.dualPageSplitPaged().collectAsState()
+            .collectAsStateWithLifecycle(initialValue = persistentSetOf())
+        val dualPageSplitPaged by readerPreferences.dualPageSplitPaged().collectAsStateWithLifecycle()
 
-        val forceHorizontalSeekbar by readerPreferences.forceHorizontalSeekbar().collectAsState()
-        val landscapeVerticalSeekbar by readerPreferences.landscapeVerticalSeekbar().collectAsState()
-        val leftHandedVerticalSeekbar by readerPreferences.leftVerticalSeekbar().collectAsState()
+        val forceHorizontalSeekbar by readerPreferences.forceHorizontalSeekbar().collectAsStateWithLifecycle()
+        val landscapeVerticalSeekbar by readerPreferences.landscapeVerticalSeekbar().collectAsStateWithLifecycle()
+        val leftHandedVerticalSeekbar by readerPreferences.leftVerticalSeekbar().collectAsStateWithLifecycle()
         val configuration = LocalConfiguration.current
         val verticalSeekbarLandscape =
             configuration.orientation == Configuration.ORIENTATION_LANDSCAPE && landscapeVerticalSeekbar
@@ -1137,9 +1183,7 @@ class ReaderActivity : BaseActivity() {
     // KMK -->
     @Composable
     private fun seedColorState(): ComposeColor? {
-        val state by viewModel.state.collectAsState()
-        return state.manga?.asMangaCover()?.vibrantCoverColor?.let { ComposeColor(it) }
-            ?: seedColorStatic()
+        return remember(viewModel.manga?.id) { seedColorStatic() }
     }
 
     private fun seedColorStatic(): ComposeColor? {

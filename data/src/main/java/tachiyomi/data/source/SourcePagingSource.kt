@@ -62,7 +62,7 @@ abstract class BaseSourcePagingSource(
             // SY -->
             getPageLoadResult(params, mangasPage)
             // SY <--
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             xLogE("${this::class.simpleName}: Failed to load paging source", e)
             LoadResult.Error(e)
         }

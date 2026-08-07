@@ -107,7 +107,7 @@ class SyncManager(
             backupCategories = backupCreator.backupCategories(backupOptions),
             backupSources = backupCreator.backupSources(backupManga),
             backupPreferences = backupCreator.backupAppPreferences(backupOptions),
-            backupExtensionRepo = backupCreator.backupExtensionRepos(backupOptions),
+            backupExtensionStores = backupCreator.backupExtensionStores(backupOptions),
             backupSourcePreferences = backupCreator.backupSourcePreferences(backupOptions),
 
             // SY -->
@@ -192,7 +192,7 @@ class SyncManager(
             backupSources = remoteBackup.backupSources,
             backupPreferences = remoteBackup.backupPreferences,
             backupSourcePreferences = remoteBackup.backupSourcePreferences,
-            backupExtensionRepo = remoteBackup.backupExtensionRepo,
+            backupExtensionStores = remoteBackup.backupExtensionStores,
 
             // SY -->
             backupSavedSearches = remoteBackup.backupSavedSearches,

@@ -288,10 +288,9 @@ class ExtensionManager(
                 val hasUpdate = extension.updateExists(availableExt)
                 installedExtensionsMap[pkgName] = extension.copy(
                     hasUpdate = hasUpdate,
-                    repoUrl = availableExt.repoUrl,
                     // KMK -->
                     isObsolete = false,
-                    repoName = extension.repoName ?: availableExt.repoName,
+                    storeName = extension.storeName ?: availableExt.storeName,
                     // KMK <--
                 )
                 changed = true
@@ -311,11 +310,11 @@ class ExtensionManager(
      * @param extension The extension to be installed.
      */
     fun installExtension(extension: Extension.Available): Flow<InstallStep> {
-        return installer.downloadAndInstall(api.getApkUrl(extension), extension)
+        return installer.downloadAndInstall(extension.apkUrl, extension)
     }
 
     fun sideloadExtension(extension: Extension.Available): Flow<InstallStep> {
-        return installer.downloadAndInstall(api.getApkUrl(extension), extension, isSideload = true)
+        return installer.downloadAndInstall(extension.apkUrl, extension, isSideload = true)
     }
 
     fun getAndClearSideloadError(pkgName: String): Throwable? {

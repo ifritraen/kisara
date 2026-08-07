@@ -336,7 +336,7 @@ class LandingScreenModel(
                                 }
                             }.take(feedItemLimit)
                             mangas
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             logcat(LogPriority.WARN, e) { "Failed to fetch feed updates for source: ${source.name}" }
                             emptyList()
                         }
@@ -368,7 +368,7 @@ class LandingScreenModel(
                     }
                     mutableState.update { it.copy(feed = mixedList.toImmutableList()) }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 logcat(LogPriority.ERROR, e) { "Failed to fetch feed" }
             } finally {
                 mutableState.update { it.copy(isFeedRefreshing = false) }

@@ -55,8 +55,6 @@ import kotlin.random.Random
             )
             .addInterceptor(UncaughtExceptionInterceptor())
             .addInterceptor(UserAgentInterceptor(::defaultUserAgentProvider))
-            .addNetworkInterceptor(IgnoreGzipInterceptor())
-            .addNetworkInterceptor(BrotliInterceptor)
 
         if (isDebugBuild) {
             val httpLoggingInterceptor = HttpLoggingInterceptor().apply {

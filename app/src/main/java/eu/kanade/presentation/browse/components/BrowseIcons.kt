@@ -119,9 +119,14 @@ fun SourceIcon(
         }
         else -> {
             val installedExt = source.installedExtension
-            if (installedExt?.repoUrl != null) {
+            val store = installedExt?.store
+            if (store != null) {
+                val baseUrl = store.indexUrl.removeSuffix("/repo.json")
+                    .removeSuffix("/index.json")
+                    .removeSuffix("/index.min.json")
+                    .removeSuffix("/index.pb")
                 AsyncImage(
-                    model = "${installedExt.repoUrl}/icon/${installedExt.pkgName}.png",
+                    model = "$baseUrl/icon/${installedExt.pkgName}.png",
                     contentDescription = null,
                     placeholder = ColorPainter(Color(0x1F888888)),
                     error = rememberResourceBitmapPainter(id = R.drawable.cover_error),
@@ -166,10 +171,14 @@ fun ExtensionIcon(
                     modifier = modifier,
                 )
                 is Result.Error -> {
-                    val repoUrl = extension.repoUrl
-                    if (repoUrl != null) {
+                    val store = extension.store
+                    if (store != null) {
+                        val baseUrl = store.indexUrl.removeSuffix("/repo.json")
+                            .removeSuffix("/index.json")
+                            .removeSuffix("/index.min.json")
+                            .removeSuffix("/index.pb")
                         AsyncImage(
-                            model = "$repoUrl/icon/${extension.pkgName}.png",
+                            model = "$baseUrl/icon/${extension.pkgName}.png",
                             contentDescription = null,
                             placeholder = ColorPainter(Color(0x1F888888)),
                             error = rememberResourceBitmapPainter(id = R.mipmap.ic_default_source),

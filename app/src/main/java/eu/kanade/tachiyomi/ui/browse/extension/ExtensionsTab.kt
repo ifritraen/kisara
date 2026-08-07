@@ -30,7 +30,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.ExtensionScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
-import eu.kanade.presentation.more.settings.screen.browse.ExtensionReposScreen
+import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
@@ -100,7 +100,7 @@ fun extensionsTab(
         }
         launch {
             BrowseTab.extensionsReposEvent.receiveAsFlow().collectLatest {
-                navigator.push(ExtensionReposScreen())
+                navigator.push(ExtensionStoresScreen())
             }
         }
         launch {
@@ -149,7 +149,7 @@ fun extensionsTab(
             ),
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.label_extension_repos),
-                onClick = { navigator.push(ExtensionReposScreen()) },
+                onClick = { navigator.push(ExtensionStoresScreen()) },
             ),
             AppBar.OverflowAction(
                 title = "Install Kotatsu JAR Extension",
@@ -165,16 +165,7 @@ fun extensionsTab(
                 contentPadding = contentPadding,
                 searchQuery = state.searchQuery,
                 onLongClickItem = { extension ->
-                    when (extension) {
-                        is Extension.Available -> extensionsScreenModel.installExtension(extension)
-                        else -> {
-                            if (context.isPackageInstalled(extension.pkgName)) {
-                                extensionsScreenModel.uninstallExtension(extension)
-                            } else {
-                                privateExtensionToUninstall = extension
-                            }
-                        }
-                    }
+                    extensionsScreenModel.setDialog(ExtensionsScreenModel.Dialog.ExtensionTags(extension))
                 },
                 onClickItemCancel = extensionsScreenModel::cancelInstallUpdateExtension,
                 onClickUpdateAll = extensionsScreenModel::updateAllExtensions,
@@ -239,7 +230,29 @@ fun extensionsTab(
                         navigator.push(screen)
                     }
                 },
+                onSelectTag = extensionsScreenModel::setSelectedTag,
             )
+
+            when (val dialog = state.dialog) {
+                is ExtensionsScreenModel.Dialog.ExtensionTags -> {
+                    val extension = dialog.extension
+                    val prefix = "ext_${extension.pkgName}:"
+                    val currentTags = state.extensionTagMappings
+                        .filter { it.startsWith(prefix) }
+                        .map { it.removePrefix(prefix) }
+                        .toSet()
+                    eu.kanade.presentation.browse.SourceTagsDialog(
+                        itemName = extension.name,
+                        allTags = state.allTags,
+                        currentTags = currentTags,
+                        onDismissRequest = { extensionsScreenModel.setDialog(null) },
+                        onSaveTags = { selectedTags, newTag ->
+                            extensionsScreenModel.saveExtensionTags(extension.pkgName, selectedTags, newTag)
+                        },
+                    )
+                }
+                null -> Unit
+            }
 
             privateExtensionToUninstall?.let { extension ->
                 ExtensionUninstallConfirmation(

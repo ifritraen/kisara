@@ -132,7 +132,7 @@ object MangaCoverMetadata {
         }
 
         if (bitmap != null) {
-            Palette.from(bitmap).generate {
+            Palette.from(bitmap).resizeBitmapArea(64 * 64).generate {
                 if (it == null) return@generate
                 if (mangaCover.isMangaFavorite) {
                     it.dominantSwatch?.let { swatch ->

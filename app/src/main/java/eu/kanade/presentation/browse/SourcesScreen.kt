@@ -81,6 +81,8 @@ fun SourcesScreen(
     // KMK -->
     @Suppress("UNUSED_PARAMETER") modifier: Modifier = Modifier,
     onChangeSearchQuery: (String?) -> Unit,
+    onSelectTag: (String?) -> Unit = {},
+    onClickManageTags: (Source) -> Unit = {},
     // KMK <--
 ) {
     // KMK -->
@@ -207,22 +209,30 @@ fun SourcesScreen(
                 }
 
                 // KMK -->
-                AnimatedFloatingSearchBox(
-                    listState = lazyListState,
-                    searchQuery = state.searchQuery,
-                    onChangeSearchQuery = onChangeSearchQuery,
-                    placeholderText = stringResource(KMR.strings.action_search_for_source),
+                Column(
                     modifier = Modifier
                         .background(MaterialTheme.colorScheme.background)
-                        .padding(
+                        .align(Alignment.TopCenter),
+                ) {
+                    AnimatedFloatingSearchBox(
+                        listState = lazyListState,
+                        searchQuery = state.searchQuery,
+                        onChangeSearchQuery = onChangeSearchQuery,
+                        placeholderText = stringResource(KMR.strings.action_search_for_source),
+                        modifier = Modifier.padding(
                             horizontal = MaterialTheme.padding.medium,
                             vertical = MaterialTheme.padding.small,
-                        )
-                        .align(Alignment.TopCenter),
-                    onGloballyPositioned = { layoutCoordinates ->
-                        searchBoxHeight = with(density) { layoutCoordinates.size.height.toDp() + 2 * MaterialTheme.padding.small }
-                    },
-                )
+                        ),
+                        onGloballyPositioned = { layoutCoordinates ->
+                            searchBoxHeight = with(density) { layoutCoordinates.size.height.toDp() + 2 * MaterialTheme.padding.small + 48.dp }
+                        },
+                    )
+                    TagFilterChipBar(
+                        tags = state.allTags.toList(),
+                        selectedTag = state.selectedTag,
+                        onSelectTag = onSelectTag,
+                    )
+                }
                 // KMK <--
             }
         }
@@ -329,6 +339,8 @@ fun SourceOptionsDialog(
     onDismiss: () -> Unit,
     // KMK -->
     onClickSettings: (() -> Unit)? = null,
+    onClickManageTags: (() -> Unit)? = null,
+    onClickUninstall: (() -> Unit)? = null,
     // KMK <--
     onClickMoveUp: (() -> Unit)? = null,
     onClickMoveDown: (() -> Unit)? = null,
@@ -339,6 +351,15 @@ fun SourceOptionsDialog(
         },
         text = {
             Column {
+                if (onClickManageTags != null) {
+                    Text(
+                        text = "Tags",
+                        modifier = Modifier
+                            .clickable(onClick = onClickManageTags)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+                }
                 val isPinned = Pin.Pinned in source.pin
                 val textId = if (isPinned) MR.strings.action_unpin else MR.strings.action_pin
                 Text(
@@ -410,6 +431,17 @@ fun SourceOptionsDialog(
                         text = stringResource(MR.strings.label_extension_info),
                         modifier = Modifier
                             .clickable(onClick = onClickSettings)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+                }
+
+                if (onClickUninstall != null && source.installedExtension != null) {
+                    Text(
+                        text = stringResource(MR.strings.ext_uninstall),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .clickable(onClick = onClickUninstall)
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
                     )

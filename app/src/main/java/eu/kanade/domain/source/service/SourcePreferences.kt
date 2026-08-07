@@ -178,6 +178,10 @@ class SourcePreferences(
     // KMK -->
     fun relatedMangas() = preferenceStore.getBoolean("related_mangas", true)
 
+    fun customSourceTags() = preferenceStore.getStringSet("custom_source_tags", setOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"))
+
+    fun sourceTagMappings() = preferenceStore.getStringSet("custom_source_tag_mappings", emptySet())
+
     companion object {
         const val PINNED_SOURCES_PREF_KEY = "pinned_catalogues"
     }

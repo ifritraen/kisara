@@ -123,6 +123,8 @@ fun Screen.sourcesTab(
                 onClickReorderPin = screenModel::reorderPinnedSources,
                 // KMK -->
                 onChangeSearchQuery = screenModel::search,
+                onSelectTag = screenModel::setSelectedTag,
+                onClickManageTags = { source -> screenModel.dialog = SourcesScreenModel.Dialog.SourceTags(source) },
                 // KMK <--
             )
 
@@ -155,6 +157,13 @@ fun Screen.sourcesTab(
                             }
                             screenModel.closeDialog()
                         },
+                        onClickManageTags = {
+                            screenModel.dialog = SourcesScreenModel.Dialog.SourceTags(source)
+                        },
+                        onClickUninstall = {
+                            screenModel.uninstallExtension(source)
+                            screenModel.closeDialog()
+                        },
                         // KMK <--
                         onClickMoveUp = {
                             screenModel.movePinnedSource(source, true)
@@ -176,6 +185,23 @@ fun Screen.sourcesTab(
                             screenModel.closeDialog()
                         },
                         onDismissRequest = screenModel::closeDialog,
+                    )
+                }
+                is SourcesScreenModel.Dialog.SourceTags -> {
+                    val source = dialog.source
+                    val prefix = "${source.id}:"
+                    val currentTags = state.sourceTagMappings
+                        .filter { it.startsWith(prefix) }
+                        .map { it.removePrefix(prefix) }
+                        .toSet()
+                    eu.kanade.presentation.browse.SourceTagsDialog(
+                        itemName = source.visualName,
+                        allTags = state.allTags,
+                        currentTags = currentTags,
+                        onDismissRequest = screenModel::closeDialog,
+                        onSaveTags = { selectedTags, newTag ->
+                            screenModel.saveSourceTags(source.id, selectedTags, newTag)
+                        },
                     )
                 }
                 null -> Unit

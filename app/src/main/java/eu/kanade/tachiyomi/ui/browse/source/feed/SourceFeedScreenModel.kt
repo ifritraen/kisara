@@ -248,7 +248,7 @@ open class SourceFeedScreenModel(
                                 )
                             }
                         }.mangas
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         emptyList()
                     }
 

@@ -270,7 +270,7 @@ abstract class SearchScreenModel(
                         if (isActive) {
                             updateItem(source, SearchItemResult.Success(titles))
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         if (isActive) {
                             updateItem(source, SearchItemResult.Error(e))
                         }

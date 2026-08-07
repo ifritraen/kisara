@@ -156,10 +156,14 @@ fun SourceIconBadge(
             )
         }
         installedExt != null -> {
-            val repoUrl = installedExt.repoUrl
-            if (repoUrl != null) {
+            val store = installedExt.store
+            if (store != null) {
+                val baseUrl = store.indexUrl.removeSuffix("/repo.json")
+                    .removeSuffix("/index.json")
+                    .removeSuffix("/index.min.json")
+                    .removeSuffix("/index.pb")
                 val painter = rememberAsyncImagePainter(
-                    model = "$repoUrl/icon/${installedExt.pkgName}.png",
+                    model = "$baseUrl/icon/${installedExt.pkgName}.png",
                 )
                 Badge(
                     painter = painter,

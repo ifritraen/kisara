@@ -1336,6 +1336,7 @@ class MangaScreenModel(
         setRelatedMangasFetchedStatus(false)
 
         fun exceptionHandler(e: Throwable) {
+            if (e is UnsupportedOperationException) return
             logcat(LogPriority.ERROR, e)
             val message = with(context) { e.formattedMessage }
 
@@ -1348,7 +1349,10 @@ class MangaScreenModel(
 
         try {
             if (state.source !is StubSource && relatedMangasEnabled) {
-                state.source.getRelatedMangaList(state.manga.toSManga(), { e -> exceptionHandler(e) }) { pair, _ ->
+                state.source.getRelatedMangaList(
+                    state.manga.toSManga(),
+                    { e -> if (e !is UnsupportedOperationException) exceptionHandler(e) },
+                ) { pair, _ ->
                     /* Push found related mangas into collection */
                     val relatedManga = RelatedManga.Success.fromPair(pair) { mangaList ->
                         mangaList

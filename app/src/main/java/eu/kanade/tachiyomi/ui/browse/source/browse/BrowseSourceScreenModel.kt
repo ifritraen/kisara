@@ -447,7 +447,7 @@ open class BrowseSourceScreenModel(
                             val chapters = source.getChapterList(sManga)
                             syncChaptersWithSource.await(chapters, manga, source, false)
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         logcat(LogPriority.ERROR, e)
                     }
                 }

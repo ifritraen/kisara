@@ -110,7 +110,7 @@ private val defaultContent: @Composable RowScope.(
                 )
             }
 
-            val repoName = source.installedExtension?.repoName ?: run {
+            val repoName = source.installedExtension?.storeName ?: run {
                 val jarSource = eu.kanade.tachiyomi.extension.JarExtensionManager.sources.value
                     .find { it.id == source.id }
                 jarSource?.repoName ?: if (jarSource != null) "Local" else null

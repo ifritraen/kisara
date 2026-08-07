@@ -126,7 +126,9 @@ interface CatalogueSource : Source {
         runCatching { fetchRelatedMangaList(manga) }
             .onSuccess { if (it.isNotEmpty()) pushResults(Pair("", it), false) }
             .onFailure { e ->
-                logcat(LogPriority.ERROR, e) { "## getRelatedMangaListByExtension: $e" }
+                if (e !is UnsupportedOperationException) {
+                    logcat(LogPriority.ERROR, e) { "## getRelatedMangaListByExtension: $e" }
+                }
             }
     }
 

@@ -23,8 +23,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
-import mihon.domain.extensionrepo.interactor.GetExtensionRepo
-import mihon.domain.extensionrepo.model.ExtensionRepo
+import mihon.domain.extension.interactor.GetExtensionStores
+import mihon.domain.extension.model.ExtensionStore
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.injectLazy
 import java.io.File
@@ -49,7 +49,7 @@ internal object ExtensionLoader {
     private val trustExtension: TrustExtension by injectLazy()
 
     // KMK -->
-    private val getExtensionRepo: GetExtensionRepo by injectLazy()
+    private val getExtensionStores: GetExtensionStores by injectLazy()
     // KMK <--
 
     private val loadNsfwSource by lazy {
@@ -217,7 +217,7 @@ internal object ExtensionLoader {
         val semaphore = Semaphore(8)
         return runBlocking {
             // KMK -->
-            val extRepos = getExtensionRepo.getAll()
+            val extStores = getExtensionStores.await()
             // KMK <--
             val deferred = extPkgs.map {
                 async {
@@ -226,7 +226,7 @@ internal object ExtensionLoader {
                             context,
                             it,
                             // KMK -->
-                            extRepos,
+                            extStores,
                             // KMK <--
                         )
                     }
@@ -351,11 +351,11 @@ internal object ExtensionLoader {
         context: Context,
         extensionInfo: ExtensionInfo,
         // KMK -->
-        extRepos: List<ExtensionRepo>? = null,
+        extStores: List<ExtensionStore>? = null,
         // KMK <--
     ): LoadResult {
         // KMK -->
-        val repos = extRepos ?: getExtensionRepo.getAll()
+        val stores = extStores ?: getExtensionStores.await()
         // KMK <--
         val pkgManager = context.packageManager
         val pkgInfo = extensionInfo.packageInfo
@@ -461,9 +461,6 @@ internal object ExtensionLoader {
             else -> "all"
         }
 
-        val repo = repos.firstOrNull { repo ->
-            signatures.all { it == repo.signingKeyFingerprint }
-        }
         val extension = Extension.Installed(
             name = extName,
             pkgName = pkgName,
@@ -478,10 +475,11 @@ internal object ExtensionLoader {
             isShared = extensionInfo.isShared,
             // KMK -->
             signatureHash = signatures.last(),
-            repoName = repo?.let {
-                it.shortName.takeIf { !it.isNullOrBlank() } ?: it.name
+            storeName = stores.firstOrNull { store ->
+                signatures.all { it == store.signingKey }
+            }?.let { store ->
+                store.badgeLabel.takeIf(String::isNotBlank) ?: store.name
             },
-            repoUrl = repo?.baseUrl,
             // KMK <--
         )
         return LoadResult.Success(extension)
