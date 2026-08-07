@@ -383,18 +383,6 @@ abstract class HttpSource : CatalogueSource {
     // KMK <--
 
     /**
-     * Get all the available chapters for a manga.
-     * Normally it's not needed to override this method.
-     *
-     * @param manga the manga to update.
-     * @return the chapters for the manga.
-     */
-    override suspend fun getChapterList(manga: SManga): List<SChapter> {
-        @Suppress("DEPRECATION")
-        return fetchChapterList(manga).awaitSingle()
-    }
-
-    /**
      * Returns an observable with the updated chapter list for a manga.
      * Normally it's not needed to override this method.
      *

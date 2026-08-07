@@ -1296,6 +1296,13 @@ class MangaScreenModel(
                 // KMK <--
             }
         } catch (e: Throwable) {
+            // KMK -->
+            // Extensions may throw UnsupportedOperationException with no message (e.g. via
+            // deprecated stub parse methods). formattedMessage renders this as
+            // "UnsupportedOperationException: null" which is meaningless to users.
+            // Silently ignore — DB chapters (if any) remain visible.
+            if (e is UnsupportedOperationException) return
+            // KMK <--
             val message = if (e is NoChaptersException) {
                 context.stringResource(MR.strings.no_chapters_error)
             } else {
