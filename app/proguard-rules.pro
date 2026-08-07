@@ -1,8 +1,8 @@
 -dontobfuscate
 
--keep,allowoptimization class eu.kanade.** { public protected *; }
--keep,allowoptimization class tachiyomi.** { public protected *; }
--keep,allowoptimization class mihon.** { public protected *; }
+-keep class eu.kanade.** { *; }
+-keep class tachiyomi.** { *; }
+-keep class mihon.** { *; }
 
 # Keep extension-facing API contracts & coroutines intact
 -keep class eu.kanade.tachiyomi.source.** { *; }

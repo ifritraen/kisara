@@ -28,8 +28,8 @@ android {
     defaultConfig {
         applicationId = "com.raen.kisara"
 
-        versionCode = 12118
-        versionName = "1.21.18"
+        versionCode = 12119
+        versionName = "1.21.19"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
@@ -120,9 +120,9 @@ android {
     splits {
         abi {
             isEnable = true
-            isUniversalApk = false
+            isUniversalApk = true
             reset()
-            include("arm64-v8a")
+            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         }
     }
 

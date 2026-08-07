@@ -55,7 +55,7 @@ jobs:
           fi
           ./gradlew assemblePreview $FLAGS
 
-      - name: Sign APK with Persistent Keystore
+      - name: Sign APKs with Persistent Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -64,43 +64,44 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
-            APK_FILE=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
             BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
-            $BUILD_TOOLS_DIR/apksigner sign --ks release.keystore --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" "$APK_FILE"
+            find app/build/outputs/apk/ -name "*.apk" | while read -r APK_FILE; do
+              $BUILD_TOOLS_DIR/apksigner sign --ks release.keystore --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" "$APK_FILE"
+            done
             rm -f release.keystore
           fi
 
-      - name: Package & Rename Output APK
+      - name: Package & Rename Output APKs
         id: package
         run: |
           set -e
           REF_NAME=$(echo "${GITHUB_REF}" | sed -e 's/refs\/[^\/]*\///g' | sed -e 's/[-\/]/_/g')
           COMMIT_COUNT=$(git rev-list --count HEAD)
-          APK_NAME="Kisara-${REF_NAME}-r${COMMIT_COUNT}.apk"
           RELEASE_TAG="build-r${COMMIT_COUNT}"
+          mkdir -p output_apks
 
-          APK_FILE=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
-          if [ -f "$APK_FILE" ]; then
-            cp "$APK_FILE" "./$APK_NAME"
-            echo "APK_PATH=./$APK_NAME" >> $GITHUB_OUTPUT
-            echo "APK_NAME=$APK_NAME" >> $GITHUB_OUTPUT
-            echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
-            echo "COMMIT_COUNT=$COMMIT_COUNT" >> $GITHUB_OUTPUT
-            echo "Successfully packaged $APK_NAME"
-          else
-            echo "Error: No APK file generated." && exit 1
-          fi
+          find app/build/outputs/apk/ -name "*.apk" | while read -r APK_FILE; do
+            BASENAME=$(basename "$APK_FILE" .apk)
+            CLEAN_NAME=$(echo "$BASENAME" | sed -e 's/app-//g' | sed -e 's/-unsigned//g')
+            NEW_NAME="Kisara-r${COMMIT_COUNT}-${CLEAN_NAME}.apk"
+            cp "$APK_FILE" "./output_apks/$NEW_NAME"
+            echo "Packaged ./output_apks/$NEW_NAME"
+          done
+
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "COMMIT_COUNT=$COMMIT_COUNT" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.APK_NAME }}
-          path: ${{ steps.package.outputs.APK_PATH }}
+          name: Kisara-apks-r${{ steps.package.outputs.COMMIT_COUNT }}
+          path: ./output_apks/*.apk
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, 'release:') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.APK_PATH }}
+          files: ./output_apks/*.apk
           tag_name: ${{ steps.package.outputs.RELEASE_TAG }}
           name: Kisara build-r${{ steps.package.outputs.COMMIT_COUNT }}
           draft: false
