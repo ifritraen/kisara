@@ -232,135 +232,135 @@ private fun ExtensionContent(
             }
         } else {
             state.items.forEach { (header, items) ->
-            item(
-                contentType = "header",
-                key = "extensionHeader-${header.hashCode()}",
-            ) {
-                when (header) {
-                    is ExtensionUiModel.Header.Resource -> {
-                        val action: @Composable RowScope.() -> Unit =
-                            when (header.textRes) {
-                                MR.strings.ext_updates_pending -> {
-                                    {
-                                        Button(onClick = { onClickUpdateAll() }) {
-                                            Text(
-                                                text = stringResource(MR.strings.ext_update_all),
-                                                style = LocalTextStyle.current.copy(
-                                                    color = MaterialTheme.colorScheme.onPrimary,
-                                                ),
-                                            )
+                item(
+                    contentType = "header",
+                    key = "extensionHeader-${header.hashCode()}",
+                ) {
+                    when (header) {
+                        is ExtensionUiModel.Header.Resource -> {
+                            val action: @Composable RowScope.() -> Unit =
+                                when (header.textRes) {
+                                    MR.strings.ext_updates_pending -> {
+                                        {
+                                            Button(onClick = { onClickUpdateAll() }) {
+                                                Text(
+                                                    text = stringResource(MR.strings.ext_update_all),
+                                                    style = LocalTextStyle.current.copy(
+                                                        color = MaterialTheme.colorScheme.onPrimary,
+                                                    ),
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                                // KMK -->
-                                KMR.strings.extensions_page_more -> {
-                                    {
-                                        Button(onClick = { navigator?.push(ExtensionStoresScreen()) }) {
-                                            Text(
-                                                text = stringResource(MR.strings.action_add_repo),
-                                                style = LocalTextStyle.current.copy(
-                                                    color = MaterialTheme.colorScheme.onPrimary,
-                                                ),
-                                            )
+                                    // KMK -->
+                                    KMR.strings.extensions_page_more -> {
+                                        {
+                                            Button(onClick = { navigator?.push(ExtensionStoresScreen()) }) {
+                                                Text(
+                                                    text = stringResource(MR.strings.action_add_repo),
+                                                    style = LocalTextStyle.current.copy(
+                                                        color = MaterialTheme.colorScheme.onPrimary,
+                                                    ),
+                                                )
+                                            }
                                         }
                                     }
+                                    // KMK <--
+                                    else -> {
+                                        {}
+                                    }
                                 }
-                                // KMK <--
-                                else -> {
-                                    {}
-                                }
-                            }
-                        ExtensionHeader(
-                            textRes = header.textRes,
-                            modifier = Modifier
-                                // KMK -->
-                                .padding(end = MaterialTheme.padding.small)
-                                // KMK <--
-                                .animateItemFastScroll(),
-                            action = action,
-                        )
-                    }
-                    is ExtensionUiModel.Header.Text -> {
-                        ExtensionHeader(
-                            text = header.text,
-                            modifier = Modifier.animateItemFastScroll(),
-                        )
+                            ExtensionHeader(
+                                textRes = header.textRes,
+                                modifier = Modifier
+                                    // KMK -->
+                                    .padding(end = MaterialTheme.padding.small)
+                                    // KMK <--
+                                    .animateItemFastScroll(),
+                                action = action,
+                            )
+                        }
+                        is ExtensionUiModel.Header.Text -> {
+                            ExtensionHeader(
+                                text = header.text,
+                                modifier = Modifier.animateItemFastScroll(),
+                            )
+                        }
                     }
                 }
-            }
 
-            items(
-                items = items,
-                contentType = { "item" },
-                key = { item ->
-                    when (item.extension) {
-                        is Extension.Untrusted -> "extension-untrusted-${item.hashCode()}"
-                        is Extension.Installed -> "extension-installed-${item.hashCode()}"
-                        is Extension.Available -> "extension-available-${item.hashCode()}"
-                        is Extension.Jar -> "extension-jar-${item.hashCode()}"
-                        is Extension.AvailableJar -> "extension-availablejar-${item.hashCode()}"
-                    }
-                },
-            ) { item ->
-                if (item.extension is Extension.Jar) {
-                    JarExtensionItem(
-                        modifier = Modifier.animateItemFastScroll(),
-                        extension = item.extension,
-                        onToggleJarSource = onToggleJarSource,
-                        onUninstallJar = onUninstallJar,
-                        onUpdateJar = onUpdateJar,
-                    )
-                } else {
-                    ExtensionItem(
-                        modifier = Modifier.animateItemFastScroll(),
-                        item = item,
-                        onClickItem = {
-                            when (it) {
-                                is Extension.Available -> onInstallExtension(it)
-                                is Extension.AvailableJar -> onInstallAvailableJar(it)
-                                is Extension.Installed -> onOpenExtension(it)
-                                is Extension.Untrusted -> {
-                                    trustState = it
-                                }
-                                else -> {}
-                            }
-                        },
-                        onLongClickItem = onLongClickItem,
-                        onClickItemSecondaryAction = {
-                            when (it) {
-                                is Extension.Available -> onOpenWebView(it)
-                                is Extension.Installed -> onOpenExtensionDetails(it)
-                                else -> {}
-                            }
-                        },
-                        onClickItemCancel = onClickItemCancel,
-                        onClickItemAction = {
-                            when (it) {
-                                is Extension.Available -> onInstallExtension(it)
-                                is Extension.AvailableJar -> onInstallAvailableJar(it)
-                                is Extension.Installed -> {
-                                    if (it.hasUpdate) {
-                                        onUpdateExtension(it)
-                                    } else {
-                                        onOpenExtension(it)
+                items(
+                    items = items,
+                    contentType = { "item" },
+                    key = { item ->
+                        when (item.extension) {
+                            is Extension.Untrusted -> "extension-untrusted-${item.hashCode()}"
+                            is Extension.Installed -> "extension-installed-${item.hashCode()}"
+                            is Extension.Available -> "extension-available-${item.hashCode()}"
+                            is Extension.Jar -> "extension-jar-${item.hashCode()}"
+                            is Extension.AvailableJar -> "extension-availablejar-${item.hashCode()}"
+                        }
+                    },
+                ) { item ->
+                    if (item.extension is Extension.Jar) {
+                        JarExtensionItem(
+                            modifier = Modifier.animateItemFastScroll(),
+                            extension = item.extension,
+                            onToggleJarSource = onToggleJarSource,
+                            onUninstallJar = onUninstallJar,
+                            onUpdateJar = onUpdateJar,
+                        )
+                    } else {
+                        ExtensionItem(
+                            modifier = Modifier.animateItemFastScroll(),
+                            item = item,
+                            onClickItem = {
+                                when (it) {
+                                    is Extension.Available -> onInstallExtension(it)
+                                    is Extension.AvailableJar -> onInstallAvailableJar(it)
+                                    is Extension.Installed -> onOpenExtension(it)
+                                    is Extension.Untrusted -> {
+                                        trustState = it
                                     }
+                                    else -> {}
                                 }
-                                is Extension.Untrusted -> {
-                                    trustState = it
+                            },
+                            onLongClickItem = onLongClickItem,
+                            onClickItemSecondaryAction = {
+                                when (it) {
+                                    is Extension.Available -> onOpenWebView(it)
+                                    is Extension.Installed -> onOpenExtensionDetails(it)
+                                    else -> {}
                                 }
-                                else -> {}
-                            }
-                        },
-                        onClickItemSideload = {
-                            onSideloadExtension(it)
-                        },
-                        onClickItemBrowseAvailableJar = onBrowseAvailableJar,
-                        onClickItemBrowseAvailableExtension = onBrowseAvailableExtension,
-                    )
+                            },
+                            onClickItemCancel = onClickItemCancel,
+                            onClickItemAction = {
+                                when (it) {
+                                    is Extension.Available -> onInstallExtension(it)
+                                    is Extension.AvailableJar -> onInstallAvailableJar(it)
+                                    is Extension.Installed -> {
+                                        if (it.hasUpdate) {
+                                            onUpdateExtension(it)
+                                        } else {
+                                            onOpenExtension(it)
+                                        }
+                                    }
+                                    is Extension.Untrusted -> {
+                                        trustState = it
+                                    }
+                                    else -> {}
+                                }
+                            },
+                            onClickItemSideload = {
+                                onSideloadExtension(it)
+                            },
+                            onClickItemBrowseAvailableJar = onBrowseAvailableJar,
+                            onClickItemBrowseAvailableExtension = onBrowseAvailableExtension,
+                        )
+                    }
                 }
             }
         }
-    }
     }
     if (trustState != null) {
         ExtensionTrustDialog(

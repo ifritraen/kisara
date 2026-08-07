@@ -642,8 +642,12 @@ class MangaScreenModel(
                             ?: searchResults.firstOrNull()
                         if (match != null) {
                             primaryTracker.searchById(match.remote_id.toString())
-                        } else null
-                    } else null
+                        } else {
+                            null
+                        }
+                    } else {
+                        null
+                    }
                 }
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Failed fetching tracker details for manga $mangaId" }
