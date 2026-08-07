@@ -18,6 +18,15 @@ class StubSource(
 
     override suspend fun getChapterList(manga: SManga): List<SChapter> =
         throw SourceNotInstalledException()
+
+    override suspend fun getMangaUpdate(
+        manga: SManga,
+        chapters: List<SChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): eu.kanade.tachiyomi.source.model.SMangaUpdate =
+        throw SourceNotInstalledException()
+
     override suspend fun getPageList(chapter: SChapter): List<Page> =
         throw SourceNotInstalledException()
 

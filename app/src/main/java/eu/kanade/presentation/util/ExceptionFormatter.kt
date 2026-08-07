@@ -23,6 +23,7 @@ val Throwable.formattedMessage: String
             }
 
             is NoResultsException -> return context.stringResource(MR.strings.no_results_found)
+            is tachiyomi.domain.chapter.model.NoChaptersException -> return context.stringResource(MR.strings.no_chapters_error)
             is SourceNotInstalledException -> return context.stringResource(MR.strings.loader_not_implemented_error)
         }
         return when (val className = this::class.simpleName) {

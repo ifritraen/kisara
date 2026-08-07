@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 
 /**
  * A basic interface for creating a source. It could be an online source, a local source, stub source, etc.
@@ -39,7 +40,7 @@ interface Source {
      * @param manga the manga to update.
      * @return the updated manga.
      */
-    suspend fun getMangaDetails(manga: SManga): SManga
+    suspend fun getMangaDetails(manga: SManga): SManga = getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = false).manga
 
     /**
      * Get all the available chapters for a manga.
@@ -48,7 +49,26 @@ interface Source {
      * @param manga the manga to update.
      * @return the chapters for the manga.
      */
-    suspend fun getChapterList(manga: SManga): List<SChapter>
+    suspend fun getChapterList(manga: SManga): List<SChapter> = getMangaUpdate(manga, emptyList(), fetchDetails = false, fetchChapters = true).chapters
+
+    /**
+     * Fetches updated information for a manga.
+     *
+     * Depending on the provided flags or source availability, this may include
+     * updated manga metadata, available chapters, or both.
+     *
+     * @since extensions-lib 1.6
+     * @param manga The manga to fetch updates for.
+     * @param chapters Existing chapters of the manga
+     * @param fetchDetails Whether to fetch updated manga details.
+     * @param fetchChapters Whether to fetch available chapters.
+     */
+    suspend fun getMangaUpdate(
+        manga: SManga,
+        chapters: List<SChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): SMangaUpdate
 
     /**
      * Get the list of pages a chapter has. Pages should be returned

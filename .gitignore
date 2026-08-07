@@ -25,6 +25,7 @@ app/standard/preview/*
 
 # Safety Gate
 .aaa/
+.agents/
 .env
 secrets.*
 sensitive.*

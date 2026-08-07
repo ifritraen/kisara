@@ -2,13 +2,17 @@ package eu.kanade.tachiyomi.source
 
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
+import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import tachiyomi.core.common.util.QuerySanitizer.sanitize
+import tachiyomi.core.common.util.lang.awaitSingle
 import tachiyomi.core.common.util.system.logcat
 
 /**
@@ -66,6 +70,17 @@ interface CatalogueSource : Source {
      * Returns the list of filters for the source.
      */
     fun getFilterList(): FilterList
+
+    override suspend fun getMangaUpdate(
+        manga: SManga,
+        chapters: List<SChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): SMangaUpdate = supervisorScope {
+        val asyncManga = if (fetchDetails) async { getMangaDetails(manga) } else null
+        val asyncChapters = if (fetchChapters) async { getChapterList(manga) } else null
+        SMangaUpdate(asyncManga?.await() ?: manga, asyncChapters?.await() ?: chapters)
+    }
 
     // KMK -->
 
