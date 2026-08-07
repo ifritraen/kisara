@@ -6,15 +6,12 @@
 
 # Keep extension-facing API contracts & coroutines intact
 -keep class eu.kanade.tachiyomi.source.** { *; }
--keepinterface eu.kanade.tachiyomi.source.** { *; }
 -keep class tachiyomi.domain.source.** { *; }
--keepinterface tachiyomi.domain.source.** { *; }
 -keep class tachiyomi.domain.chapter.** { *; }
 -keep class tachiyomi.domain.manga.** { *; }
 
 # Keep Kotatsu Parsers package intact for sideloaded jars
 -keep class org.koitharu.kotatsu.parsers.** { *; }
--keep interface org.koitharu.kotatsu.parsers.** { *; }
 
 # Keep common dependencies used in extensions
 -keep,allowoptimization class androidx.preference.** { public protected *; }
