@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -129,24 +130,19 @@ fun ExtensionScreen(
     ) {
         when {
             state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))
-            state.isEmpty -> {
-                val msg = if (!searchQuery.isNullOrEmpty()) {
-                    MR.strings.no_results_found
-                } else {
-                    MR.strings.empty_screen
-                }
-                EmptyScreen(
-                    msg,
-                    modifier = Modifier.padding(contentPadding),
-                    actions = persistentListOf(
-                        EmptyScreenAction(
-                            stringRes = MR.strings.label_extension_repos,
-                            icon = Icons.Outlined.Settings,
-                            onClick = { navigator.push(ExtensionStoresScreen()) },
-                        ),
+            searchQuery.isNullOrEmpty() &&
+                state.selectedTag == null &&
+                state.isEmpty -> EmptyScreen(
+                MR.strings.empty_screen,
+                modifier = Modifier.padding(contentPadding),
+                actions = persistentListOf(
+                    EmptyScreenAction(
+                        stringRes = MR.strings.label_extension_repos,
+                        icon = Icons.Outlined.Settings,
+                        onClick = { navigator.push(ExtensionStoresScreen()) },
                     ),
-                )
-            }
+                ),
+            )
             else -> {
                 ExtensionContent(
                     state = state,
@@ -226,7 +222,16 @@ private fun ExtensionContent(
             }
         }
 
-        state.items.forEach { (header, items) ->
+        if (state.items.isEmpty()) {
+            item(key = "extension-empty-state") {
+                EmptyScreen(
+                    stringResource(MR.strings.no_results_found),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.padding.medium),
+                    scrollable = false,
+                )
+            }
+        } else {
+            state.items.forEach { (header, items) ->
             item(
                 contentType = "header",
                 key = "extensionHeader-${header.hashCode()}",
@@ -355,6 +360,7 @@ private fun ExtensionContent(
                 }
             }
         }
+    }
     }
     if (trustState != null) {
         ExtensionTrustDialog(

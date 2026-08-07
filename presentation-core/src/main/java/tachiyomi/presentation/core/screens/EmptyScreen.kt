@@ -40,6 +40,7 @@ fun EmptyScreen(
     stringRes: StringResource,
     modifier: Modifier = Modifier,
     actions: ImmutableList<EmptyScreenAction>? = null,
+    scrollable: Boolean = true,
     // KMK -->
     help: @Composable (() -> Unit)? = null,
     // KMK <--
@@ -48,6 +49,7 @@ fun EmptyScreen(
         message = stringResource(stringRes),
         modifier = modifier,
         actions = actions,
+        scrollable = scrollable,
         // KMK -->
         help = help,
         // KMK <--
@@ -59,6 +61,7 @@ fun EmptyScreen(
     message: String,
     modifier: Modifier = Modifier,
     actions: ImmutableList<EmptyScreenAction>? = null,
+    scrollable: Boolean = true,
     // KMK -->
     help: @Composable (() -> Unit)? = null,
     // KMK <--
@@ -67,7 +70,7 @@ fun EmptyScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,

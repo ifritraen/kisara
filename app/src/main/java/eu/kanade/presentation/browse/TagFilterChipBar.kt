@@ -34,6 +34,12 @@ fun TagFilterChipBar(
             selected = selectedTag == null,
             onClick = { onSelectTag(null) },
             label = { Text("All") },
+            border = FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = selectedTag == null,
+                borderColor = androidx.compose.ui.graphics.Color.Transparent,
+                selectedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+            ),
             colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                 selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -44,6 +50,12 @@ fun TagFilterChipBar(
                 selected = selectedTag == tag,
                 onClick = { onSelectTag(if (selectedTag == tag) null else tag) },
                 label = { Text(tag) },
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selectedTag == tag,
+                    borderColor = androidx.compose.ui.graphics.Color.Transparent,
+                    selectedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                ),
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,

@@ -10,10 +10,10 @@ data class ALSearchItem(
     val description: String?,
     val format: String?,
     val status: String?,
-    val startDate: ALFuzzyDate,
+    val startDate: ALFuzzyDate? = null,
     val chapters: Long?,
     val averageScore: Int?,
-    val staff: ALStaff,
+    val staff: ALStaff? = null,
 ) {
     fun toALManga(): ALManga = ALManga(
         remoteId = id,
@@ -22,10 +22,10 @@ data class ALSearchItem(
         description = description,
         format = format?.replace("_", "-") ?: "",
         publishingStatus = status ?: "",
-        startDateFuzzy = startDate.toEpochMilli(),
+        startDateFuzzy = startDate?.toEpochMilli() ?: 0L,
         totalChapters = chapters ?: 0,
         averageScore = averageScore ?: -1,
-        staff = staff,
+        staff = staff ?: ALStaff(emptyList()),
     )
 }
 

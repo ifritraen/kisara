@@ -22,6 +22,7 @@ enum class MangaScreenItem {
     METADATA_INFO,
 
     // SY <--
+    TRACKER_DETAILS,
     DESCRIPTION_WITH_TAG,
 
     // SY -->

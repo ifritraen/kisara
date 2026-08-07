@@ -622,6 +622,36 @@ class MangaScreenModel(
     }
 
     private suspend fun syncTrackers() {
+        val primaryTracker = trackPreferences.getPrimaryTracker(trackerManager)
+        if (primaryTracker != null && primaryTracker.isLoggedIn) {
+            updateSuccessState { it.copy(isFetchingTrackerDetails = true) }
+            val existingTracks = try {
+                getTracks.await(mangaId)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val boundTrack = existingTracks.firstOrNull { it.trackerId == primaryTracker.id }
+            val trackDetails = try {
+                if (boundTrack != null) {
+                    primaryTracker.searchById(boundTrack.remoteId.toString())
+                } else {
+                    val currentManga = successState?.manga ?: getManga.await(mangaId)
+                    if (currentManga != null) {
+                        val searchResults = primaryTracker.search(currentManga.title)
+                        val match = searchResults.firstOrNull { it.title.equals(currentManga.title, ignoreCase = true) }
+                            ?: searchResults.firstOrNull()
+                        if (match != null) {
+                            primaryTracker.searchById(match.remote_id.toString())
+                        } else null
+                    } else null
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Failed fetching tracker details for manga $mangaId" }
+                null
+            }
+            updateSuccessState { it.copy(trackerDetails = trackDetails, isFetchingTrackerDetails = false) }
+        }
+
         if (!trackPreferences.autoSyncProgressFromTrackers().get()) return
 
         refreshTracks.await(mangaId, enhancedTrackersOnly = false)
@@ -2326,6 +2356,8 @@ class MangaScreenModel(
             // KMK <--
             // KMK -->
             val pageBookmarks: List<tachiyomi.domain.pagebookmark.model.PageBookmark> = emptyList(),
+            val trackerDetails: eu.kanade.tachiyomi.data.track.model.TrackSearch? = null,
+            val isFetchingTrackerDetails: Boolean = false,
             // KMK <--
         ) : State {
             // KMK -->

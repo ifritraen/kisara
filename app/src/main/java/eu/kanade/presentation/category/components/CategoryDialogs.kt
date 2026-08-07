@@ -12,10 +12,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CopyAll
@@ -669,36 +673,61 @@ fun ChangeCategoryDialog(
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+                                                    modifier = Modifier.padding(start = 2.dp, end = 6.dp, top = 1.dp, bottom = 1.dp),
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                 ) {
                                                     when (subEntry) {
-                                                        is CheckboxState.TriState -> {
-                                                            androidx.compose.runtime.CompositionLocalProvider(
-                                                                androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp,
-                                                            ) {
-                                                                TriStateCheckbox(
-                                                                    state = subEntry.asToggleableState(),
-                                                                    onClick = { onChange(subEntry) },
-                                                                    modifier = Modifier.size(16.dp),
+                                                        is CheckboxState.TriState.Include -> {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Check,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(12.dp),
+                                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                            )
+                                                        }
+                                                        is CheckboxState.TriState.Exclude -> {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Close,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(12.dp),
+                                                                tint = MaterialTheme.colorScheme.error,
+                                                            )
+                                                        }
+                                                        is CheckboxState.State -> {
+                                                            if (subEntry.isChecked) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Check,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(12.dp),
+                                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                                )
+                                                            } else {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(10.dp)
+                                                                        .border(
+                                                                            width = 1.dp,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                                            shape = RoundedCornerShape(2.dp),
+                                                                        ),
                                                                 )
                                                             }
                                                         }
-                                                        is CheckboxState.State -> {
-                                                            androidx.compose.runtime.CompositionLocalProvider(
-                                                                androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp,
-                                                            ) {
-                                                                Checkbox(
-                                                                    checked = subEntry.isChecked,
-                                                                    onCheckedChange = { onChange(subEntry) },
-                                                                    modifier = Modifier.size(16.dp),
-                                                                )
-                                                            }
+                                                        else -> {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(10.dp)
+                                                                    .border(
+                                                                        width = 1.dp,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                                        shape = RoundedCornerShape(2.dp),
+                                                                    ),
+                                                            )
                                                         }
                                                     }
                                                     Text(
                                                         text = sub.visualName,
-                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        style = MaterialTheme.typography.bodySmall,
                                                     )
                                                 }
                                             }

@@ -1,28 +1,35 @@
 -dontobfuscate
 
--keep class eu.kanade.** { *; }
--keep class tachiyomi.** { *; }
--keep class mihon.** { *; }
+-keep,allowoptimization class eu.kanade.** { public protected *; }
+-keep,allowoptimization class tachiyomi.** { public protected *; }
+-keep,allowoptimization class mihon.** { public protected *; }
+
+# Keep extension-facing API contracts & coroutines intact
+-keep class eu.kanade.tachiyomi.source.** { *; }
+-keepinterface eu.kanade.tachiyomi.source.** { *; }
+-keep class tachiyomi.domain.source.** { *; }
+-keepinterface tachiyomi.domain.source.** { *; }
+-keep class tachiyomi.domain.chapter.** { *; }
+-keep class tachiyomi.domain.manga.** { *; }
 
 # Keep Kotatsu Parsers package intact for sideloaded jars
 -keep class org.koitharu.kotatsu.parsers.** { *; }
 -keep interface org.koitharu.kotatsu.parsers.** { *; }
 
-
 # Keep common dependencies used in extensions
--keep class androidx.preference.** { *; }
--keep class kotlin.** { *; }
--keep class kotlinx.coroutines.** { *; }
+-keep,allowoptimization class androidx.preference.** { public protected *; }
+-keep,allowoptimization class kotlin.** { public protected *; }
+-keep,allowoptimization class kotlinx.coroutines.** { public protected *; }
 -keepclassmembers class kotlinx.coroutines.** { *; }
 -keepclassmembers class kotlinx.coroutines.BuildersKt { *; }
--keep class kotlinx.serialization.** { *; }
--keep class kotlin.time.** { *; }
--keep class okhttp3.** { *; }
--keep class okio.** { *; }
--keep class org.jsoup.** { *; }
--keep class rx.** { *; }
--keep class app.cash.quickjs.** { *; }
--keep class uy.kohesive.injekt.** { *; }
+-keep,allowoptimization class kotlinx.serialization.** { public protected *; }
+-keep,allowoptimization class kotlin.time.** { public protected *; }
+-keep,allowoptimization class okhttp3.** { public protected *; }
+-keep,allowoptimization class okio.** { public protected *; }
+-keep,allowoptimization class org.jsoup.** { public protected *; }
+-keep,allowoptimization class rx.** { public protected *; }
+-keep,allowoptimization class app.cash.quickjs.** { public protected *; }
+-keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
 
 # From extensions-lib
 -keep class eu.kanade.tachiyomi.network.interceptor.RateLimitInterceptorKt { *; }

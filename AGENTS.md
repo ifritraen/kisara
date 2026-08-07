@@ -131,13 +131,26 @@ Gradle `-P` flags (`buildSrc/.../BuildConfig.kt`):
 | `disable-code-shrink` | Skip R8 minification |
 | `include-dependency-info` | Dependency metadata in APK |
 
+### Fast Gradle Strategy & Task Hierarchy
+- **No Auto Builds**: NEVER run `./gradlew`, builds, tests, or spotless automatically unless explicitly commanded by the user or executing `/build` / `/up`.
+- **Always use `./gradlew` syntax** (never `gradlew.bat`).
+- **Task Hierarchy & Ultra-Fast Pipeline**:
+  - Compilation check: `./gradlew :app:compileDebugKotlin`
+  - Ultra-Fast Local Build & Install: `./gradlew assembleDebug --offline --build-cache --parallel; if ($LASTEXITCODE -eq 0) { adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk }`
+  - Fast Preview Build & Install: `./gradlew assemblePreview --offline --build-cache --parallel; if ($LASTEXITCODE -eq 0) { adb install -r app/build/outputs/apk/preview/app-arm64-v8a-preview.apk }`
+  - Full Preview APK: `./gradlew assemblePreview -Pinclude-telemetry -Penable-updater --build-cache --parallel`
+  - Targeted tests: `./gradlew test --tests <Class>` or `./gradlew :<module>:test`
+  - Full verification: `./gradlew check` (only on feature completion) / `./gradlew build` (only before release/merge)
+- **Forbidden**: NEVER run `./gradlew clean` or `./gradlew clean build` unless explicitly requested or Gradle cache is corrupted.
+
 ```bash
 ./gradlew spotlessApply              # format (run before spotlessCheck)
 ./gradlew spotlessCheck              # REQUIRED before considering work done (CI gate)
+./gradlew :app:compileDebugKotlin    # fast compilation check
+./gradlew assembleDebug --offline --build-cache --parallel; if ($LASTEXITCODE -eq 0) { adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk } # ultra-fast local build + install
 ./gradlew assemblePreview            # main CI/dev APK
 ./gradlew assemblePreview -Pinclude-telemetry -Penable-updater  # full upstream CI build
 ./gradlew testReleaseUnitTest        # CI unit tests (or ./gradlew test for all modules)
-./gradlew installDebug               # device install
 ./gradlew :data:generateSqlDelightInterface  # after .sq / .sqm changes
 ```
 

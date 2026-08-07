@@ -292,7 +292,7 @@ class ReaderActivity : BaseActivity() {
                 override fun handleOnBackPressed() {
                     val now = System.currentTimeMillis()
                     if (now - lastBackPressedTime < 2000) {
-                        finish()
+                        finishAndRemoveTask()
                     } else {
                         lastBackPressedTime = now
                         toast(KMR.strings.confirm_exit_reader)

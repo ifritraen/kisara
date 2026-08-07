@@ -124,8 +124,8 @@ fun SourcesScreen(
     when {
         state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))
         // KMK -->
-        state.searchQuery == null &&
-            // KMK <--
+        state.searchQuery.isNullOrEmpty() &&
+            state.selectedTag == null &&
             state.isEmpty -> EmptyScreen(
             MR.strings.source_empty_screen,
             modifier = Modifier.padding(contentPadding),
@@ -145,44 +145,64 @@ fun SourcesScreen(
                     contentPadding = PaddingValues(top = searchBoxHeight) + PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                     // KMK <--
                 ) {
-                    items.forEach { model ->
-                        when (model) {
-                            is SourceUiModel.Header -> {
-                                stickyHeader(
-                                    key = "$STICKY_HEADER_KEY_PREFIX-header-${model.hashCode()}",
-                                    contentType = "header",
-                                ) {
-                                    SourceHeader(
-                                        modifier = Modifier
-                                            .animateItemFastScroll()
-                                            .background(MaterialTheme.colorScheme.background)
-                                            .fillMaxWidth(),
-                                        language = model.language,
-                                        // SY -->
-                                        isCategory = model.isCategory,
-                                        // SY <--
-                                    )
+                    if (items.isEmpty()) {
+                        item(key = "source-empty-state") {
+                            EmptyScreen(
+                                stringResource(MR.strings.no_results_found),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.padding.medium),
+                                scrollable = false,
+                            )
+                        }
+                    } else {
+                        items.forEach { model ->
+                            when (model) {
+                                is SourceUiModel.Header -> {
+                                    stickyHeader(
+                                        key = "$STICKY_HEADER_KEY_PREFIX-header-${model.hashCode()}",
+                                        contentType = "header",
+                                    ) {
+                                        SourceHeader(
+                                            modifier = Modifier
+                                                .animateItemFastScroll()
+                                                .background(MaterialTheme.colorScheme.background)
+                                                .fillMaxWidth(),
+                                            language = model.language,
+                                            // SY -->
+                                            isCategory = model.isCategory,
+                                            // SY <--
+                                        )
+                                    }
                                 }
-                            }
-                            is SourceUiModel.Item -> {
-                                val isPinned = Pin.Pinned in model.source.pin
-                                item(
-                                    key = "source-${model.source.key()}",
-                                    contentType = "item",
-                                ) {
-                                    if (isPinned) {
-                                        ReorderableItem(reorderableState, key = "source-${model.source.key()}") {
+                                is SourceUiModel.Item -> {
+                                    val isPinned = Pin.Pinned in model.source.pin
+                                    item(
+                                        key = "source-${model.source.key()}",
+                                        contentType = "item",
+                                    ) {
+                                        if (isPinned) {
+                                            ReorderableItem(reorderableState, key = "source-${model.source.key()}") {
+                                                SourceItem(
+                                                    modifier = Modifier.animateItemFastScroll(),
+                                                    dragHandle = {
+                                                        Icon(
+                                                            imageVector = Icons.Outlined.DragHandle,
+                                                            contentDescription = "Drag to reorder",
+                                                            modifier = Modifier
+                                                                .padding(horizontal = 4.dp)
+                                                                .draggableHandle(),
+                                                        )
+                                                    },
+                                                    source = model.source,
+                                                    showLatest = state.showLatest,
+                                                    showPin = state.showPin,
+                                                    onClickItem = onClickItem,
+                                                    onLongClickItem = onLongClickItem,
+                                                    onClickPin = onClickPin,
+                                                )
+                                            }
+                                        } else {
                                             SourceItem(
                                                 modifier = Modifier.animateItemFastScroll(),
-                                                dragHandle = {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.DragHandle,
-                                                        contentDescription = "Drag to reorder",
-                                                        modifier = Modifier
-                                                            .padding(horizontal = 4.dp)
-                                                            .draggableHandle(),
-                                                    )
-                                                },
                                                 source = model.source,
                                                 showLatest = state.showLatest,
                                                 showPin = state.showPin,
@@ -191,16 +211,6 @@ fun SourcesScreen(
                                                 onClickPin = onClickPin,
                                             )
                                         }
-                                    } else {
-                                        SourceItem(
-                                            modifier = Modifier.animateItemFastScroll(),
-                                            source = model.source,
-                                            showLatest = state.showLatest,
-                                            showPin = state.showPin,
-                                            onClickItem = onClickItem,
-                                            onLongClickItem = onLongClickItem,
-                                            onClickPin = onClickPin,
-                                        )
                                     }
                                 }
                             }

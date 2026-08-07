@@ -127,6 +127,8 @@ import eu.kanade.presentation.manga.components.PagePreviewItems
 import eu.kanade.presentation.manga.components.PagePreviews
 import eu.kanade.presentation.manga.components.RelatedMangasRow
 import eu.kanade.presentation.manga.components.SearchMetadataChips
+import eu.kanade.presentation.manga.components.TrackerDetailsCard
+import eu.kanade.presentation.manga.components.TrackerDetailsSkeleton
 import eu.kanade.presentation.manga.components.TranslationSettingsDialog
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.data.download.model.Download
@@ -752,6 +754,21 @@ private fun MangaScreenSmallImpl(
                                 ) {
                                     onSearch(it, false)
                                 }
+                            }
+                        }
+                        if (state.isFetchingTrackerDetails) {
+                            item(
+                                key = MangaScreenItem.TRACKER_DETAILS,
+                                contentType = MangaScreenItem.TRACKER_DETAILS,
+                            ) {
+                                TrackerDetailsSkeleton()
+                            }
+                        } else if (state.trackerDetails != null) {
+                            item(
+                                key = MangaScreenItem.TRACKER_DETAILS,
+                                contentType = MangaScreenItem.TRACKER_DETAILS,
+                            ) {
+                                TrackerDetailsCard(trackDetails = state.trackerDetails)
                             }
                         }
 
