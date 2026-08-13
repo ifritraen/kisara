@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
@@ -30,9 +31,11 @@ import java.net.URLEncoder
 class FetchExternalMetadata(
     private val getMangaExternalMetadata: GetMangaExternalMetadata = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
-    private val client: OkHttpClient = Injekt.get(),
+    private val networkHelper: NetworkHelper = Injekt.get(),
     private val json: Json = Injekt.get(),
 ) {
+    private val client: OkHttpClient
+        get() = networkHelper.client
 
     suspend fun await(manga: Manga, forceRefresh: Boolean = false): MangaExternalMetadata? = withContext(Dispatchers.IO) {
         if (!forceRefresh) {
