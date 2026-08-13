@@ -409,4 +409,23 @@
     <string name="custom_group_name">Group Name</string>
     <string name="custom_group_select_sources">Select Extensions &amp; Sources</string>
     <string name="custom_group_no_groups">No custom groups created yet</string>
+
+    <!-- External Metadata -->
+    <string name="action_display_score_badge">Score badge</string>
+    <string name="action_display_status_badge">Status badge</string>
+    <string name="action_fetch_external_metadata">Fetch external info</string>
+    <string name="action_fetching_external_metadata">Fetching info from %s…</string>
+    <string name="external_metadata_score">Score</string>
+    <string name="external_metadata_status">Status</string>
+    <string name="external_metadata_start_date">Start Date</string>
+    <string name="external_metadata_chapters">Chapters</string>
+    <string name="external_metadata_licensor">English Licensor</string>
+    <string name="external_metadata_demographic">Demographic</string>
+    <string name="external_metadata_tags">Tags &amp; Tropes</string>
+    <string name="external_metadata_suggested_categories">Suggested Categories</string>
+
+    <!-- Extension Tags -->
+    <string name="extension_tags">Extension Tags</string>
+    <string name="filter_by_extension_tag">Filter by Extension Tag</string>
+    <string name="action_add_to_tracker">Add to Tracker</string>
 </resources>

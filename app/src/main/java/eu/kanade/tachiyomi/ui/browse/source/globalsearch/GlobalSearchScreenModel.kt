@@ -28,11 +28,30 @@ class GlobalSearchScreenModel(
             SourceFilter.PinnedOnly -> base.filter { "${it.id}" in pinnedSources }
             SourceFilter.Custom -> {
                 val activeGroupId = preferences.globalSearchActiveCustomGroupId().get()
-                val customGroup = preferences.customSearchGroups().get().firstOrNull { it.id == activeGroupId }
-                if (customGroup != null) {
-                    base.filter { it.id in customGroup.sourceIds }
+                if (activeGroupId.startsWith("tag_")) {
+                    val tag = activeGroupId.removePrefix("tag_")
+                    val sourceMappings = preferences.sourceTagMappings().get()
+                    val extPrefix = "ext_"
+                    val sourcePrefix = "source_"
+                    val installedExts = extensionManager.installedExtensionsFlow.value
+
+                    base.filter { source ->
+                        val hasDirectTag = sourceMappings.contains("$sourcePrefix${source.id}:$tag")
+                        if (hasDirectTag) return@filter true
+                        val parentExt = installedExts.find { ext -> ext.sources.any { it.id == source.id } }
+                        if (parentExt != null) {
+                            sourceMappings.contains("$extPrefix${parentExt.pkgName}:$tag")
+                        } else {
+                            false
+                        }
+                    }
                 } else {
-                    base
+                    val customGroup = preferences.customSearchGroups().get().firstOrNull { it.id == activeGroupId }
+                    if (customGroup != null) {
+                        base.filter { it.id in customGroup.sourceIds }
+                    } else {
+                        base
+                    }
                 }
             }
             SourceFilter.All -> base

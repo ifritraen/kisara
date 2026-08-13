@@ -66,6 +66,14 @@ fun DisplayOverlaySettingsDialog(
                     label = stringResource(KMR.strings.action_display_source_badge),
                     pref = libraryPreferences.sourceBadge(),
                 )
+                CheckboxItem(
+                    label = stringResource(KMR.strings.action_display_score_badge),
+                    pref = libraryPreferences.scoreBadge(),
+                )
+                CheckboxItem(
+                    label = stringResource(KMR.strings.action_display_status_badge),
+                    pref = libraryPreferences.externalStatusBadge(),
+                )
             }
         },
     )

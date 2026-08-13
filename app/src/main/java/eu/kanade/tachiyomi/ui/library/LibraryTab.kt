@@ -780,350 +780,139 @@ data object LibraryTab : Tab {
                         .padding(start = 16.dp, end = 16.dp, bottom = fabBottomPadding)
                         .let { if (useNewCategorySubbar) it.wrapContentWidth() else it.fillMaxWidth() },
                 ) {
-                    if (useNewCategorySubbar) {
-                        val editCategory = LocalEditCategory.current
-                        // Main Category Bar Surface (New Style)
-                        GlassSurface(
-                            shape = RoundedCornerShape(24.dp),
-                            style = GlassDefaults.prominentStyle(),
-                            isCategoryBar = true,
+                    val editCategory = LocalEditCategory.current
+                    // Main Category Bar Surface
+                    GlassSurface(
+                        shape = RoundedCornerShape(24.dp),
+                        style = GlassDefaults.prominentStyle(),
+                        isCategoryBar = true,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                // Subcategories Row (if present) - Rendered ABOVE Parent Categories
-                                if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        // "All" button
-                                        val allCount = remember(activeParent, state, kisaraShowItemCountInTabs) {
-                                            if (kisaraShowItemCountInTabs && activeParent != null) {
-                                                childrenByParent[activeParent.id].orEmpty().sumOf { state.getItemCountForCategory(it, force = true)?.toInt() ?: 0 } + (state.getItemCountForCategory(activeParent, force = true)?.toInt() ?: 0)
-                                            } else {
-                                                0
-                                            }
-                                        }
-                                        val allText = if (kisaraShowItemCountInTabs) "All ($allCount)" else "All"
-                                        SubTabButton(
-                                            text = allText,
-                                            selected = activeSubcategoryIdOfActivePage == null,
-                                            onLongClick = { activeParent?.let { editCategory(it) } },
-                                        ) {
-                                            if (showParentFilters) {
-                                                activeSubcategoryId = null
-                                            } else {
-                                                activeParent?.let { parent ->
-                                                    val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
-                                                    if (actualIndex != -1) {
-                                                        LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        subcategories.forEach { sub ->
-                                            val subCount = remember(sub, state, kisaraShowItemCountInTabs) {
-                                                if (kisaraShowItemCountInTabs) {
-                                                    state.getItemCountForCategory(sub, force = true)
-                                                } else {
-                                                    0
-                                                }
-                                            }
-                                            val subText = if (kisaraShowItemCountInTabs) "${sub.visualName} ($subCount)" else sub.visualName
-                                            SubTabButton(
-                                                text = subText,
-                                                selected = activeSubcategoryIdOfActivePage == sub.id,
-                                                onLongClick = { editCategory(sub) },
-                                            ) {
-                                                if (showParentFilters) {
-                                                    activeSubcategoryId = sub.id
-                                                } else {
-                                                    val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
-                                                    if (actualIndex != -1) {
-                                                        LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Parent Categories Row (with Pin on the right)
+                            // Subcategories Row (if present) - Rendered ABOVE Parent Categories
+                            if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
                                 Row(
+                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    tabCategories.forEachIndexed { index, category ->
-                                        val count = remember(category, state, kisaraShowItemCountInTabs) {
-                                            if (kisaraShowItemCountInTabs) {
-                                                val childCount = childrenByParent[category.id].orEmpty().sumOf { state.getItemCountForCategory(it, force = true)?.toInt() ?: 0 }
-                                                val parentCount = state.getItemCountForCategory(category, force = true)?.toInt() ?: 0
-                                                childCount + parentCount
-                                            } else {
-                                                0
+                                    // "All" button
+                                    val allCount = remember(activeParent, state.libraryData.favorites, childrenByParent, kisaraShowItemCountInTabs) {
+                                        if (kisaraShowItemCountInTabs && activeParent != null) {
+                                            val childCategories = childrenByParent[activeParent.id].orEmpty()
+                                            val allCategoryIds = listOf(activeParent.id) + childCategories.map { it.id }
+                                            state.libraryData.favorites.count { item ->
+                                                item.libraryManga.categories.any { it in allCategoryIds }
                                             }
+                                        } else {
+                                            0
                                         }
-                                        val text = if (kisaraShowItemCountInTabs) "${category.visualName} ($count)" else category.visualName
-                                        SubTabButton(
-                                            text = text,
-                                            selected = if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
-                                                val activeParentId = state.categories.getOrNull(state.activeCategoryIndex)?.let {
-                                                    if (it.parentId == null) it.id else it.parentId
-                                                }
-                                                category.id == activeParentId
-                                            } else {
-                                                state.activeCategoryIndex == index
-                                            },
-                                            onLongClick = { editCategory(category) },
-                                        ) {
-                                            val actualIndex = state.categories.indexOfFirst { it.id == category.id }
-                                            if (actualIndex != -1) {
-                                                LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                                if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
-                                                    activeSubcategoryId = null
+                                    }
+                                    val allText = if (kisaraShowItemCountInTabs) "All ($allCount)" else "All"
+                                    SubTabButton(
+                                        text = allText,
+                                        selected = activeSubcategoryIdOfActivePage == null,
+                                        onLongClick = { activeParent?.let { editCategory(it) } },
+                                    ) {
+                                        if (showParentFilters) {
+                                            activeSubcategoryId = null
+                                        } else {
+                                            activeParent?.let { parent ->
+                                                val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
+                                                if (actualIndex != -1) {
+                                                    LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                 }
                                             }
                                         }
                                     }
-
-                                    // Pin button on the right (tiny & zero padding space)
-                                    androidx.compose.material3.Icon(
-                                        imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                        contentDescription = "Pin category bar",
-                                        modifier = Modifier
-                                            .size(12.dp)
-                                            .clickable {
-                                                scope.launch {
-                                                    categoryBarPinnedPref.set(!isCategoryBarPinned)
+                                    subcategories.forEach { sub ->
+                                        val subCount = remember(sub, state, kisaraShowItemCountInTabs) {
+                                            if (kisaraShowItemCountInTabs) {
+                                                state.getItemCountForCategory(sub, force = true)
+                                            } else {
+                                                0
+                                            }
+                                        }
+                                        val subText = if (kisaraShowItemCountInTabs) "${sub.visualName} ($subCount)" else sub.visualName
+                                        SubTabButton(
+                                            text = subText,
+                                            selected = activeSubcategoryIdOfActivePage == sub.id,
+                                            onLongClick = { editCategory(sub) },
+                                        ) {
+                                            if (showParentFilters) {
+                                                activeSubcategoryId = sub.id
+                                            } else {
+                                                val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
+                                                if (actualIndex != -1) {
+                                                    LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                 }
-                                            },
-                                        tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    } else {
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            // Small attached Pin button above category bar
-                            GlassSurface(
-                                modifier = Modifier.padding(end = 12.dp),
-                                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
-                                style = GlassDefaults.subtleStyle(),
+
+                            // Parent Categories Row (with Pin on the right)
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Box(
+                                tabCategories.forEachIndexed { index, category ->
+                                    val count = remember(category, state.libraryData.favorites, childrenByParent, kisaraShowItemCountInTabs) {
+                                        if (kisaraShowItemCountInTabs) {
+                                            val childCategories = childrenByParent[category.id].orEmpty()
+                                            if (childCategories.isEmpty()) {
+                                                state.getItemCountForCategory(category, force = true)?.toInt() ?: 0
+                                            } else {
+                                                val allCategoryIds = listOf(category.id) + childCategories.map { it.id }
+                                                state.libraryData.favorites.count { item ->
+                                                    item.libraryManga.categories.any { it in allCategoryIds }
+                                                }
+                                            }
+                                        } else {
+                                            0
+                                        }
+                                    }
+                                    val text = if (kisaraShowItemCountInTabs) "${category.visualName} ($count)" else category.visualName
+                                    SubTabButton(
+                                        text = text,
+                                        selected = if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
+                                            val activeParentId = state.categories.getOrNull(state.activeCategoryIndex)?.let {
+                                                if (it.parentId == null) it.id else it.parentId
+                                            }
+                                            category.id == activeParentId
+                                        } else {
+                                            state.activeCategoryIndex == index
+                                        },
+                                        onLongClick = { editCategory(category) },
+                                    ) {
+                                        val actualIndex = state.categories.indexOfFirst { it.id == category.id }
+                                        if (actualIndex != -1) {
+                                            LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                            if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
+                                                activeSubcategoryId = null
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Pin button on the right (tiny & zero padding space)
+                                androidx.compose.material3.Icon(
+                                    imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                    contentDescription = "Pin category bar",
                                     modifier = Modifier
+                                        .size(12.dp)
                                         .clickable {
                                             scope.launch {
                                                 categoryBarPinnedPref.set(!isCategoryBarPinned)
                                             }
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    androidx.compose.material3.Icon(
-                                        imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                        contentDescription = "Pin category bar",
-                                        modifier = Modifier.size(12.dp),
-                                        tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-
-                            // Main Category Bar Surface
-                            GlassSurface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(24.dp),
-                                style = GlassDefaults.prominentStyle(),
-                                isCategoryBar = true,
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                                    ) {
-                                        val contentColor = LocalContentColor.current
-                                        if (subcategories.isNotEmpty()) {
-                                            LazyRow(
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.fillMaxWidth(),
-                                            ) {
-                                                item {
-                                                    FilterChip(
-                                                        selected = activeSubcategoryIdOfActivePage == null,
-                                                        onClick = {
-                                                            if (showParentFilters) {
-                                                                activeSubcategoryId = null
-                                                            } else {
-                                                                activeParent?.let { parent ->
-                                                                    val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
-                                                                    if (actualIndex != -1) {
-                                                                        screenModel.updateActiveCategoryIndex(actualIndex)
-                                                                    }
-                                                                }
-                                                            }
-                                                        },
-                                                        label = {
-                                                            val contentColor = LocalContentColor.current
-                                                            val allText = remember(activeParent, kisaraShowItemCountInTabs, state, contentColor) {
-                                                                if (kisaraShowItemCountInTabs && activeParent != null) {
-                                                                    val count = state.getItemCountForCategory(activeParent, force = true)
-                                                                    if (count != null) {
-                                                                        buildAnnotatedString {
-                                                                            append("All")
-                                                                            withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
-                                                                                append(" ($count)")
-                                                                            }
-                                                                        }
-                                                                    } else {
-                                                                        AnnotatedString("All")
-                                                                    }
-                                                                } else {
-                                                                    AnnotatedString("All")
-                                                                }
-                                                            }
-                                                            Text(text = allText, fontSize = 9.sp)
-                                                        },
-                                                        colors = FilterChipDefaults.filterChipColors(
-                                                            containerColor = Color.Transparent,
-                                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
-                                                            labelColor = MaterialTheme.colorScheme.onSurface,
-                                                            selectedLabelColor = categorySelectedLabelColor,
-                                                        ),
-                                                        border = null,
-                                                    )
-                                                }
-                                                items(subcategories) { sub ->
-                                                    val isSelected = activeSubcategoryIdOfActivePage == sub.id
-                                                    val visualName = sub.visualName
-                                                    val subTitleText = remember(sub, visualName, kisaraShowItemCountInTabs, state, contentColor) {
-                                                        if (kisaraShowItemCountInTabs) {
-                                                            val count = state.getItemCountForCategory(sub, force = true)
-                                                            if (count != null) {
-                                                                buildAnnotatedString {
-                                                                    append(visualName)
-                                                                    withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
-                                                                        append(" ($count)")
-                                                                    }
-                                                                }
-                                                            } else {
-                                                                AnnotatedString(visualName)
-                                                            }
-                                                        } else {
-                                                            AnnotatedString(visualName)
-                                                        }
-                                                    }
-                                                    FilterChip(
-                                                        selected = isSelected,
-                                                        onClick = {
-                                                            if (showParentFilters) {
-                                                                activeSubcategoryId = sub.id
-                                                            } else {
-                                                                val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
-                                                                if (actualIndex != -1) {
-                                                                    screenModel.updateActiveCategoryIndex(actualIndex)
-                                                                }
-                                                            }
-                                                        },
-                                                        label = {
-                                                            Text(text = subTitleText, fontSize = 9.sp)
-                                                        },
-                                                        colors = FilterChipDefaults.filterChipColors(
-                                                            containerColor = Color.Transparent,
-                                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
-                                                            labelColor = MaterialTheme.colorScheme.onSurface,
-                                                            selectedLabelColor = categorySelectedLabelColor,
-                                                        ),
-                                                        border = null,
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        // Main Categories
-                                        LazyRow(
-                                            state = categoryRowState,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            itemsIndexed(tabCategories) { idx, cat ->
-                                                val targetIndex = remember(cat, state.categories) {
-                                                    state.categories.indexOfFirst { it.id == cat.id }.coerceAtLeast(0)
-                                                }
-                                                val isSelected = remember(state.activeCategoryIndex, targetIndex) {
-                                                    state.activeCategoryIndex == targetIndex
-                                                }
-                                                val scale by animateFloatAsState(
-                                                    targetValue = if (categoryBarCarouselStyle && isSelected) 1.2f else 1.0f,
-                                                    label = "scaleAnimation",
-                                                )
-                                                val contentColor = LocalContentColor.current
-                                                val visualName = cat.visualName
-                                                val catTitleText = remember(cat, visualName, kisaraShowItemCountInTabs, state, contentColor) {
-                                                    if (kisaraShowItemCountInTabs) {
-                                                        val count = state.getItemCountForCategory(cat, force = true)
-                                                        if (count != null) {
-                                                            buildAnnotatedString {
-                                                                append(visualName)
-                                                                withStyle(style = SpanStyle(fontSize = 7.sp, color = contentColor.copy(alpha = 0.54f))) {
-                                                                    append(" ($count)")
-                                                                }
-                                                            }
-                                                        } else {
-                                                            AnnotatedString(visualName)
-                                                        }
-                                                    } else {
-                                                        AnnotatedString(visualName)
-                                                    }
-                                                }
-                                                FilterChip(
-                                                    selected = isSelected,
-                                                    onClick = {
-                                                        screenModel.updateActiveCategoryIndex(targetIndex)
-                                                        if (showParentFilters) {
-                                                            activeSubcategoryId = null
-                                                        }
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            text = catTitleText,
-                                                            fontSize = 10.sp,
-                                                            modifier = if (categoryBarCarouselStyle) Modifier.graphicsLayer(scaleX = scale, scaleY = scale) else Modifier,
-                                                        )
-                                                    },
-                                                    modifier = Modifier
-                                                        .height(24.dp)
-                                                        .then(
-                                                            if (categoryBarCarouselStyle && isSelected) {
-                                                                Modifier.padding(horizontal = 6.dp)
-                                                            } else {
-                                                                Modifier
-                                                            },
-                                                        ),
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        containerColor = Color.Transparent,
-                                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
-                                                        labelColor = MaterialTheme.colorScheme.onSurface,
-                                                        selectedLabelColor = categorySelectedLabelColor,
-                                                    ),
-                                                    border = null,
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
+                                        },
+                                    tint = if (isCategoryBarPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }

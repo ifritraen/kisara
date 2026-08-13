@@ -1,0 +1,18 @@
+import kotlin.collections.List;
+import kotlin.String;
+
+CREATE TABLE manga_external_metadata (
+    manga_id INTEGER NOT NULL PRIMARY KEY,
+    score REAL,
+    status TEXT,
+    start_date TEXT,
+    total_chapters INTEGER,
+    genres TEXT AS List<String>,
+    tags TEXT AS List<String>,
+    licensor TEXT,
+    demographic TEXT,
+    synopsis TEXT,
+    source_name TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);

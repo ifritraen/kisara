@@ -11,7 +11,9 @@ import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.CatalogueSource
 import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.mutate
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.Job
@@ -42,7 +44,7 @@ abstract class SearchScreenModel(
     initialState: State = State(),
     sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
-    private val extensionManager: ExtensionManager = Injekt.get(),
+    protected val extensionManager: ExtensionManager = Injekt.get(),
     private val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
     val preferences: SourcePreferences = Injekt.get(),
@@ -244,6 +246,47 @@ abstract class SearchScreenModel(
             )
         }
 
+        // KMK -->
+        ioCoroutineScope.launch {
+            try {
+                val getLibraryManga = Injekt.get<tachiyomi.domain.manga.interactor.GetLibraryManga>()
+                val getCategories = Injekt.get<tachiyomi.domain.category.interactor.GetCategories>()
+                val allCategories = getCategories.await()
+                val libraryMangas = getLibraryManga.await()
+
+                val cleanQuery = query.trim()
+                val matches = libraryMangas.filter { item ->
+                    item.manga.title.contains(cleanQuery, ignoreCase = true) ||
+                        (item.manga.author?.contains(cleanQuery, ignoreCase = true) == true) ||
+                        (item.manga.artist?.contains(cleanQuery, ignoreCase = true) == true)
+                }.map { item ->
+                    val catNames = item.categories.mapNotNull { catId ->
+                        val cat = allCategories.find { it.id == catId }
+                        if (cat != null) {
+                            if (cat.parentId != null) {
+                                val parent = allCategories.find { it.id == cat.parentId }
+                                if (parent != null) "${parent.name} / ${cat.name}" else cat.name
+                            } else {
+                                if (cat.isSystemCategory) "Default" else cat.name
+                            }
+                        } else {
+                            null
+                        }
+                    }.ifEmpty { listOf("Default") }.distinct().joinToString(", ")
+
+                    LibrarySearchResult(
+                        manga = item.manga,
+                        categoryNames = catNames,
+                    )
+                }
+
+                mutableState.update { it.copy(libraryResults = matches.toImmutableList()) }
+            } catch (_: Throwable) {
+                mutableState.update { it.copy(libraryResults = persistentListOf()) }
+            }
+        }
+        // KMK <--
+
         searchJob = ioCoroutineScope.launch {
             sources.map { source ->
                 async {
@@ -321,6 +364,7 @@ abstract class SearchScreenModel(
         val searchClean: Boolean = false,
         val searchFormat: Int = 0,
         val searchFuzzy: Boolean = false,
+        val libraryResults: kotlinx.collections.immutable.ImmutableList<LibrarySearchResult> = kotlinx.collections.immutable.persistentListOf(),
         // KMK <--
     ) {
         val progress: Int = items.count { it.value !is SearchItemResult.Loading }
@@ -328,6 +372,11 @@ abstract class SearchScreenModel(
         val filteredItems = items.filter { (_, result) -> result.isVisible(onlyShowHasResults) }
             .toImmutableMap()
     }
+
+    data class LibrarySearchResult(
+        val manga: Manga,
+        val categoryNames: String,
+    )
 
     sealed interface Dialog {
         data class Migrate(val target: Manga, val current: Manga) : Dialog

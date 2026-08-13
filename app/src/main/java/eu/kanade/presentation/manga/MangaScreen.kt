@@ -99,6 +99,7 @@ import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.RelatedMangaTitle
+import eu.kanade.presentation.components.BulkSelectionToolbar
 import eu.kanade.presentation.components.ColorizerDropdownMenu
 import eu.kanade.presentation.components.DownloadDropdownMenu
 import eu.kanade.presentation.components.GlassDefaults
@@ -114,6 +115,7 @@ import eu.kanade.presentation.manga.components.ChapterHeader
 import eu.kanade.presentation.manga.components.ChapterTranslationAction
 import eu.kanade.presentation.manga.components.ChapterTranslationIndicator
 import eu.kanade.presentation.manga.components.ExpandableMangaDescription
+import eu.kanade.presentation.manga.components.ExternalMetadataCard
 import eu.kanade.presentation.manga.components.MangaActionRow
 import eu.kanade.presentation.manga.components.MangaBottomActionMenu
 import eu.kanade.presentation.manga.components.MangaChapterListItem
@@ -143,6 +145,7 @@ import eu.kanade.tachiyomi.source.online.all.MangaDex
 import eu.kanade.tachiyomi.source.online.all.NHentai
 import eu.kanade.tachiyomi.source.online.all.Pururin
 import eu.kanade.tachiyomi.source.online.english.EightMuses
+import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
 import eu.kanade.tachiyomi.ui.manga.ChapterList
 import eu.kanade.tachiyomi.ui.manga.MangaScreenModel
 import eu.kanade.tachiyomi.ui.manga.MergedMangaData
@@ -271,6 +274,11 @@ fun MangaScreen(
     coverRatio: MutableFloatState,
     onPaletteScreenClick: () -> Unit,
     hazeState: HazeState,
+    bulkFavoriteState: BulkFavoriteScreenModel.State? = null,
+    onToggleBulkSelectionMode: (() -> Unit)? = null,
+    onSelectAllRelatedMangas: (() -> Unit)? = null,
+    onReverseRelatedMangasSelection: (() -> Unit)? = null,
+    onBulkFavoriteClicked: (() -> Unit)? = null,
     // KMK <--
 ) {
     val context = LocalContext.current
@@ -281,155 +289,265 @@ fun MangaScreen(
         }
     }
 
-    CompositionLocalProvider(LocalHazeState provides hazeState) {
-        if (!isTabletUi) {
-            MangaScreenSmallImpl(
-                state = state,
-                snackbarHostState = snackbarHostState,
-                nextUpdate = nextUpdate,
-                chapterSwipeStartAction = chapterSwipeStartAction,
-                chapterSwipeEndAction = chapterSwipeEndAction,
-                navigateUp = navigateUp,
-                onChapterClicked = onChapterClicked,
-                onDownloadChapter = onDownloadChapter,
-                // KMK -->
-                onTranslationChapter = onTranslationChapter,
-                onColorizeChapter = onColorizeChapter,
-                // KMK <--
-                onAddToLibraryClicked = onAddToLibraryClicked,
-                onWebViewClicked = onWebViewClicked,
-                onWebViewLongClicked = onWebViewLongClicked,
-                onTrackingClicked = onTrackingClicked,
-                onDuplicateClicked = onDuplicateClicked,
-                onTagSearch = onTagSearch,
-                onCopyTagToClipboard = onCopyTagToClipboard,
-                onFilterClicked = onFilterButtonClicked,
-                onRefresh = onRefresh,
-                onContinueReading = onContinueReading,
-                onSearch = onSearch,
-                onCoverClicked = onCoverClicked,
-                onShareClicked = onShareClicked,
-                onDownloadActionClicked = onDownloadActionClicked,
-                onTranslateActionClicked = onTranslateActionClicked,
-                onColorizeActionClicked = onColorizeActionClicked,
-                onEditCategoryClicked = onEditCategoryClicked,
-                onEditIntervalClicked = onEditFetchIntervalClicked,
-                onMigrateClicked = onMigrateClicked,
-                onEditNotesClicked = onEditNotesClicked,
-                // SY -->
-                onMetadataViewerClicked = onMetadataViewerClicked,
-                onEditInfoClicked = onEditInfoClicked,
-                onRecommendClicked = onRecommendClicked,
-                onMergedSettingsClicked = onMergedSettingsClicked,
-                onMergeClicked = onMergeClicked,
-                onMergeWithAnotherClicked = onMergeWithAnotherClicked,
-                onOpenPagePreview = onOpenPagePreview,
-                onMorePreviewsClicked = onMorePreviewsClicked,
-                previewsRowCount = previewsRowCount,
-                // SY <--
-                onDeletePageBookmark = onDeletePageBookmark,
-                onMultiBookmarkClicked = onMultiBookmarkClicked,
-                onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
-                onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
-                onMultiDeleteClicked = onMultiDeleteClicked,
-                onMultiTranslateClicked = onMultiTranslateClicked,
-                onChapterSwipe = onChapterSwipe,
-                onChapterSelected = onChapterSelected,
-                onAllChapterSelected = onAllChapterSelected,
-                onInvertSelection = onInvertSelection,
-                // KMK -->
-                getMangaState = getMangaState,
-                onClickSourceSettingsClicked = onClickSourceSettingsClicked,
-                onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
-                onClickColorizerSettingsClicked = onClickColorizerSettingsClicked,
-                onToggleAutoTranslate = onToggleAutoTranslate,
-                onClearManga = onClearManga,
-                onOpenMangaFolder = onOpenMangaFolder,
-                onRelatedMangasScreenClick = onRelatedMangasScreenClick,
-                onRelatedMangaClick = onRelatedMangaClick,
-                onRelatedMangaLongClick = onRelatedMangaLongClick,
-                librarySearch = librarySearch,
-                onSourceClick = onSourceClick,
-                onCoverLoaded = onCoverLoaded,
-                coverRatio = coverRatio,
-                onPaletteScreenClick = onPaletteScreenClick,
-                hazeState = hazeState,
-                // KMK <--
-            )
+    // KMK -->
+    var selectedTagForAction by remember { mutableStateOf<String?>(null) }
+    var isTagMultiSelectMode by remember { mutableStateOf(false) }
+    var multiSelectedTags by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    val handleTagClick: (String) -> Unit = { tag ->
+        if (isTagMultiSelectMode) {
+            multiSelectedTags = if (multiSelectedTags.contains(tag)) {
+                multiSelectedTags - tag
+            } else {
+                multiSelectedTags + tag
+            }
         } else {
-            MangaScreenLargeImpl(
-                state = state,
-                snackbarHostState = snackbarHostState,
-                nextUpdate = nextUpdate,
-                chapterSwipeStartAction = chapterSwipeStartAction,
-                chapterSwipeEndAction = chapterSwipeEndAction,
-                navigateUp = navigateUp,
-                onChapterClicked = onChapterClicked,
-                onDownloadChapter = onDownloadChapter,
-                // KMK -->
-                onTranslationChapter = onTranslationChapter,
-                onColorizeChapter = onColorizeChapter,
-                // KMK <--
-                onAddToLibraryClicked = onAddToLibraryClicked,
-                onWebViewClicked = onWebViewClicked,
-                onWebViewLongClicked = onWebViewLongClicked,
-                onTrackingClicked = onTrackingClicked,
-                onDuplicateClicked = onDuplicateClicked,
-                onTagSearch = onTagSearch,
-                onCopyTagToClipboard = onCopyTagToClipboard,
-                onFilterButtonClicked = onFilterButtonClicked,
-                onRefresh = onRefresh,
-                onContinueReading = onContinueReading,
-                onSearch = onSearch,
-                onCoverClicked = onCoverClicked,
-                onShareClicked = onShareClicked,
-                onDownloadActionClicked = onDownloadActionClicked,
-                onTranslateActionClicked = onTranslateActionClicked,
-                onColorizeActionClicked = onColorizeActionClicked,
-                onEditCategoryClicked = onEditCategoryClicked,
-                onEditIntervalClicked = onEditFetchIntervalClicked,
-                onMigrateClicked = onMigrateClicked,
-                onEditNotesClicked = onEditNotesClicked,
-                // SY -->
-                onMetadataViewerClicked = onMetadataViewerClicked,
-                onEditInfoClicked = onEditInfoClicked,
-                onRecommendClicked = onRecommendClicked,
-                onMergedSettingsClicked = onMergedSettingsClicked,
-                onMergeClicked = onMergeClicked,
-                onMergeWithAnotherClicked = onMergeWithAnotherClicked,
-                onOpenPagePreview = onOpenPagePreview,
-                onMorePreviewsClicked = onMorePreviewsClicked,
-                previewsRowCount = previewsRowCount,
-                // SY <--
-                onDeletePageBookmark = onDeletePageBookmark,
-                onMultiBookmarkClicked = onMultiBookmarkClicked,
-                onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
-                onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
-                onMultiDeleteClicked = onMultiDeleteClicked,
-                onMultiTranslateClicked = onMultiTranslateClicked,
-                onChapterSwipe = onChapterSwipe,
-                onChapterSelected = onChapterSelected,
-                onAllChapterSelected = onAllChapterSelected,
-                onInvertSelection = onInvertSelection,
-                // KMK -->
-                getMangaState = getMangaState,
-                onClickSourceSettingsClicked = onClickSourceSettingsClicked,
-                onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
-                onClickColorizerSettingsClicked = onClickColorizerSettingsClicked,
-                onToggleAutoTranslate = onToggleAutoTranslate,
-                onClearManga = onClearManga,
-                onOpenMangaFolder = onOpenMangaFolder,
-                onRelatedMangasScreenClick = onRelatedMangasScreenClick,
-                onRelatedMangaClick = onRelatedMangaClick,
-                onRelatedMangaLongClick = onRelatedMangaLongClick,
-                librarySearch = librarySearch,
-                onSourceClick = onSourceClick,
-                onCoverLoaded = onCoverLoaded,
-                coverRatio = coverRatio,
-                onPaletteScreenClick = onPaletteScreenClick,
-                hazeState = hazeState,
-                // KMK <--
-            )
+            selectedTagForAction = tag
+        }
+    }
+
+    val handleTagLongClick: (String) -> Unit = { tag ->
+        if (isTagMultiSelectMode) {
+            multiSelectedTags = if (multiSelectedTags.contains(tag)) {
+                multiSelectedTags - tag
+            } else {
+                multiSelectedTags + tag
+            }
+        } else {
+            val favoriteManager = Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>()
+            val added = favoriteManager.toggleFavoriteTag(tag)
+            val msg = if (added) {
+                context.getString(KMR.strings.added_to_favorite_tags.resourceId)
+            } else {
+                context.getString(KMR.strings.removed_from_favorite_tags.resourceId)
+            }
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    if (selectedTagForAction != null) {
+        eu.kanade.presentation.manga.components.TagActionDialog(
+            tag = selectedTagForAction!!,
+            onDismissRequest = { selectedTagForAction = null },
+            onSearchInSource = { tag -> onSearch(tag, false) },
+            onGlobalSearch = { tag -> onSearch(tag, true) },
+            onLibrarySearch = { tag -> librarySearch(tag) },
+            onStartMultiSelect = {
+                isTagMultiSelectMode = true
+                multiSelectedTags = setOf(selectedTagForAction!!)
+            },
+        )
+    }
+    // KMK <--
+
+    CompositionLocalProvider(LocalHazeState provides hazeState) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (!isTabletUi) {
+                MangaScreenSmallImpl(
+                    state = state,
+                    snackbarHostState = snackbarHostState,
+                    nextUpdate = nextUpdate,
+                    chapterSwipeStartAction = chapterSwipeStartAction,
+                    chapterSwipeEndAction = chapterSwipeEndAction,
+                    navigateUp = navigateUp,
+                    onChapterClicked = onChapterClicked,
+                    onDownloadChapter = onDownloadChapter,
+                    // KMK -->
+                    onTranslationChapter = onTranslationChapter,
+                    onColorizeChapter = onColorizeChapter,
+                    // KMK <--
+                    onAddToLibraryClicked = onAddToLibraryClicked,
+                    onWebViewClicked = onWebViewClicked,
+                    onWebViewLongClicked = onWebViewLongClicked,
+                    onTrackingClicked = onTrackingClicked,
+                    onDuplicateClicked = onDuplicateClicked,
+                    onTagSearch = onTagSearch,
+                    onCopyTagToClipboard = onCopyTagToClipboard,
+                    onFilterClicked = onFilterButtonClicked,
+                    onRefresh = onRefresh,
+                    onContinueReading = onContinueReading,
+                    onSearch = onSearch,
+                    onCoverClicked = onCoverClicked,
+                    onShareClicked = onShareClicked,
+                    onDownloadActionClicked = onDownloadActionClicked,
+                    onTranslateActionClicked = onTranslateActionClicked,
+                    onColorizeActionClicked = onColorizeActionClicked,
+                    onEditCategoryClicked = onEditCategoryClicked,
+                    onEditIntervalClicked = onEditFetchIntervalClicked,
+                    onMigrateClicked = onMigrateClicked,
+                    onEditNotesClicked = onEditNotesClicked,
+                    // SY -->
+                    onMetadataViewerClicked = onMetadataViewerClicked,
+                    onEditInfoClicked = onEditInfoClicked,
+                    onRecommendClicked = onRecommendClicked,
+                    onMergedSettingsClicked = onMergedSettingsClicked,
+                    onMergeClicked = onMergeClicked,
+                    onMergeWithAnotherClicked = onMergeWithAnotherClicked,
+                    onOpenPagePreview = onOpenPagePreview,
+                    onMorePreviewsClicked = onMorePreviewsClicked,
+                    previewsRowCount = previewsRowCount,
+                    // SY <--
+                    onDeletePageBookmark = onDeletePageBookmark,
+                    onMultiBookmarkClicked = onMultiBookmarkClicked,
+                    onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                    onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
+                    onMultiDeleteClicked = onMultiDeleteClicked,
+                    onMultiTranslateClicked = onMultiTranslateClicked,
+                    onChapterSwipe = onChapterSwipe,
+                    onChapterSelected = onChapterSelected,
+                    onAllChapterSelected = onAllChapterSelected,
+                    onInvertSelection = onInvertSelection,
+                    // KMK -->
+                    getMangaState = getMangaState,
+                    onClickSourceSettingsClicked = onClickSourceSettingsClicked,
+                    onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
+                    onClickColorizerSettingsClicked = onClickColorizerSettingsClicked,
+                    onToggleAutoTranslate = onToggleAutoTranslate,
+                    onClearManga = onClearManga,
+                    onOpenMangaFolder = onOpenMangaFolder,
+                    onRelatedMangasScreenClick = onRelatedMangasScreenClick,
+                    onRelatedMangaClick = onRelatedMangaClick,
+                    onRelatedMangaLongClick = onRelatedMangaLongClick,
+                    librarySearch = librarySearch,
+                    onSourceClick = onSourceClick,
+                    onCoverLoaded = onCoverLoaded,
+                    coverRatio = coverRatio,
+                    onPaletteScreenClick = onPaletteScreenClick,
+                    hazeState = hazeState,
+                    bulkFavoriteState = bulkFavoriteState,
+                    onToggleBulkSelectionMode = onToggleBulkSelectionMode,
+                    onSelectAllRelatedMangas = onSelectAllRelatedMangas,
+                    onReverseRelatedMangasSelection = onReverseRelatedMangasSelection,
+                    onBulkFavoriteClicked = onBulkFavoriteClicked,
+                    onTagClick = handleTagClick,
+                    onTagLongClick = handleTagLongClick,
+                    selectedTags = multiSelectedTags,
+                    isTagMultiSelectMode = isTagMultiSelectMode,
+                    // KMK <--
+                )
+            } else {
+                MangaScreenLargeImpl(
+                    state = state,
+                    snackbarHostState = snackbarHostState,
+                    nextUpdate = nextUpdate,
+                    chapterSwipeStartAction = chapterSwipeStartAction,
+                    chapterSwipeEndAction = chapterSwipeEndAction,
+                    navigateUp = navigateUp,
+                    onChapterClicked = onChapterClicked,
+                    onDownloadChapter = onDownloadChapter,
+                    // KMK -->
+                    onTranslationChapter = onTranslationChapter,
+                    onColorizeChapter = onColorizeChapter,
+                    // KMK <--
+                    onAddToLibraryClicked = onAddToLibraryClicked,
+                    onWebViewClicked = onWebViewClicked,
+                    onWebViewLongClicked = onWebViewLongClicked,
+                    onTrackingClicked = onTrackingClicked,
+                    onDuplicateClicked = onDuplicateClicked,
+                    onTagSearch = onTagSearch,
+                    onCopyTagToClipboard = onCopyTagToClipboard,
+                    onFilterButtonClicked = onFilterButtonClicked,
+                    onRefresh = onRefresh,
+                    onContinueReading = onContinueReading,
+                    onSearch = onSearch,
+                    onCoverClicked = onCoverClicked,
+                    onShareClicked = onShareClicked,
+                    onDownloadActionClicked = onDownloadActionClicked,
+                    onTranslateActionClicked = onTranslateActionClicked,
+                    onColorizeActionClicked = onColorizeActionClicked,
+                    onEditCategoryClicked = onEditCategoryClicked,
+                    onEditIntervalClicked = onEditFetchIntervalClicked,
+                    onMigrateClicked = onMigrateClicked,
+                    onEditNotesClicked = onEditNotesClicked,
+                    // SY -->
+                    onMetadataViewerClicked = onMetadataViewerClicked,
+                    onEditInfoClicked = onEditInfoClicked,
+                    onRecommendClicked = onRecommendClicked,
+                    onMergedSettingsClicked = onMergedSettingsClicked,
+                    onMergeClicked = onMergeClicked,
+                    onMergeWithAnotherClicked = onMergeWithAnotherClicked,
+                    onOpenPagePreview = onOpenPagePreview,
+                    onMorePreviewsClicked = onMorePreviewsClicked,
+                    previewsRowCount = previewsRowCount,
+                    // SY <--
+                    onDeletePageBookmark = onDeletePageBookmark,
+                    onMultiBookmarkClicked = onMultiBookmarkClicked,
+                    onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
+                    onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
+                    onMultiDeleteClicked = onMultiDeleteClicked,
+                    onMultiTranslateClicked = onMultiTranslateClicked,
+                    onChapterSwipe = onChapterSwipe,
+                    onChapterSelected = onChapterSelected,
+                    onAllChapterSelected = onAllChapterSelected,
+                    onInvertSelection = onInvertSelection,
+                    // KMK -->
+                    getMangaState = getMangaState,
+                    onClickSourceSettingsClicked = onClickSourceSettingsClicked,
+                    onClickTranslationSettingsClicked = onClickTranslationSettingsClicked,
+                    onClickColorizerSettingsClicked = onClickColorizerSettingsClicked,
+                    onToggleAutoTranslate = onToggleAutoTranslate,
+                    onClearManga = onClearManga,
+                    onOpenMangaFolder = onOpenMangaFolder,
+                    onRelatedMangasScreenClick = onRelatedMangasScreenClick,
+                    onRelatedMangaClick = onRelatedMangaClick,
+                    onRelatedMangaLongClick = onRelatedMangaLongClick,
+                    librarySearch = librarySearch,
+                    onSourceClick = onSourceClick,
+                    onCoverLoaded = onCoverLoaded,
+                    coverRatio = coverRatio,
+                    onPaletteScreenClick = onPaletteScreenClick,
+                    hazeState = hazeState,
+                    bulkFavoriteState = bulkFavoriteState,
+                    onToggleBulkSelectionMode = onToggleBulkSelectionMode,
+                    onSelectAllRelatedMangas = onSelectAllRelatedMangas,
+                    onReverseRelatedMangasSelection = onReverseRelatedMangasSelection,
+                    onBulkFavoriteClicked = onBulkFavoriteClicked,
+                    onTagClick = handleTagClick,
+                    onTagLongClick = handleTagLongClick,
+                    selectedTags = multiSelectedTags,
+                    isTagMultiSelectMode = isTagMultiSelectMode,
+                    // KMK <--
+                )
+            }
+
+            // KMK -->
+            if (isTagMultiSelectMode) {
+                eu.kanade.presentation.manga.components.TagMultiSelectBottomBar(
+                    selectedTags = multiSelectedTags,
+                    onGlobalSearch = { tags ->
+                        onSearch(tags.joinToString(" "), true)
+                        isTagMultiSelectMode = false
+                        multiSelectedTags = emptySet()
+                    },
+                    onSourceSearch = { tags ->
+                        onSearch(tags.joinToString(" "), false)
+                        isTagMultiSelectMode = false
+                        multiSelectedTags = emptySet()
+                    },
+                    onFavoriteAll = { tags ->
+                        val favoriteManager = Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>()
+                        tags.forEach { favoriteManager.addFavoriteTag(it) }
+                        android.widget.Toast.makeText(context, "Added ${tags.size} tags to Favorites ⭐", android.widget.Toast.LENGTH_SHORT).show()
+                        isTagMultiSelectMode = false
+                        multiSelectedTags = emptySet()
+                    },
+                    onBlockAll = { tags ->
+                        val sourcePreferences = Injekt.get<SourcePreferences>()
+                        val currentBlocked = sourcePreferences.blockedTags().get().toMutableSet()
+                        currentBlocked.addAll(tags)
+                        sourcePreferences.blockedTags().set(currentBlocked)
+                        android.widget.Toast.makeText(context, "Blocked ${tags.size} tags 🚫", android.widget.Toast.LENGTH_SHORT).show()
+                        isTagMultiSelectMode = false
+                        multiSelectedTags = emptySet()
+                    },
+                    onClearSelection = {
+                        isTagMultiSelectMode = false
+                        multiSelectedTags = emptySet()
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
+            // KMK <--
         }
     }
 }
@@ -520,6 +638,15 @@ private fun MangaScreenSmallImpl(
     coverRatio: MutableFloatState,
     onPaletteScreenClick: () -> Unit,
     hazeState: HazeState,
+    bulkFavoriteState: BulkFavoriteScreenModel.State? = null,
+    onToggleBulkSelectionMode: (() -> Unit)? = null,
+    onSelectAllRelatedMangas: (() -> Unit)? = null,
+    onReverseRelatedMangasSelection: (() -> Unit)? = null,
+    onBulkFavoriteClicked: (() -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
+    selectedTags: Set<String> = emptySet(),
+    isTagMultiSelectMode: Boolean = false,
     // KMK <--
 ) {
     val currentContext = LocalContext.current
@@ -599,65 +726,80 @@ private fun MangaScreenSmallImpl(
 
         Scaffold(
             topBar = {
-                val selectedChapterCount: Int = remember(chapters) {
-                    chapters.count { it.selected }
+                // KMK -->
+                if (bulkFavoriteState?.selectionMode == true) {
+                    BulkSelectionToolbar(
+                        selectedCount = bulkFavoriteState.selection.size,
+                        isRunning = bulkFavoriteState.isRunning,
+                        onClickClearSelection = { onToggleBulkSelectionMode?.invoke() },
+                        onChangeCategoryClick = { onBulkFavoriteClicked?.invoke() },
+                        onSelectAll = onSelectAllRelatedMangas,
+                        onReverseSelection = onReverseRelatedMangasSelection,
+                    )
+                } else {
+                    // KMK <--
+                    val selectedChapterCount: Int = remember(chapters) {
+                        chapters.count { it.selected }
+                    }
+                    val isFirstItemVisible by remember {
+                        derivedStateOf { chapterListState.firstVisibleItemIndex == 0 }
+                    }
+                    val isFirstItemScrolled by remember {
+                        derivedStateOf { chapterListState.firstVisibleItemScrollOffset > 0 }
+                    }
+                    val titleAlpha by animateFloatAsState(
+                        if (!isFirstItemVisible) 1f else 0f,
+                        label = "Top Bar Title",
+                    )
+                    val backgroundAlpha by animateFloatAsState(
+                        if (!isFirstItemVisible || isFirstItemScrolled) 1f else 0f,
+                        label = "Top Bar Background",
+                    )
+                    MangaToolbar(
+                        title = state.manga.title,
+                        hasFilters = state.filterActive,
+                        navigateUp = navigateUp,
+                        onClickFilter = onFilterClicked,
+                        onClickShare = onShareClicked,
+                        onClickDownload = onDownloadActionClicked,
+                        onClickTranslate = onTranslateActionClicked,
+                        onClickEditCategory = onEditCategoryClicked,
+                        onClickRefresh = onRefresh,
+                        onClickMigrate = onMigrateClicked,
+                        onClickEditNotes = onEditNotesClicked,
+                        onClickEditInfo = onEditInfoClicked.takeIf { state.manga.favorite },
+                        onClickSourceSettings = onClickSourceSettingsClicked,
+                        onClearManga = onClearManga,
+                        onOpenMangaFolder = onOpenMangaFolder,
+                        onClickRelatedMangas = onRelatedMangasScreenClick.takeIf {
+                            !expandRelatedMangas &&
+                                showRelatedMangasInOverflow &&
+                                state.manga.source != MERGED_SOURCE_ID
+                        },
+                        onClickRecommend = onRecommendClicked.takeIf { state.showRecommendationsInOverflow },
+                        onClickMergedSettings = onMergedSettingsClicked.takeIf { state.manga.source == MERGED_SOURCE_ID },
+                        onClickMerge = onMergeClicked.takeIf { state.showMergeInOverflow },
+                        actionModeCounter = selectedChapterCount,
+                        onCancelActionMode = { onAllChapterSelected(false) },
+                        onSelectAll = { onAllChapterSelected(true) },
+                        onInvertSelection = { onInvertSelection() },
+                        titleAlphaProvider = { titleAlpha },
+                        backgroundAlphaProvider = { backgroundAlpha },
+                        onPaletteScreenClick = onPaletteScreenClick,
+                        autoTranslate = state.manga.autoTranslateAfterDownload,
+                        onClickToggleAutoTranslate = onToggleAutoTranslate.takeIf { !state.source.isLocalOrStub() },
+                        onClickTranslationSettings = {
+                            if (onClickTranslationSettingsClicked != null) {
+                                onClickTranslationSettingsClicked()
+                            } else {
+                                showTranslationSettings = true
+                            }
+                        },
+                        onClickColorizerSettings = onClickColorizerSettingsClicked,
+                    )
+                    // KMK -->
                 }
-                val isFirstItemVisible by remember {
-                    derivedStateOf { chapterListState.firstVisibleItemIndex == 0 }
-                }
-                val isFirstItemScrolled by remember {
-                    derivedStateOf { chapterListState.firstVisibleItemScrollOffset > 0 }
-                }
-                val titleAlpha by animateFloatAsState(
-                    if (!isFirstItemVisible) 1f else 0f,
-                    label = "Top Bar Title",
-                )
-                val backgroundAlpha by animateFloatAsState(
-                    if (!isFirstItemVisible || isFirstItemScrolled) 1f else 0f,
-                    label = "Top Bar Background",
-                )
-                MangaToolbar(
-                    title = state.manga.title,
-                    hasFilters = state.filterActive,
-                    navigateUp = navigateUp,
-                    onClickFilter = onFilterClicked,
-                    onClickShare = onShareClicked,
-                    onClickDownload = onDownloadActionClicked,
-                    onClickTranslate = onTranslateActionClicked,
-                    onClickEditCategory = onEditCategoryClicked,
-                    onClickRefresh = onRefresh,
-                    onClickMigrate = onMigrateClicked,
-                    onClickEditNotes = onEditNotesClicked,
-                    onClickEditInfo = onEditInfoClicked.takeIf { state.manga.favorite },
-                    onClickSourceSettings = onClickSourceSettingsClicked,
-                    onClearManga = onClearManga,
-                    onOpenMangaFolder = onOpenMangaFolder,
-                    onClickRelatedMangas = onRelatedMangasScreenClick.takeIf {
-                        !expandRelatedMangas &&
-                            showRelatedMangasInOverflow &&
-                            state.manga.source != MERGED_SOURCE_ID
-                    },
-                    onClickRecommend = onRecommendClicked.takeIf { state.showRecommendationsInOverflow },
-                    onClickMergedSettings = onMergedSettingsClicked.takeIf { state.manga.source == MERGED_SOURCE_ID },
-                    onClickMerge = onMergeClicked.takeIf { state.showMergeInOverflow },
-                    actionModeCounter = selectedChapterCount,
-                    onCancelActionMode = { onAllChapterSelected(false) },
-                    onSelectAll = { onAllChapterSelected(true) },
-                    onInvertSelection = { onInvertSelection() },
-                    titleAlphaProvider = { titleAlpha },
-                    backgroundAlphaProvider = { backgroundAlpha },
-                    onPaletteScreenClick = onPaletteScreenClick,
-                    autoTranslate = state.manga.autoTranslateAfterDownload,
-                    onClickToggleAutoTranslate = onToggleAutoTranslate.takeIf { !state.source.isLocalOrStub() },
-                    onClickTranslationSettings = {
-                        if (onClickTranslationSettingsClicked != null) {
-                            onClickTranslationSettingsClicked()
-                        } else {
-                            showTranslationSettings = true
-                        }
-                    },
-                    onClickColorizerSettings = onClickColorizerSettingsClicked,
-                )
+                // KMK <--
             },
             bottomBar = {
                 val selectedChapters = remember(chapters) {
@@ -772,6 +914,23 @@ private fun MangaScreenSmallImpl(
                             }
                         }
 
+                        if (state.isFetchingExternalMetadata || state.externalMetadata != null) {
+                            item(
+                                key = MangaScreenItem.EXTERNAL_METADATA,
+                                contentType = MangaScreenItem.EXTERNAL_METADATA,
+                            ) {
+                                ExternalMetadataCard(
+                                    metadata = state.externalMetadata,
+                                    isLoading = state.isFetchingExternalMetadata,
+                                    onAddToTracker = onTrackingClicked,
+                                    onTagClick = onTagClick,
+                                    onTagLongClick = onTagLongClick,
+                                    selectedTags = selectedTags,
+                                    isMultiSelectMode = isTagMultiSelectMode,
+                                )
+                            }
+                        }
+
                         item(
                             key = MangaScreenItem.DESCRIPTION_WITH_TAG,
                             contentType = MangaScreenItem.DESCRIPTION_WITH_TAG,
@@ -788,6 +947,10 @@ private fun MangaScreenSmallImpl(
                                 searchMetadataChips = remember(state.meta, state.source.id, state.manga.genre) {
                                     SearchMetadataChips(state.meta, state.source.id, state.manga.genre)
                                 },
+                                onTagClick = onTagClick,
+                                onTagLongClick = onTagLongClick,
+                                selectedTags = selectedTags,
+                                isMultiSelectMode = isTagMultiSelectMode,
                             )
                         }
 
@@ -830,12 +993,19 @@ private fun MangaScreenSmallImpl(
                                                 onLongClick = null,
                                                 modifier = Modifier
                                                     .padding(horizontal = MaterialTheme.padding.medium),
+                                                // KMK -->
+                                                toggleSelectionMode = onToggleBulkSelectionMode,
+                                                isRunning = bulkFavoriteState?.isRunning == true,
+                                                // KMK <--
                                             )
                                             RelatedMangasRow(
                                                 relatedMangas = state.relatedMangasSorted,
                                                 getMangaState = getMangaState,
                                                 onMangaClick = onRelatedMangaClick,
                                                 onMangaLongClick = onRelatedMangaLongClick,
+                                                // KMK -->
+                                                selection = bulkFavoriteState?.selection.orEmpty(),
+                                                // KMK <--
                                             )
                                         }
                                     }
@@ -1213,6 +1383,15 @@ private fun MangaScreenLargeImpl(
     coverRatio: MutableFloatState,
     onPaletteScreenClick: () -> Unit,
     hazeState: HazeState,
+    bulkFavoriteState: BulkFavoriteScreenModel.State? = null,
+    onToggleBulkSelectionMode: (() -> Unit)? = null,
+    onSelectAllRelatedMangas: (() -> Unit)? = null,
+    onReverseRelatedMangasSelection: (() -> Unit)? = null,
+    onBulkFavoriteClicked: (() -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
+    selectedTags: Set<String> = emptySet(),
+    isTagMultiSelectMode: Boolean = false,
     // KMK <--
 ) {
     val currentContext = LocalContext.current
@@ -1278,51 +1457,66 @@ private fun MangaScreenLargeImpl(
 
     Scaffold(
         topBar = {
-            val selectedChapterCount = remember(chapters) {
-                chapters.count { it.selected }
-            }
-            MangaToolbar(
-                modifier = Modifier.onSizeChanged { topBarHeight = it.height },
-                title = state.manga.title,
-                hasFilters = state.filterActive,
-                navigateUp = navigateUp,
-                onClickFilter = onFilterButtonClicked,
-                onClickShare = onShareClicked,
-                onClickDownload = onDownloadActionClicked,
-                onClickTranslate = onTranslateActionClicked,
-                onClickEditCategory = onEditCategoryClicked,
-                onClickRefresh = onRefresh,
-                onClickMigrate = onMigrateClicked,
-                onClickEditNotes = onEditNotesClicked,
-                onCancelActionMode = { onAllChapterSelected(false) },
-                // SY -->
-                onClickEditInfo = onEditInfoClicked.takeIf { state.manga.favorite },
-                // KMK -->
-                onClickSourceSettings = onClickSourceSettingsClicked,
-                onClearManga = onClearManga,
-                onOpenMangaFolder = onOpenMangaFolder,
-                onClickRelatedMangas = onRelatedMangasScreenClick.takeIf {
-                    !expandRelatedMangas &&
-                        showRelatedMangasInOverflow &&
-                        state.manga.source != MERGED_SOURCE_ID
-                },
+            // KMK -->
+            if (bulkFavoriteState?.selectionMode == true) {
+                BulkSelectionToolbar(
+                    selectedCount = bulkFavoriteState.selection.size,
+                    isRunning = bulkFavoriteState.isRunning,
+                    onClickClearSelection = { onToggleBulkSelectionMode?.invoke() },
+                    onChangeCategoryClick = { onBulkFavoriteClicked?.invoke() },
+                    onSelectAll = onSelectAllRelatedMangas,
+                    onReverseSelection = onReverseRelatedMangasSelection,
+                )
+            } else {
                 // KMK <--
-                onClickRecommend = onRecommendClicked.takeIf { state.showRecommendationsInOverflow },
-                onClickMergedSettings = onMergedSettingsClicked.takeIf { state.manga.source == MERGED_SOURCE_ID },
-                onClickMerge = onMergeClicked.takeIf { state.showMergeInOverflow },
-                // SY <--
-                actionModeCounter = selectedChapterCount,
-                onSelectAll = { onAllChapterSelected(true) },
-                onInvertSelection = { onInvertSelection() },
-                titleAlphaProvider = { 1f },
-                backgroundAlphaProvider = { 1f },
+                val selectedChapterCount = remember(chapters) {
+                    chapters.count { it.selected }
+                }
+                MangaToolbar(
+                    modifier = Modifier.onSizeChanged { topBarHeight = it.height },
+                    title = state.manga.title,
+                    hasFilters = state.filterActive,
+                    navigateUp = navigateUp,
+                    onClickFilter = onFilterButtonClicked,
+                    onClickShare = onShareClicked,
+                    onClickDownload = onDownloadActionClicked,
+                    onClickTranslate = onTranslateActionClicked,
+                    onClickEditCategory = onEditCategoryClicked,
+                    onClickRefresh = onRefresh,
+                    onClickMigrate = onMigrateClicked,
+                    onClickEditNotes = onEditNotesClicked,
+                    onCancelActionMode = { onAllChapterSelected(false) },
+                    // SY -->
+                    onClickEditInfo = onEditInfoClicked.takeIf { state.manga.favorite },
+                    // KMK -->
+                    onClickSourceSettings = onClickSourceSettingsClicked,
+                    onClearManga = onClearManga,
+                    onOpenMangaFolder = onOpenMangaFolder,
+                    onClickRelatedMangas = onRelatedMangasScreenClick.takeIf {
+                        !expandRelatedMangas &&
+                            showRelatedMangasInOverflow &&
+                            state.manga.source != MERGED_SOURCE_ID
+                    },
+                    // KMK <--
+                    onClickRecommend = onRecommendClicked.takeIf { state.showRecommendationsInOverflow },
+                    onClickMergedSettings = onMergedSettingsClicked.takeIf { state.manga.source == MERGED_SOURCE_ID },
+                    onClickMerge = onMergeClicked.takeIf { state.showMergeInOverflow },
+                    // SY <--
+                    actionModeCounter = selectedChapterCount,
+                    onSelectAll = { onAllChapterSelected(true) },
+                    onInvertSelection = { onInvertSelection() },
+                    titleAlphaProvider = { 1f },
+                    backgroundAlphaProvider = { 1f },
+                    // KMK -->
+                    onPaletteScreenClick = onPaletteScreenClick,
+                    autoTranslate = state.manga.autoTranslateAfterDownload,
+                    onClickToggleAutoTranslate = onToggleAutoTranslate.takeIf { !state.source.isLocalOrStub() },
+                    onClickTranslationSettings = onClickTranslationSettingsClicked,
+                    onClickColorizerSettings = onClickColorizerSettingsClicked,
+                )
                 // KMK -->
-                onPaletteScreenClick = onPaletteScreenClick,
-                autoTranslate = state.manga.autoTranslateAfterDownload,
-                onClickToggleAutoTranslate = onToggleAutoTranslate.takeIf { !state.source.isLocalOrStub() },
-                onClickTranslationSettings = onClickTranslationSettingsClicked,
-                onClickColorizerSettings = onClickColorizerSettingsClicked,
-            )
+            }
+            // KMK <--
         },
         bottomBar = {
             Box(
@@ -1476,6 +1670,17 @@ private fun MangaScreenLargeImpl(
                             onSearch(it, false)
                         }
                         // SY <--
+                        if (state.isFetchingExternalMetadata || state.externalMetadata != null) {
+                            ExternalMetadataCard(
+                                metadata = state.externalMetadata,
+                                isLoading = state.isFetchingExternalMetadata,
+                                onAddToTracker = onTrackingClicked,
+                                onTagClick = onTagClick,
+                                onTagLongClick = onTagLongClick,
+                                selectedTags = selectedTags,
+                                isMultiSelectMode = isTagMultiSelectMode,
+                            )
+                        }
                         ExpandableMangaDescription(
                             defaultExpandState = true,
                             description = state.manga.description,
@@ -1490,6 +1695,10 @@ private fun MangaScreenLargeImpl(
                                 SearchMetadataChips(state.meta, state.source.id, state.manga.genre)
                             },
                             // SY <--
+                            onTagClick = onTagClick,
+                            onTagLongClick = onTagLongClick,
+                            selectedTags = selectedTags,
+                            isMultiSelectMode = isTagMultiSelectMode,
                         )
                         // SY -->
                         if (!state.showRecommendationsInOverflow || state.showMergeWithAnother) {
@@ -1538,19 +1747,25 @@ private fun MangaScreenLargeImpl(
                                         ) {
                                             Column {
                                                 RelatedMangaTitle(
-                                                    title = stringResource(KMR.strings.pref_source_related_mangas)
-                                                        .uppercase(),
+                                                    title = stringResource(KMR.strings.pref_source_related_mangas),
                                                     subtitle = null,
                                                     onClick = onRelatedMangasScreenClick,
                                                     onLongClick = null,
                                                     modifier = Modifier
                                                         .padding(horizontal = MaterialTheme.padding.medium),
+                                                    // KMK -->
+                                                    toggleSelectionMode = onToggleBulkSelectionMode,
+                                                    isRunning = bulkFavoriteState?.isRunning == true,
+                                                    // KMK <--
                                                 )
                                                 RelatedMangasRow(
                                                     relatedMangas = state.relatedMangasSorted,
                                                     getMangaState = getMangaState,
                                                     onMangaClick = onRelatedMangaClick,
                                                     onMangaLongClick = onRelatedMangaLongClick,
+                                                    // KMK -->
+                                                    selection = bulkFavoriteState?.selection.orEmpty(),
+                                                    // KMK <--
                                                 )
                                             }
                                         }

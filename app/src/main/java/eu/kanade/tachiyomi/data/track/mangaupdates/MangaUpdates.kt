@@ -42,7 +42,7 @@ class MangaUpdates(id: Long) : BaseTracker(id, "MangaUpdates"), DeletableTracker
 
     private val interceptor by lazy { MangaUpdatesInterceptor(this) }
 
-    private val api by lazy { MangaUpdatesApi(interceptor, client) }
+    val api by lazy { MangaUpdatesApi(interceptor, client) }
 
     override fun getLogo(): Int = R.drawable.brand_mangaupdates
 

@@ -58,51 +58,61 @@ class SuggestionsWorker(
             val sourcePreferences = Injekt.get<SourcePreferences>()
             val suggestionsPreferences = Injekt.get<SuggestionsPreferences>()
 
-            // 1. Scan favorites and history to update/populate taste database
+            // 1. Scan favorites and history to update/populate taste database with deep engagement (duration + chapters)
             val favorites = mangaRepository.getFavorites()
             val readHistory = mangaRepository.getReadMangaNotInLibrary()
             val seed = (favorites + readHistory).distinctBy { it.id }
 
-            // Sync tags with time decay and generic blacklist
+            // Sync tags with time decay, reading duration, chapter depth, and generic blacklist
             val genericTags = setOf("manga", "webtoon", "comic", "scanlation", "translation", "english", "raw", "doujinshi", "oneshot")
             val historyRepository = Injekt.get<tachiyomi.domain.history.repository.HistoryRepository>()
+            val chapterRepository = Injekt.get<tachiyomi.domain.chapter.repository.ChapterRepository>()
             val now = System.currentTimeMillis()
 
             val tagFrequencies = mutableMapOf<String, Double>()
-            favorites.distinctBy { it.id }.forEach { manga ->
-                manga.genre.orEmpty().forEach { genre ->
-                    val cleanGenre = cleanAndFilterGenre(genre)
-                    if (cleanGenre != null && !genericTags.contains(cleanGenre) && cleanGenre.isNotEmpty()) {
-                        tagFrequencies[cleanGenre] = (tagFrequencies[cleanGenre] ?: 0.0) + 1.0
-                    }
-                }
-            }
-
             val recentAuthors = mutableSetOf<String>()
             val recentArtists = mutableSetOf<String>()
 
-            readHistory.distinctBy { it.id }.forEach { manga ->
-                val history = historyRepository.getHistoryByMangaId(manga.id)
+            seed.forEach { manga ->
+                val history = try {
+                    historyRepository.getHistoryByMangaId(manga.id)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val totalReadDurationMs = history.sumOf { it.readDuration }
+                val durationMinutes = totalReadDurationMs / (1000.0 * 60.0)
                 val lastReadTime = history.mapNotNull { it.readAt?.time }.maxOrNull()
-                val weight = if (lastReadTime != null) {
-                    val diffDays = (now - lastReadTime) / (1000 * 60 * 60 * 24)
+                val readChaptersCount = try {
+                    chapterRepository.getChapterByMangaId(manga.id).count { it.read }
+                } catch (e: Exception) {
+                    0
+                }
+
+                val recencyMultiplier = if (lastReadTime != null) {
+                    val diffDays = (now - lastReadTime) / (1000.0 * 60 * 60 * 24)
                     if (diffDays <= 7) {
                         manga.author?.lowercase()?.trim()?.takeIf { it.isNotBlank() }?.let { recentAuthors.add(it) }
                         manga.artist?.lowercase()?.trim()?.takeIf { it.isNotBlank() }?.let { recentArtists.add(it) }
                     }
                     when {
                         diffDays <= 7 -> 2.5
-                        diffDays <= 30 -> 1.5
-                        diffDays <= 90 -> 0.6
-                        else -> 0.2
+                        diffDays <= 30 -> 1.8
+                        diffDays <= 90 -> 1.0
+                        else -> 0.4
                     }
                 } else {
-                    0.2
+                    1.0
                 }
+
+                // Logarithmic scaling for chapters read & reading duration to reward deeply engaged manga
+                val chapterMultiplier = 1.0 + Math.log(1.0 + readChaptersCount.coerceAtLeast(0)) * 0.5
+                val durationMultiplier = 1.0 + Math.log(1.0 + (durationMinutes / 10.0).coerceAtLeast(0.0)) * 0.4
+                val mangaEngagementWeight = (if (manga.favorite) 1.5 else 1.0) * recencyMultiplier * chapterMultiplier * durationMultiplier
+
                 manga.genre.orEmpty().forEach { genre ->
                     val cleanGenre = cleanAndFilterGenre(genre)
                     if (cleanGenre != null && !genericTags.contains(cleanGenre) && cleanGenre.isNotEmpty()) {
-                        tagFrequencies[cleanGenre] = (tagFrequencies[cleanGenre] ?: 0.0) + weight
+                        tagFrequencies[cleanGenre] = (tagFrequencies[cleanGenre] ?: 0.0) + mangaEngagementWeight
                     }
                 }
             }
@@ -281,18 +291,27 @@ class SuggestionsWorker(
 
             val maxTagsToMatch = suggestionsPreferences.maxTagsToMatch().get()
             val searchTerms = mutableListOf<String>()
-            searchTerms.addAll(topAuthors)
-            searchTerms.addAll(topArtists)
 
-            val tagCandidates = finalTags.map { it.tag }.toMutableList()
-            if (tagCandidates.size < maxTagsToMatch) {
-                val fallbackTags = allTags.filter { !it.isBlocked && !finalTags.any { ft -> ft.tag == it.tag } }
-                    .sortedByDescending { it.count }
-                tagCandidates.addAll(fallbackTags.map { it.tag })
+            // Bucket 1: Explicit user-added tags & top authors/artists
+            finalTags.filter { it.isUserAdded }.forEach { searchTerms.add(it.tag) }
+            searchTerms.addAll(topAuthors.take(1))
+            searchTerms.addAll(topArtists.take(1))
+
+            // Bucket 2: Weighted Roulette Sampling across top and niche tags to avoid monopoly
+            val candidatePool = finalTags.filterNot { it.isUserAdded }.toMutableList()
+            if (candidatePool.isNotEmpty()) {
+                // Pick top ranked tag
+                searchTerms.add(candidatePool.removeAt(0).tag)
+
+                // Shuffle / roulette sample secondary niche tags
+                val remainingTags = (candidatePool + allTags.filter { !it.isBlocked && !finalTags.any { ft -> ft.tag == it.tag } })
+                    .distinctBy { it.tag }
+                    .shuffled()
+                searchTerms.addAll(remainingTags.take(maxTagsToMatch - searchTerms.size).map { it.tag })
             }
-            searchTerms.addAll(tagCandidates.distinct().take(maxTagsToMatch))
 
-            val totalRanks = searchTerms.size
+            val totalRanks = searchTerms.distinct().size
+            val distinctSearchTerms = searchTerms.distinct()
 
             val favoriteUrls = favorites.map { it.url }.toSet()
             val historyUrls = readHistory.map { it.url }.toSet()
@@ -305,12 +324,16 @@ class SuggestionsWorker(
 
             // Semaphore to throttle extension concurrent queries
             val semaphore = Semaphore(3)
+            val random = java.util.Random()
 
             suspend fun processRank(rankIdx: Int, isFirstRank: Boolean) {
-                if (rankIdx < 0 || rankIdx >= totalRanks) return
-                val currentSearchTerm = searchTerms[rankIdx]
+                if (rankIdx < 0 || rankIdx >= distinctSearchTerms.size) return
+                val currentSearchTerm = distinctSearchTerms[rankIdx]
                 SuggestionsReport.log("INFO", "Processing rank $rankIdx. Selected query/tag: '$currentSearchTerm'")
                 logcat(LogPriority.INFO) { "Fetching suggestions rank $rankIdx (query/tag: $currentSearchTerm)" }
+
+                // Dynamic page offset sampling (page 1 or 2) for deep exploration
+                val pageToFetch = if (random.nextFloat() < 0.35f) 2 else 1
 
                 val candidates = mutableMapOf<String, Pair<eu.kanade.tachiyomi.source.model.SManga, Long>>()
                 coroutineScope {
@@ -318,8 +341,8 @@ class SuggestionsWorker(
                         async {
                             semaphore.withPermit {
                                 try {
-                                    SuggestionsReport.log("INFO", "Extension '${source.name}' starting search for: '$currentSearchTerm'")
-                                    val results = source.getSearchManga(1, currentSearchTerm, eu.kanade.tachiyomi.source.model.FilterList())
+                                    SuggestionsReport.log("INFO", "Extension '${source.name}' starting search for: '$currentSearchTerm' (page $pageToFetch)")
+                                    val results = source.getSearchManga(pageToFetch, currentSearchTerm, eu.kanade.tachiyomi.source.model.FilterList())
                                     val fetchedSize = results.mangas.size
                                     SuggestionsReport.log("INFO", "Extension '${source.name}' returned $fetchedSize results.")
 
@@ -396,6 +419,10 @@ class SuggestionsWorker(
                                 try {
                                     val networkManga = smanga.toDomainManga(sourceId)
                                     var localManga = networkToLocalManga(networkManga)
+
+                                    if (localManga.favorite || favoriteUrls.contains(localManga.url) || favoriteTitles.contains(localManga.title.lowercase().trim())) {
+                                        return@async
+                                    }
 
                                     if (!localManga.initialized) {
                                         try {

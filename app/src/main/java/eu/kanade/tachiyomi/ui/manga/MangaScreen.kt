@@ -236,6 +236,7 @@ class MangaScreen(
     ) {
         // KMK <--
         val haptic = LocalHapticFeedback.current
+        val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
         val isHttpSource = remember { successState.source is HttpSource }
 
         LaunchedEffect(successState.manga, screenModel.source) {
@@ -460,8 +461,20 @@ class MangaScreen(
                 }
                 showRelatedMangasScreen()
             },
-            onRelatedMangaClick = { navigator.push(MangaScreen(it.id, true)) },
-            onRelatedMangaLongClick = { bulkFavoriteScreenModel.addRemoveManga(it, haptic) },
+            onRelatedMangaClick = {
+                if (bulkFavoriteState.selectionMode) {
+                    bulkFavoriteScreenModel.toggleSelection(it)
+                } else {
+                    navigator.push(MangaScreen(it.id, true))
+                }
+            },
+            onRelatedMangaLongClick = {
+                if (!bulkFavoriteState.selectionMode) {
+                    bulkFavoriteScreenModel.addRemoveManga(it, haptic)
+                } else {
+                    navigator.push(MangaScreen(it.id, true))
+                }
+            },
             onSourceClick = {
                 if (successState.source !is StubSource) {
                     // KMK -->
@@ -489,6 +502,23 @@ class MangaScreen(
             coverRatio = coverRatio,
             onPaletteScreenClick = { navigator.push(PaletteScreen(successState.seedColor?.toArgb())) },
             hazeState = hazeState,
+            bulkFavoriteState = bulkFavoriteState,
+            onToggleBulkSelectionMode = bulkFavoriteScreenModel::toggleSelectionMode,
+            onSelectAllRelatedMangas = {
+                successState.relatedMangasSorted?.let { result ->
+                    result.mapNotNull { it as? RelatedManga.Success }
+                        .flatMap { it.mangaList }
+                        .forEach { bulkFavoriteScreenModel.select(it) }
+                }
+            },
+            onReverseRelatedMangasSelection = {
+                successState.relatedMangasSorted?.let { result ->
+                    result.mapNotNull { it as? RelatedManga.Success }
+                        .flatMap { it.mangaList }
+                        .let { bulkFavoriteScreenModel.reverseSelection(it) }
+                }
+            },
+            onBulkFavoriteClicked = bulkFavoriteScreenModel::addFavorite,
             // KMK <--
         )
 

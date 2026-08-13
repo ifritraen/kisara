@@ -17,6 +17,8 @@ data class LibraryItem(
     // KMK -->
     val useLangIcon: Boolean = true,
     val source: Source? = null,
+    val score: Double? = null,
+    val externalStatus: String? = null,
     // KMK <--
     private val sourceManager: SourceManager = Injekt.get(),
 ) {

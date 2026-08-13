@@ -249,6 +249,8 @@ class MangaScreenModel(
     private val insertLibraryUpdateErrors: InsertLibraryUpdateErrors = Injekt.get(),
     private val insertLibraryUpdateErrorMessages: InsertLibraryUpdateErrorMessages = Injekt.get(),
     private val deleteChaptersFromDb: DeleteChapters = Injekt.get(),
+    private val getMangaExternalMetadata: tachiyomi.domain.manga.interactor.GetMangaExternalMetadata = Injekt.get(),
+    private val fetchExternalMetadata: eu.kanade.domain.manga.interactor.FetchExternalMetadata = Injekt.get(),
     // KMK <--
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
 
@@ -452,6 +454,17 @@ class MangaScreenModel(
         // KMK -->
         observeTranslations()
         observeColorizer()
+
+        screenModelScope.launchIO {
+            getMangaExternalMetadata.subscribe(mangaId)
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { metadata ->
+                    updateSuccessState {
+                        it.copy(externalMetadata = metadata)
+                    }
+                }
+        }
         // KMK <--
 
         screenModelScope.launchIO {
@@ -655,6 +668,23 @@ class MangaScreenModel(
             }
             updateSuccessState { it.copy(trackerDetails = trackDetails, isFetchingTrackerDetails = false) }
         }
+
+        // KMK -->
+        val currentManga = successState?.manga ?: getManga.await(mangaId)
+        if (currentManga != null) {
+            val cachedMetadata = getMangaExternalMetadata.await(mangaId)
+            if (cachedMetadata == null) {
+                updateSuccessState { it.copy(isFetchingExternalMetadata = true) }
+                val fetched = fetchExternalMetadata.await(currentManga, forceRefresh = false)
+                updateSuccessState {
+                    it.copy(
+                        externalMetadata = fetched ?: it.externalMetadata,
+                        isFetchingExternalMetadata = false,
+                    )
+                }
+            }
+        }
+        // KMK <--
 
         if (!trackPreferences.autoSyncProgressFromTrackers().get()) return
 
@@ -2362,6 +2392,8 @@ class MangaScreenModel(
             val pageBookmarks: List<tachiyomi.domain.pagebookmark.model.PageBookmark> = emptyList(),
             val trackerDetails: eu.kanade.tachiyomi.data.track.model.TrackSearch? = null,
             val isFetchingTrackerDetails: Boolean = false,
+            val externalMetadata: tachiyomi.domain.manga.model.MangaExternalMetadata? = null,
+            val isFetchingExternalMetadata: Boolean = false,
             // KMK <--
         ) : State {
             // KMK -->

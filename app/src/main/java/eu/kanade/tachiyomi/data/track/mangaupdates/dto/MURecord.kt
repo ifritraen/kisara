@@ -22,6 +22,23 @@ data class MURecord(
     @SerialName("latest_chapter")
     val latestChapter: Int? = null,
     val authors: List<MUAuthor>? = null,
+    val status: String? = null,
+    val licensed: Boolean? = null,
+    @SerialName("english_publisher")
+    val englishPublisher: String? = null,
+    val genres: List<MUGenre>? = null,
+    val categories: List<MUCategory>? = null,
+)
+
+@Serializable
+data class MUGenre(
+    val genre: String? = null,
+)
+
+@Serializable
+data class MUCategory(
+    val category: String? = null,
+    val votes: Int? = null,
 )
 
 fun MURecord.toTrackSearch(id: Long): TrackSearch {

@@ -56,6 +56,8 @@ internal fun LibraryCompactGrid(
                 coverBadgeStart = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnreadBadge(count = libraryItem.unreadCount)
+                    libraryItem.score?.let { ScoreBadge(score = it) }
+                    libraryItem.externalStatus?.let { ExternalStatusBadge(status = it) }
                 },
                 coverBadgeEnd = {
                     LanguageBadge(

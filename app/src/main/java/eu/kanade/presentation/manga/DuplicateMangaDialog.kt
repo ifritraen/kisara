@@ -130,11 +130,18 @@ fun DuplicateMangaDialog(
             )
 
             // KMK -->
-            Text(
-                text = targetManga.title,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.then(horizontalPaddingModifier),
-            )
+            val targetSource = remember(targetManga.source) { sourceManager.getOrStub(targetManga.source) }
+            Column(modifier = horizontalPaddingModifier) {
+                Text(
+                    text = targetManga.title,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Source: ${targetSource.name}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             // KMK <--
 
             Text(

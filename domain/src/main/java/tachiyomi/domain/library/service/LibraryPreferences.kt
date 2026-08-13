@@ -130,6 +130,11 @@ class LibraryPreferences(
     fun filterCategoriesInclude() = preferenceStore.getStringSet(FILTER_LIBRARY_CATEGORIES_INCLUDE_PREF_KEY, emptySet())
 
     fun filterCategoriesExclude() = preferenceStore.getStringSet(FILTER_LIBRARY_CATEGORIES_EXCLUDE_PREF_KEY, emptySet())
+
+    fun filterExtensionTag() = preferenceStore.getString(
+        "pref_filter_library_extension_tag",
+        "",
+    )
     // KMK <--
 
     fun filterTracking(id: Int) = preferenceStore.getEnum(
@@ -151,6 +156,10 @@ class LibraryPreferences(
 
     // KMK -->
     fun sourceBadge() = preferenceStore.getBoolean("display_source_badge", true)
+
+    fun scoreBadge() = preferenceStore.getBoolean("display_score_badge", true)
+
+    fun externalStatusBadge() = preferenceStore.getBoolean("display_external_status_badge", false)
 
     fun useLangIcon() = preferenceStore.getBoolean("display_language_text", true)
     // KMK <--

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.FilterList
@@ -180,6 +181,7 @@ fun landingTab(
                 onRefresh = {
                     screenModel.triggerBackgroundFeedFetch(force = true)
                     screenModel.loadForgottenFavorites()
+                    screenModel.loadTrackerRecommendations(force = true)
                 },
             ) {
                 LazyColumn(
@@ -200,6 +202,9 @@ fun landingTab(
                                 onMangaLongClick = { manga ->
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     screenModel.toggleFavorite(manga.id, manga.favorite)
+                                },
+                                onDismissSuggestion = { manga ->
+                                    screenModel.dismissSuggestion(manga)
                                 },
                             )
                         }
@@ -409,7 +414,48 @@ fun landingTab(
                         }
                     }
 
-                    // 5. Explore Feed
+                    // 5. Recommended For You (Tracker / AniList / MangaUpdates Recommendations)
+                    if (state.trackerRecommendations.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "Recommended For You",
+                                onClickMore = null,
+                            )
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                items(
+                                    items = state.trackerRecommendations,
+                                    key = { "rec-${it.sourceName}-${it.id}-${it.title}" },
+                                ) { rec ->
+                                    val coverTitleStyle = uiPreferences.kisaraCoverTitleStyle().collectAsState().value
+                                    val genreText = rec.genres.take(2).joinToString(" • ").ifBlank { rec.status ?: rec.sourceName }
+
+                                    KisaraHomeSectionCard(
+                                        style = HomeSectionCardStyle.DEFAULT,
+                                        title = rec.title,
+                                        subtitle = genreText,
+                                        coverData = rec.coverUrl,
+                                        progress = 0f,
+                                        chapterName = if (rec.score != null && rec.score > 0.0) "★ ${String.format(java.util.Locale.US, "%.1f", rec.score)}" else rec.sourceName,
+                                        coverTitleStyle = coverTitleStyle,
+                                        onClick = {
+                                            navigator.push(
+                                                eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen(
+                                                    searchQuery = rec.title,
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Explore Feed
                     if (showFeed) {
                         item {
                             SectionHeader(
@@ -489,6 +535,7 @@ fun SpotlightCarousel(
     tagName: String?,
     onMangaClick: (Long) -> Unit,
     onMangaLongClick: (tachiyomi.domain.manga.model.Manga) -> Unit,
+    onDismissSuggestion: ((tachiyomi.domain.manga.model.Manga) -> Unit)? = null,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val autoplay by uiPreferences.homeSuggestionsAutoplay().collectAsState()
@@ -551,49 +598,29 @@ fun SpotlightCarousel(
             val manga = suggestion.manga
             val coverData = manga.asMangaCover()
             val parsed = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, manga.title) }
-            val numberMatch = remember(manga.title) { Regex("(\\d+)$").find(manga.title) }
-            val endingNumber = numberMatch?.groupValues?.get(1)
-            val cleanTitle = remember(parsed.cleanTitle, endingNumber) {
-                if (endingNumber != null && !parsed.cleanTitle.endsWith(endingNumber)) {
-                    "${parsed.cleanTitle} $endingNumber"
-                } else {
-                    parsed.cleanTitle
-                }
+            val authorText = remember(parsed.author, parsed.artist) {
+                listOfNotNull(parsed.author, parsed.artist).distinct().joinToString(" • ").ifBlank { "Unknown" }
             }
-
-            val authorText = remember(manga.author, manga.artist, parsed.author, parsed.artist) {
-                listOfNotNull(manga.author?.ifBlank { null }, manga.artist?.ifBlank { null }, parsed.author, parsed.artist)
-                    .distinct()
-                    .joinToString(" • ")
-                    .ifBlank { "Unknown Author" }
+            val tags = remember(manga.genre) {
+                manga.genre.orEmpty().take(3)
             }
-
-            val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
-            val titleFontSize = remember(coverTitleStyleKey) {
-                when (coverTitleStyleKey) {
-                    "compact" -> 13.sp
-                    "ultra_compact" -> 11.sp
-                    "moderate" -> 14.sp
-                    else -> 16.sp
-                }
+            val endingNumber = remember(manga.title) {
+                Regex("(\\d+)$").find(manga.title)?.groupValues?.get(1)
             }
-
-            val tags: List<String> = remember(manga.genre) {
-                manga.genre ?: emptyList()
-            }
+            val titleFontSize = 15.sp
 
             Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 modifier = Modifier
                     .fillMaxSize()
                     .combinedClickable(
                         onClick = { onMangaClick(manga.id) },
                         onLongClick = { onMangaLongClick(manga) },
                     ),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Subtle Blur Background Cover (Reduced blur)
+                    // Blurred background cover
                     MangaCover.Book(
                         data = coverData,
                         modifier = Modifier
@@ -639,24 +666,46 @@ fun SpotlightCarousel(
                                 .padding(vertical = 12.dp, horizontal = 4.dp),
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            // 1. Title following Cover Title Style + Preserved Ending Number Suffix
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    text = parsed.cleanTitle,
-                                    fontSize = titleFontSize,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                            // 1. Title + Dismiss button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Row(
                                     modifier = Modifier.weight(1f, fill = false),
-                                )
-                                if (endingNumber != null) {
+                                    verticalAlignment = Alignment.Bottom,
+                                ) {
                                     Text(
-                                        text = " $endingNumber",
+                                        text = parsed.cleanTitle,
                                         fontSize = titleFontSize,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
                                     )
+                                    if (endingNumber != null) {
+                                        Text(
+                                            text = " $endingNumber",
+                                            fontSize = titleFontSize,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                                if (onDismissSuggestion != null) {
+                                    IconButton(
+                                        onClick = { onDismissSuggestion(manga) },
+                                        modifier = Modifier.size(24.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Not Interested",
+                                            tint = Color.White.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
                                 }
                             }
 

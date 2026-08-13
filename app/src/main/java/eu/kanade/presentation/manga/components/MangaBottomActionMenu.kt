@@ -288,6 +288,7 @@ fun LibraryBottomActionMenu(
     // SY <--
     // KMK -->
     onDuplicateCheckClicked: (() -> Unit)? = null,
+    onFetchExternalMetadataClicked: (() -> Unit)? = null,
     // KMK <--
     modifier: Modifier = Modifier,
 ) {
@@ -453,6 +454,12 @@ fun LibraryBottomActionMenu(
                             DropdownMenuItem(
                                 text = { Text(text = stringResource(SYMR.strings.reset_info)) },
                                 onClick = onClickResetInfo,
+                            )
+                        }
+                        if (onFetchExternalMetadataClicked != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(KMR.strings.action_fetch_external_metadata)) },
+                                onClick = onFetchExternalMetadataClicked,
                             )
                         }
                         // KMK <--

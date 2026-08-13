@@ -67,6 +67,8 @@ import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.components.material.TextButton
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 fun LibrarySettingsDialog(
@@ -205,6 +207,9 @@ private fun ColumnScope.FilterPage(
     CategoriesFilter(
         libraryPreferences = screenModel.libraryPreferences,
         categories = categories,
+    )
+    ExtensionTagFilter(
+        libraryPreferences = screenModel.libraryPreferences,
     )
     // KMK <--
 
@@ -585,6 +590,45 @@ private fun CategoriesFilter(
         Spacer(Modifier.weight(1f))
         TextButton(onClick = { showCategoriesDialog = true }) {
             Text(stringResource(MR.strings.action_edit))
+        }
+    }
+}
+
+// KMK -->
+@Composable
+private fun ExtensionTagFilter(
+    libraryPreferences: tachiyomi.domain.library.service.LibraryPreferences,
+) {
+    val sourcePreferences = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.source.service.SourcePreferences>() }
+    val allTags by sourcePreferences.customSourceTags().collectAsState()
+    val activeExtTag by libraryPreferences.filterExtensionTag().collectAsState()
+
+    if (allTags.isNotEmpty()) {
+        HeadingItem(stringResource(tachiyomi.i18n.kmk.KMR.strings.extension_tags))
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.padding(
+                start = TabbedDialogPaddings.Horizontal,
+                top = 0.dp,
+                end = TabbedDialogPaddings.Horizontal,
+                bottom = TabbedDialogPaddings.Vertical,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = activeExtTag.isEmpty(),
+                onClick = { libraryPreferences.filterExtensionTag().set("") },
+                label = { Text(stringResource(tachiyomi.i18n.MR.strings.all)) },
+            )
+            allTags.forEach { tag ->
+                FilterChip(
+                    selected = activeExtTag == tag,
+                    onClick = {
+                        val newTag = if (activeExtTag == tag) "" else tag
+                        libraryPreferences.filterExtensionTag().set(newTag)
+                    },
+                    label = { Text(tag) },
+                )
+            }
         }
     }
 }

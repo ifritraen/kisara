@@ -376,13 +376,19 @@ fun ExpandableMangaDescription(
     doSearch: (query: String, global: Boolean) -> Unit,
     // SY <--
     modifier: Modifier = Modifier,
+    // KMK -->
+    onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
+    selectedTags: Set<String> = emptySet(),
+    isMultiSelectMode: Boolean = false,
+    // KMK <--
 ) {
     // KMK -->
     val uiPreferences = Injekt.get<UiPreferences>()
     val pureDarkMode = uiPreferences.themeDarkAmoled().get()
     val favoriteManager = remember { Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>() }
     val context = androidx.compose.ui.platform.LocalContext.current
-    val onTagLongClick: (String) -> Unit = { tag ->
+    val onTagLongClickFallback: (String) -> Unit = { tag ->
         val added = favoriteManager.toggleFavoriteTag(tag)
         val msg = if (added) {
             context.getString(KMR.strings.added_to_favorite_tags.resourceId)
@@ -463,12 +469,16 @@ fun ExpandableMangaDescription(
                         NamespaceTags(
                             tags = searchMetadataChips,
                             onClick = {
-                                tagSelected = it
-                                showMenu = true
+                                if (onTagClick != null) {
+                                    onTagClick(it)
+                                } else {
+                                    tagSelected = it
+                                    showMenu = true
+                                }
                             },
                             // KMK -->
                             pureDarkMode = pureDarkMode,
-                            onLongClick = onTagLongClick,
+                            onLongClick = onTagLongClick ?: onTagLongClickFallback,
                             // KMK <--
                         )
                     } else {
@@ -479,16 +489,33 @@ fun ExpandableMangaDescription(
                         ) {
                             tags.forEach { tagText ->
                                 val isExtracted = extractedTagsSet.contains(tagText)
+                                val isSelected = selectedTags.contains(tagText)
                                 TagsChip(
                                     modifier = DefaultTagChipModifier,
                                     text = tagText,
                                     onClick = {
-                                        tagSelected = tagText
-                                        showMenu = true
+                                        if (onTagClick != null) {
+                                            onTagClick(tagText)
+                                        } else {
+                                            tagSelected = tagText
+                                            showMenu = true
+                                        }
                                     },
-                                    onLongClick = { onTagLongClick(tagText) },
+                                    onLongClick = {
+                                        if (onTagLongClick != null) {
+                                            onTagLongClick(tagText)
+                                        } else {
+                                            onTagLongClickFallback(tagText)
+                                        }
+                                    },
                                     // KMK -->
-                                    borderM3 = if (isExtracted) androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary) else null,
+                                    borderM3 = if (isSelected) {
+                                        androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                                    } else if (isExtracted) {
+                                        androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        null
+                                    },
                                     pureDarkMode = pureDarkMode,
                                     // KMK <--
                                 )
@@ -502,16 +529,33 @@ fun ExpandableMangaDescription(
                     ) {
                         items(items = tags) { tagText ->
                             val isExtracted = extractedTagsSet.contains(tagText)
+                            val isSelected = selectedTags.contains(tagText)
                             TagsChip(
                                 modifier = DefaultTagChipModifier,
                                 text = tagText,
                                 onClick = {
-                                    tagSelected = tagText
-                                    showMenu = true
+                                    if (onTagClick != null) {
+                                        onTagClick(tagText)
+                                    } else {
+                                        tagSelected = tagText
+                                        showMenu = true
+                                    }
                                 },
-                                onLongClick = { onTagLongClick(tagText) },
+                                onLongClick = {
+                                    if (onTagLongClick != null) {
+                                        onTagLongClick(tagText)
+                                    } else {
+                                        onTagLongClickFallback(tagText)
+                                    }
+                                },
                                 // KMK -->
-                                borderM3 = if (isExtracted) androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary) else null,
+                                borderM3 = if (isSelected) {
+                                    androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                                } else if (isExtracted) {
+                                    androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
+                                } else {
+                                    null
+                                },
                                 pureDarkMode = pureDarkMode,
                                 // KMK <--
                             )

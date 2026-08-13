@@ -22,10 +22,14 @@ class MigrateSearchScreenModel(
     private val migrationSources by lazy { sourcePreferences.migrationSources().get() }
 
     override val sortComparator = { map: Map<CatalogueSource, SearchItemResult> ->
-        compareBy<CatalogueSource>(
-            { (map[it] as? SearchItemResult.Success)?.isEmpty ?: true },
-            { migrationSources.indexOf(it.id) },
-        )
+        if (migrationSources.isNotEmpty()) {
+            compareBy<CatalogueSource>(
+                { (map[it] as? SearchItemResult.Success)?.isEmpty ?: true },
+                { migrationSources.indexOf(it.id) },
+            )
+        } else {
+            super.sortComparator(map)
+        }
     }
 
     init {
@@ -46,6 +50,11 @@ class MigrateSearchScreenModel(
     }
 
     override fun getEnabledSources(): List<CatalogueSource> {
-        return migrationSources.mapNotNull { sourceManager.get(it) as? CatalogueSource }
+        val selected = migrationSources.mapNotNull { sourceManager.get(it) as? CatalogueSource }
+        return if (selected.isNotEmpty()) {
+            selected
+        } else {
+            super.getEnabledSources()
+        }
     }
 }

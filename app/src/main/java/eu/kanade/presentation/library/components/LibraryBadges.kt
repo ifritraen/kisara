@@ -73,6 +73,28 @@ fun UncensoredBadge() {
 }
 
 @Composable
+fun ScoreBadge(score: Double) {
+    if (score > 0.0) {
+        Badge(
+            text = "★ " + String.format(java.util.Locale.US, "%.1f", score),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            textColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
+}
+
+@Composable
+fun ExternalStatusBadge(status: String) {
+    if (status.isNotBlank()) {
+        Badge(
+            text = status,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            textColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
+@Composable
 fun ColorizedBadge() {
     val colors = listOf(
         Color(0xFFFF595E),

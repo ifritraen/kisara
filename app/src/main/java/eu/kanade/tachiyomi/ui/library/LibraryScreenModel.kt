@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.all.MergedSource
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
+import eu.kanade.tachiyomi.util.system.toast
 import exh.favorites.FavoritesSyncHelper
 import exh.log.xLogE
 import exh.md.utils.FollowStatus
@@ -92,6 +93,7 @@ import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
@@ -162,8 +164,9 @@ class LibraryScreenModel(
     private val getMergedChaptersByMangaId: GetMergedChaptersByMangaId = Injekt.get(),
     syncPreferences: SyncPreferences = Injekt.get(),
     // SY <--
-    // KMK -->
     private val smartSearchMerge: SmartSearchMerge = Injekt.get(),
+    private val getMangaExternalMetadata: tachiyomi.domain.manga.interactor.GetMangaExternalMetadata = Injekt.get(),
+    private val extensionManager: eu.kanade.tachiyomi.extension.ExtensionManager = Injekt.get(),
     // KMK <--
 ) : StateScreenModel<LibraryScreenModel.State>(State()) {
 
@@ -361,7 +364,8 @@ class LibraryScreenModel(
             )
                 .fastAny { it != TriState.DISABLED } ||
                 // KMK -->
-                prefs.filterCategories
+                prefs.filterCategories ||
+                prefs.filterExtensionTag.isNotEmpty()
             // KMK <--
         }
             .distinctUntilChanged()
@@ -541,6 +545,26 @@ class LibraryScreenModel(
 
             !isExcluded && isIncluded
         }
+
+        val filterFnExtensionTag: (LibraryItem) -> Boolean = extTag@{ item ->
+            val extTag = preferences.filterExtensionTag
+            if (extTag.isBlank()) return@extTag true
+            val sourceMappings = sourcePreferences.sourceTagMappings().get()
+            val extPrefix = "ext_"
+            val sourcePrefix = "source_${item.libraryManga.manga.source}:"
+
+            val hasDirectTag = sourceMappings.contains("$sourcePrefix$extTag")
+            if (hasDirectTag) return@extTag true
+
+            val parentExt = extensionManager.installedExtensionsFlow.value.find { ext ->
+                ext.sources.any { it.id == item.libraryManga.manga.source }
+            }
+            if (parentExt != null) {
+                val hasExtTag = sourceMappings.contains("$extPrefix${parentExt.pkgName}:$extTag")
+                if (hasExtTag) return@extTag true
+            }
+            false
+        }
         // KMK <--
 
         return fastFilter {
@@ -555,7 +579,8 @@ class LibraryScreenModel(
                 filterFnLewd(it) &&
                 // SY <--
                 // KMK -->
-                filterFnCategories(it)
+                filterFnCategories(it) &&
+                filterFnExtensionTag(it)
             // KMK <--
         }
     }
@@ -762,6 +787,9 @@ class LibraryScreenModel(
             libraryPreferences.sourceBadge().changes(),
             libraryPreferences.useLangIcon().changes(),
             libraryPreferences.filterCategories().changes(),
+            libraryPreferences.scoreBadge().changes(),
+            libraryPreferences.externalStatusBadge().changes(),
+            libraryPreferences.filterExtensionTag().changes(),
             // KMK <--
         ) {
             ItemPreferences(
@@ -784,6 +812,9 @@ class LibraryScreenModel(
                 sourceBadge = it[13] as Boolean,
                 useLangIcon = it[14] as Boolean,
                 filterCategories = it[15] as Boolean,
+                scoreBadge = it[16] as Boolean,
+                externalStatusBadge = it[17] as Boolean,
+                filterExtensionTag = it[18] as String,
             )
         }
     }
@@ -848,6 +879,16 @@ class LibraryScreenModel(
                             supportsLatest = false,
                             isStub = source is StubSource,
                         )
+                    } else {
+                        null
+                    },
+                    score = if (preferences.scoreBadge) {
+                        getMangaExternalMetadata.await(manga.manga.id)?.score
+                    } else {
+                        null
+                    },
+                    externalStatus = if (preferences.externalStatusBadge) {
+                        getMangaExternalMetadata.await(manga.manga.id)?.status
                     } else {
                         null
                     },
@@ -1343,15 +1384,34 @@ class LibraryScreenModel(
                             (searchTitles?.fastAny { it.title.contains(query, true) } == true)
                     }
                     is Namespace -> {
-                        searchTags != null &&
-                            searchTags.fastAny {
-                                val tag = queryComponent.tag
-                                (
-                                    it.namespace.equals(queryComponent.namespace, true) &&
-                                        tag?.run { it.name.contains(tag.asQuery(), true) } == true
-                                    ) ||
-                                    (tag == null && it.namespace.equals(queryComponent.namespace, true))
+                        if (queryComponent.namespace.equals("tag", true) || queryComponent.namespace.equals("ext", true) || queryComponent.namespace.equals("source_tag", true)) {
+                            val targetTag = queryComponent.tag?.asQuery()
+                            if (!targetTag.isNullOrBlank()) {
+                                val sourceMappings = sourcePreferences.sourceTagMappings().get()
+                                val extPrefix = "ext_"
+                                val sourcePrefix = "source_${manga.source}:"
+                                val hasDirectTag = sourceMappings.any { it.startsWith(sourcePrefix) && it.removePrefix(sourcePrefix).equals(targetTag, true) }
+                                val parentExt = extensionManager.installedExtensionsFlow.value.find { ext ->
+                                    ext.sources.any { it.id == manga.source }
+                                }
+                                val hasExtTag = parentExt != null && sourceMappings.any {
+                                    it.startsWith("$extPrefix${parentExt.pkgName}:") && it.removePrefix("$extPrefix${parentExt.pkgName}:").equals(targetTag, true)
+                                }
+                                hasDirectTag || hasExtTag
+                            } else {
+                                true
                             }
+                        } else {
+                            searchTags != null &&
+                                searchTags.fastAny {
+                                    val tag = queryComponent.tag
+                                    (
+                                        it.namespace.equals(queryComponent.namespace, true) &&
+                                            tag?.run { it.name.contains(tag.asQuery(), true) } == true
+                                        ) ||
+                                        (tag == null && it.namespace.equals(queryComponent.namespace, true))
+                                }
+                        }
                     }
                     else -> true
                 }
@@ -1377,22 +1437,41 @@ class LibraryScreenModel(
                                 )
                     }
                     is Namespace -> {
-                        val searchedTag = queryComponent.tag?.asQuery()
-                        searchTags == null ||
-                            (queryComponent.namespace.isBlank() && searchedTag.isNullOrBlank()) ||
-                            searchTags.fastAll { mangaTag ->
-                                if (queryComponent.namespace.isBlank() && !searchedTag.isNullOrBlank()) {
-                                    !mangaTag.name.contains(searchedTag, true)
-                                } else if (searchedTag.isNullOrBlank()) {
-                                    mangaTag.namespace == null ||
-                                        !mangaTag.namespace.equals(queryComponent.namespace, true)
-                                } else if (mangaTag.namespace.isNullOrBlank()) {
-                                    true
-                                } else {
-                                    !mangaTag.name.contains(searchedTag, true) ||
-                                        !mangaTag.namespace.equals(queryComponent.namespace, true)
+                        if (queryComponent.namespace.equals("tag", true) || queryComponent.namespace.equals("ext", true) || queryComponent.namespace.equals("source_tag", true)) {
+                            val targetTag = queryComponent.tag?.asQuery()
+                            if (!targetTag.isNullOrBlank()) {
+                                val sourceMappings = sourcePreferences.sourceTagMappings().get()
+                                val extPrefix = "ext_"
+                                val sourcePrefix = "source_${manga.source}:"
+                                val hasDirectTag = sourceMappings.any { it.startsWith(sourcePrefix) && it.removePrefix(sourcePrefix).equals(targetTag, true) }
+                                val parentExt = extensionManager.installedExtensionsFlow.value.find { ext ->
+                                    ext.sources.any { it.id == manga.source }
                                 }
+                                val hasExtTag = parentExt != null && sourceMappings.any {
+                                    it.startsWith("$extPrefix${parentExt.pkgName}:") && it.removePrefix("$extPrefix${parentExt.pkgName}:").equals(targetTag, true)
+                                }
+                                !(hasDirectTag || hasExtTag)
+                            } else {
+                                true
                             }
+                        } else {
+                            val searchedTag = queryComponent.tag?.asQuery()
+                            searchTags == null ||
+                                (queryComponent.namespace.isBlank() && searchedTag.isNullOrBlank()) ||
+                                searchTags.fastAll { mangaTag ->
+                                    if (queryComponent.namespace.isBlank() && !searchedTag.isNullOrBlank()) {
+                                        !mangaTag.name.contains(searchedTag, true)
+                                    } else if (searchedTag.isNullOrBlank()) {
+                                        mangaTag.namespace == null ||
+                                            !mangaTag.namespace.equals(queryComponent.namespace, true)
+                                    } else if (mangaTag.namespace.isNullOrBlank()) {
+                                        true
+                                    } else {
+                                        !mangaTag.name.contains(searchedTag, true) ||
+                                            !mangaTag.namespace.equals(queryComponent.namespace, true)
+                                    }
+                                }
+                        }
                     }
                     else -> true
                 }
@@ -1660,6 +1739,29 @@ class LibraryScreenModel(
     )
     // KMK <--
 
+    // KMK -->
+    fun fetchExternalMetadataForSelection() {
+        val selection = state.value.selectedManga
+        if (selection.isEmpty()) return
+        clearSelection()
+        screenModelScope.launchIO {
+            val fetcher = Injekt.get<eu.kanade.domain.manga.interactor.FetchExternalMetadata>()
+            var successCount = 0
+            selection.forEach { manga ->
+                try {
+                    val res = fetcher.await(manga, forceRefresh = true)
+                    if (res != null) successCount++
+                } catch (e: Exception) {
+                    // Ignore per-item failures
+                }
+            }
+            withUIContext {
+                preferences.context.toast("Fetched info for $successCount/${selection.size} manga")
+            }
+        }
+    }
+    // KMK <--
+
     fun runRecommendationSearch(selection: List<Manga>) {
         recommendationSearch.runSearch(screenModelScope, selection)?.let {
             recommendationSearchJob = it
@@ -1735,6 +1837,9 @@ class LibraryScreenModel(
         // SY <--
         // KMK -->
         val filterCategories: Boolean,
+        val scoreBadge: Boolean,
+        val externalStatusBadge: Boolean,
+        val filterExtensionTag: String = "",
         // KMK <--
     )
 

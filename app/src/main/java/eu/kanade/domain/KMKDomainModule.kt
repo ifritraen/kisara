@@ -55,5 +55,13 @@ class KMKDomainModule : InjektModule {
 
         // Content Filter
         addFactory { tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent(get(), get(), get(), get()) }
+
+        // External Metadata
+        addSingletonFactory<tachiyomi.domain.manga.repository.MangaExternalMetadataRepository> {
+            tachiyomi.data.manga.MangaExternalMetadataRepositoryImpl(get())
+        }
+        addFactory { tachiyomi.domain.manga.interactor.GetMangaExternalMetadata(get()) }
+        addFactory { eu.kanade.domain.manga.interactor.FetchExternalMetadata(get(), get(), get(), get()) }
+        addFactory { eu.kanade.domain.manga.interactor.GetTrackerRecommendations(get(), get(), get(), get()) }
     }
 }

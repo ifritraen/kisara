@@ -98,6 +98,9 @@ class FavoriteManager(
     }
 
     @Synchronized
+    fun getFavoriteTags(): List<String> = cache.tags
+
+    @Synchronized
     fun toggleFavoriteTag(tag: String): Boolean {
         val clean = tag.trim().lowercase()
         if (clean.isEmpty()) return false
@@ -112,5 +115,16 @@ class FavoriteManager(
         cache = cache.copy(tags = current)
         save()
         return added
+    }
+
+    @Synchronized
+    fun addFavoriteTag(tag: String): Boolean {
+        val clean = tag.trim().lowercase()
+        if (clean.isEmpty() || cache.tags.contains(clean)) return false
+        val current = cache.tags.toMutableList()
+        current.add(clean)
+        cache = cache.copy(tags = current)
+        save()
+        return true
     }
 }

@@ -670,6 +670,9 @@ fun DuplicateGroupItem(
                     }
                 }.filterNotNull().joinToString(", ").takeIf { it.isNotEmpty() } ?: "Default"
 
+                val sourceManager = remember { uy.kohesive.injekt.Injekt.get<tachiyomi.domain.source.service.SourceManager>() }
+                val source = remember(item.manga.source) { sourceManager.getOrStub(item.manga.source) }
+
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth(),
@@ -703,11 +706,21 @@ fun DuplicateGroupItem(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = source.name,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                    )
+
                     Text(
                         text = item.manga.title,
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                        maxLines = 5,
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 4.dp),
                     )

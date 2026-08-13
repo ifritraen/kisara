@@ -249,7 +249,7 @@ fun Screen.bulkSearchTab(): TabContent {
 
                                             BaseSourceItem(
                                                 source = source,
-                                                showLanguageInContent = false,
+                                                showLanguageInContent = true,
                                                 modifier = Modifier.weight(1f),
                                                 onClickItem = {
                                                     if (isMultiSelectActive) {

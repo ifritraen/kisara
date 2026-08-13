@@ -314,19 +314,23 @@ private fun ExtensionSourceItem(
                 modifier = Modifier.size(24.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val extLangText = remember(extension.lang) {
+                val display = eu.kanade.tachiyomi.util.system.LocaleHelper.getSourceDisplayName(extension.lang, context)
+                val emoji = tachiyomi.presentation.core.icons.FlagEmoji.getEmojiLangFlag(extension.lang)
+                if (emoji.isNotBlank()) "$display $emoji" else display
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = extension.name,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
-                if (catalogueSources.size > 1) {
-                    Text(
-                        text = "${catalogueSources.size} sources",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    text = if (catalogueSources.size > 1) "${catalogueSources.size} sources • $extLangText" else extLangText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (catalogueSources.size > 1) {
                 IconButton(onClick = { expanded = !expanded }) {
@@ -339,9 +343,15 @@ private fun ExtensionSourceItem(
         }
 
         AnimatedVisibility(visible = expanded && catalogueSources.size > 1) {
+            val context = androidx.compose.ui.platform.LocalContext.current
             Column(modifier = Modifier.padding(start = 32.dp)) {
                 catalogueSources.forEach { source ->
                     val isChecked = source.id in selectedSourceIds
+                    val sourceLangText = remember(source.lang) {
+                        val display = eu.kanade.tachiyomi.util.system.LocaleHelper.getSourceDisplayName(source.lang, context)
+                        val emoji = tachiyomi.presentation.core.icons.FlagEmoji.getEmojiLangFlag(source.lang)
+                        if (emoji.isNotBlank()) "$display $emoji" else display
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -366,10 +376,18 @@ private fun ExtensionSourceItem(
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = source.name,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = source.name,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                text = sourceLangText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

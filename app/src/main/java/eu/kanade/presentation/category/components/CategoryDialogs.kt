@@ -1,5 +1,6 @@
 package eu.kanade.presentation.category.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,11 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -43,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
@@ -61,6 +65,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.util.system.logcat
@@ -375,6 +380,13 @@ fun ChangeCategoryDialog(
     val insertTrack = remember { Injekt.get<InsertTrack>() }
     val addTracks = remember { Injekt.get<AddTracks>() }
     val primaryTracker: Tracker? = remember { trackPreferences.getPrimaryTracker(trackerManager) }
+    val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
+    val fetchExternalMetadata = remember { Injekt.get<eu.kanade.domain.manga.interactor.FetchExternalMetadata>() }
+    val createCategoryWithName = remember { Injekt.get<tachiyomi.domain.category.interactor.CreateCategoryWithName>() }
+
+    var externalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    var isMetadataExpanded by remember { mutableStateOf(false) }
+    var isSynopsisExpanded by remember { mutableStateOf(false) }
 
     var trackerTitle by remember { mutableStateOf<String?>(null) }
     var currentTrack by remember { mutableStateOf<tachiyomi.domain.track.model.Track?>(null) }
@@ -382,6 +394,17 @@ fun ChangeCategoryDialog(
     var showStatusDropdown by remember { mutableStateOf(false) }
 
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    LaunchedEffect(manga) {
+        val currentManga = manga ?: return@LaunchedEffect
+        val cached = getMangaExternalMetadata.await(currentManga.id)
+        if (cached != null) {
+            externalMetadata = cached
+        } else {
+            val fetched = fetchExternalMetadata.await(currentManga)
+            externalMetadata = fetched
+        }
+    }
 
     LaunchedEffect(manga, primaryTracker) {
         val pTracker = primaryTracker
@@ -421,11 +444,23 @@ fun ChangeCategoryDialog(
             .groupBy { it.value.parentId }
     }
 
-    val onChange: (CheckboxState<Category>) -> Unit = {
-        val index = selection.indexOf(it)
+    val onChange: (CheckboxState<Category>) -> Unit = { entry ->
+        val index = selection.indexOfFirst { it.value.id == entry.value.id }
         if (index != -1) {
             val mutableList = selection.toMutableList()
-            mutableList[index] = it.next()
+            mutableList[index] = entry.next()
+            selection = mutableList.toList().toImmutableList()
+        }
+    }
+
+    val onUnselect: (CheckboxState<Category>) -> Unit = { entry ->
+        val index = selection.indexOfFirst { it.value.id == entry.value.id }
+        if (index != -1) {
+            val mutableList = selection.toMutableList()
+            mutableList[index] = when (entry) {
+                is CheckboxState.State -> CheckboxState.State.None(entry.value)
+                is CheckboxState.TriState -> CheckboxState.TriState.None(entry.value)
+            }
             selection = mutableList.toList().toImmutableList()
         }
     }
@@ -454,18 +489,28 @@ fun ChangeCategoryDialog(
         }
         Box(
             modifier = Modifier
-                .padding(28.dp)
+                .padding(horizontal = 16.dp, vertical = 20.dp)
                 .wrapContentHeight(),
         ) {
             GlassSurface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                 style = GlassDefaults.prominentStyle(),
                 dialogSurface = true,
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    // Drag Handle (Anymex style)
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                            .align(Alignment.CenterHorizontally),
+                    )
+
                     // KMK -->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -593,6 +638,159 @@ fun ChangeCategoryDialog(
                             }
                         }
                     }
+
+                    if (externalMetadata != null) {
+                        val meta = externalMetadata!!
+                        val suggestedTags = remember(meta) {
+                            (meta.genres + meta.tags + listOfNotNull(meta.demographic)).distinct().filter { it.isNotBlank() }
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isMetadataExpanded = !isMetadataExpanded },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                androidx.compose.foundation.layout.FlowRow(
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(1f, fill = false),
+                                ) {
+                                    val score = meta.score
+                                    if (score != null && score > 0.0) {
+                                        Text(
+                                            text = "★ ${String.format(java.util.Locale.US, "%.2f", score)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                    if (!meta.status.isNullOrBlank()) {
+                                        Text(
+                                            text = "• ${meta.status}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                        )
+                                    }
+                                    val totalChapters = meta.totalChapters
+                                    if (totalChapters != null && totalChapters > 0) {
+                                        Text(
+                                            text = "• $totalChapters ch.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                        )
+                                    }
+                                    Text(
+                                        text = "(${meta.sourceName})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                }
+                                Icon(
+                                    imageVector = if (isMetadataExpanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+
+                            val synopsis = meta.synopsis
+                            if (!synopsis.isNullOrBlank()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { isSynopsisExpanded = !isSynopsisExpanded },
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Text(
+                                        text = synopsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = if (isSynopsisExpanded) Int.MAX_VALUE else 3,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = if (isSynopsisExpanded) "Show less ▲" else "Show more ▼",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+
+                            androidx.compose.animation.AnimatedVisibility(visible = isMetadataExpanded) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    if (suggestedTags.isNotEmpty()) {
+                                        Text(
+                                            text = stringResource(tachiyomi.i18n.kmk.KMR.strings.external_metadata_suggested_categories),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        androidx.compose.foundation.layout.FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            suggestedTags.take(12).forEach { tag ->
+                                                val matchingCategory = selection.find { it.value.name.equals(tag, ignoreCase = true) }
+                                                val isSelected = matchingCategory is CheckboxState.State.Checked || matchingCategory is CheckboxState.TriState.Include
+
+                                                androidx.compose.material3.SuggestionChip(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            if (matchingCategory != null) {
+                                                                val index = selection.indexOfFirst { it.value.id == matchingCategory.value.id }
+                                                                if (index != -1) {
+                                                                    val mutableList = selection.toMutableList()
+                                                                    mutableList[index] = matchingCategory.next()
+                                                                    selection = mutableList.toList().toImmutableList()
+                                                                }
+                                                            } else {
+                                                                val result = createCategoryWithName.await(tag)
+                                                                if (result is tachiyomi.domain.category.interactor.CreateCategoryWithName.Result.Success) {
+                                                                    val newCat = result.category
+                                                                    val mutableList = selection.toMutableList()
+                                                                    mutableList.add(CheckboxState.State.Checked(newCat))
+                                                                    selection = mutableList.toList().toImmutableList()
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            text = if (isSelected) "✓ $tag" else "+ $tag",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                                                        )
+                                                    },
+                                                    colors = androidx.compose.material3.SuggestionChipDefaults.suggestionChipColors(
+                                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                                        labelColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                    ),
+                                                    border = null,
+                                                    modifier = Modifier.height(26.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // KMK <--
 
                     Column(
@@ -604,6 +802,10 @@ fun ChangeCategoryDialog(
                         parents.forEach { parentEntry ->
                             val parent = parentEntry.value
                             val subcategories = childrenByParent[parent.id].orEmpty()
+                            val isParentChecked = when (parentEntry) {
+                                is CheckboxState.TriState -> parentEntry is CheckboxState.TriState.Include
+                                is CheckboxState.State -> parentEntry.isChecked
+                            }
 
                             Column(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -612,7 +814,13 @@ fun ChangeCategoryDialog(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onDirectAdd(parent.id) },
+                                        .clickable {
+                                            if (isParentChecked) {
+                                                onUnselect(parentEntry)
+                                            } else {
+                                                onChange(parentEntry)
+                                            }
+                                        },
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     when (parentEntry) {
@@ -633,6 +841,7 @@ fun ChangeCategoryDialog(
                                     Text(
                                         text = parent.visualName,
                                         style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (isParentChecked) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f),
                                     )
@@ -669,65 +878,80 @@ fun ChangeCategoryDialog(
                                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                                                 color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                                 contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.clickable { onDirectAdd(sub.id) },
+                                                modifier = Modifier.clickable {
+                                                    if (isChecked) {
+                                                        onUnselect(subEntry)
+                                                    } else {
+                                                        onChange(subEntry)
+                                                    }
+                                                },
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.padding(start = 2.dp, end = 6.dp, top = 1.dp, bottom = 1.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    modifier = Modifier.padding(start = 6.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                 ) {
-                                                    when (subEntry) {
-                                                        is CheckboxState.TriState.Include -> {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Check,
-                                                                contentDescription = null,
-                                                                modifier = Modifier.size(12.dp),
-                                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                            )
-                                                        }
-                                                        is CheckboxState.TriState.Exclude -> {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Close,
-                                                                contentDescription = null,
-                                                                modifier = Modifier.size(12.dp),
-                                                                tint = MaterialTheme.colorScheme.error,
-                                                            )
-                                                        }
-                                                        is CheckboxState.State -> {
-                                                            if (subEntry.isChecked) {
+                                                    // Check button
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(16.dp)
+                                                            .clickable { onChange(subEntry) },
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        when (subEntry) {
+                                                            is CheckboxState.TriState.Include -> {
                                                                 Icon(
                                                                     imageVector = Icons.Default.Check,
                                                                     contentDescription = null,
-                                                                    modifier = Modifier.size(12.dp),
+                                                                    modifier = Modifier.size(14.dp),
                                                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                                                 )
-                                                            } else {
+                                                            }
+                                                            is CheckboxState.TriState.Exclude -> {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Close,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(14.dp),
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                )
+                                                            }
+                                                            is CheckboxState.State -> {
+                                                                if (subEntry.isChecked) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Check,
+                                                                        contentDescription = null,
+                                                                        modifier = Modifier.size(14.dp),
+                                                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                                    )
+                                                                } else {
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .size(12.dp)
+                                                                            .border(
+                                                                                width = 1.5.dp,
+                                                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                                                shape = RoundedCornerShape(3.dp),
+                                                                            ),
+                                                                    )
+                                                                }
+                                                            }
+                                                            else -> {
                                                                 Box(
                                                                     modifier = Modifier
-                                                                        .size(10.dp)
+                                                                        .size(12.dp)
                                                                         .border(
-                                                                            width = 1.dp,
-                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                                            shape = RoundedCornerShape(2.dp),
+                                                                            width = 1.5.dp,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                                            shape = RoundedCornerShape(3.dp),
                                                                         ),
                                                                 )
                                                             }
-                                                        }
-                                                        else -> {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(10.dp)
-                                                                    .border(
-                                                                        width = 1.dp,
-                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                                        shape = RoundedCornerShape(2.dp),
-                                                                    ),
-                                                            )
                                                         }
                                                     }
                                                     Text(
                                                         text = sub.visualName,
                                                         style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = if (isChecked) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
                                                     )
                                                 }
                                             }

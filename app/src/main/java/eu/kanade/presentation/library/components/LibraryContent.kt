@@ -305,10 +305,10 @@ fun LibraryContent(
                     } else if (activeSubcategoryId == null) {
                         // "All" selected
                         if (isExcludingSubcategories) {
-                            // Exclude mode:  show only parent's own items (no subcategory items)
+                            // Exclude mode: show only parent's own items (no subcategory items)
                             getItemsForCategory(pageCategory)
                         } else {
-                            // Include mode: merge parent + all subcategory items (deduped)
+                            // Include mode: merge parent + all subcategory items (deduped) and sort by parent category sort
                             val parentItems = getItemsForCategory(pageCategory)
                             val children = childrenByParent[pageCategory.id].orEmpty()
                             val childItems = children.flatMap { child -> getItemsForCategory(child) }
@@ -319,7 +319,37 @@ fun LibraryContent(
                                 val mangaId = item.libraryManga.manga.id
                                 if (seen.add(mangaId)) merged.add(item)
                             }
-                            merged
+
+                            val sort = pageCategory.sort
+                            if (merged.size > 1) {
+                                val sortAlpha: (LibraryItem, LibraryItem) -> Int = { m1, m2 ->
+                                    val t1 = m1.libraryManga.manga.title.lowercase()
+                                    val t2 = m2.libraryManga.manga.title.lowercase()
+                                    t1.compareToWithCollator(t2)
+                                }
+                                val comp = Comparator<LibraryItem> { manga1, manga2 ->
+                                    when (sort.type) {
+                                        tachiyomi.domain.library.model.LibrarySort.Type.Alphabetical -> sortAlpha(manga1, manga2)
+                                        tachiyomi.domain.library.model.LibrarySort.Type.LastRead -> manga1.libraryManga.lastRead.compareTo(manga2.libraryManga.lastRead)
+                                        tachiyomi.domain.library.model.LibrarySort.Type.LastUpdate -> manga1.libraryManga.manga.lastUpdate.compareTo(manga2.libraryManga.manga.lastUpdate)
+                                        tachiyomi.domain.library.model.LibrarySort.Type.UnreadCount -> when {
+                                            manga1.libraryManga.unreadCount == manga2.libraryManga.unreadCount -> 0
+                                            manga1.libraryManga.unreadCount == 0L -> if (sort.isAscending) 1 else -1
+                                            manga2.libraryManga.unreadCount == 0L -> if (sort.isAscending) -1 else 1
+                                            else -> manga1.libraryManga.unreadCount.compareTo(manga2.libraryManga.unreadCount)
+                                        }
+                                        tachiyomi.domain.library.model.LibrarySort.Type.TotalChapters -> manga1.libraryManga.totalChapters.compareTo(manga2.libraryManga.totalChapters)
+                                        tachiyomi.domain.library.model.LibrarySort.Type.LatestChapter -> manga1.libraryManga.latestUpload.compareTo(manga2.libraryManga.latestUpload)
+                                        tachiyomi.domain.library.model.LibrarySort.Type.ChapterFetchDate -> manga1.libraryManga.chapterFetchedAt.compareTo(manga2.libraryManga.chapterFetchedAt)
+                                        tachiyomi.domain.library.model.LibrarySort.Type.DateAdded -> manga1.libraryManga.manga.dateAdded.compareTo(manga2.libraryManga.manga.dateAdded)
+                                        else -> sortAlpha(manga1, manga2)
+                                    }
+                                }
+                                val finalComp = (if (sort.isAscending) comp else comp.reversed()).thenComparator(sortAlpha)
+                                merged.sortedWith(finalComp)
+                            } else {
+                                merged
+                            }
                         }
                     } else {
                         // Subcategory selected but doesn't belong to current parent

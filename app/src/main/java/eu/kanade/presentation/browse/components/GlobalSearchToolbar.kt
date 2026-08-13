@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.SearchToolbar
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SourceFilter
@@ -99,6 +100,22 @@ fun GlobalSearchToolbar(
                 actions = {
                     AppBarActions(
                         actions = persistentListOf(
+                            AppBar.Action(
+                                title = if (searchClean) "Clean (ON)" else "Clean",
+                                icon = Icons.Outlined.CleaningServices,
+                                iconTint = if (searchClean) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = onToggleClean,
+                            ),
+                            AppBar.Action(
+                                title = when (searchFormat) {
+                                    1 -> "Format: Key"
+                                    2 -> "Format: Raw"
+                                    else -> "Format"
+                                },
+                                icon = Icons.AutoMirrored.Outlined.FormatListBulleted,
+                                iconTint = if (searchFormat != 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = onToggleFormat,
+                            ),
                             bulkSelectionButton(isRunning, toggleSelectionMode),
                         ),
                     )
@@ -121,54 +138,6 @@ fun GlobalSearchToolbar(
                 .padding(horizontal = MaterialTheme.padding.small),
             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
         ) {
-            // KMK -->
-            FilterChip(
-                selected = searchClean,
-                onClick = onToggleClean,
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.CleaningServices,
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                    )
-                },
-                label = { Text("Clean") },
-            )
-            FilterChip(
-                selected = searchFormat != 0,
-                onClick = onToggleFormat,
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.FormatListBulleted,
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                    )
-                },
-                label = {
-                    Text(
-                        when (searchFormat) {
-                            1 -> "Format (Key)"
-                            2 -> "Format (Raw)"
-                            else -> "Format"
-                        },
-                    )
-                },
-            )
-            FilterChip(
-                selected = searchFuzzy,
-                onClick = onToggleFuzzy,
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Shuffle,
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                    )
-                },
-                label = { Text("Fuzzy") },
-            )
-            VerticalDivider()
-            // KMK <--
-
             // TODO: make this UX better; it only applies when triggering a new search
             if (!hideSourceFilter) {
                 // KMK -->
@@ -208,14 +177,19 @@ fun GlobalSearchToolbar(
 
                 // KMK -->
                 var customGroupsExpanded by remember { mutableStateOf(false) }
+                val sourcePreferences = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.source.service.SourcePreferences>() }
+                val allSourceTags = remember { sourcePreferences.customSourceTags().get() }
                 val activeGroup = remember(customGroups, activeCustomGroupId) {
                     customGroups.firstOrNull { it.id == activeCustomGroupId }
+                }
+                val activeTagName = remember(activeCustomGroupId) {
+                    if (activeCustomGroupId.startsWith("tag_")) activeCustomGroupId.removePrefix("tag_") else null
                 }
                 Box {
                     FilterChip(
                         selected = sourceFilter == SourceFilter.Custom,
                         onClick = {
-                            if (customGroups.isEmpty()) {
+                            if (customGroups.isEmpty() && allSourceTags.isEmpty()) {
                                 onOpenGroupManager()
                             } else {
                                 customGroupsExpanded = true
@@ -223,15 +197,15 @@ fun GlobalSearchToolbar(
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Outlined.FolderSpecial,
+                                imageVector = if (activeTagName != null) Icons.Outlined.FilterList else Icons.Outlined.FolderSpecial,
                                 contentDescription = null,
                                 modifier = Modifier.size(FilterChipDefaults.IconSize),
                             )
                         },
                         label = {
                             Text(
-                                text = if (sourceFilter == SourceFilter.Custom && activeGroup != null) {
-                                    activeGroup.name
+                                text = if (sourceFilter == SourceFilter.Custom) {
+                                    activeGroup?.name ?: (if (activeTagName != null) "Tag: $activeTagName" else stringResource(KMR.strings.custom_groups))
                                 } else {
                                     stringResource(KMR.strings.custom_groups)
                                 },
@@ -269,6 +243,28 @@ fun GlobalSearchToolbar(
                             )
                         }
                         if (customGroups.isNotEmpty()) {
+                            HorizontalDivider()
+                        }
+                        if (allSourceTags.isNotEmpty()) {
+                            allSourceTags.forEach { tag ->
+                                val tagId = "tag_$tag"
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "🏷️ $tag",
+                                            fontWeight = if (sourceFilter == SourceFilter.Custom && activeCustomGroupId == tagId) {
+                                                FontWeight.Bold
+                                            } else {
+                                                FontWeight.Normal
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        onSelectCustomGroup(tagId)
+                                        customGroupsExpanded = false
+                                    },
+                                )
+                            }
                             HorizontalDivider()
                         }
                         DropdownMenuItem(

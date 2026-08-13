@@ -43,6 +43,7 @@ class MigrateMangaUseCase(
     // KMK -->
     private val getHistory: GetHistory,
     private val upsertHistory: UpsertHistory,
+    private val getMangaExternalMetadata: tachiyomi.domain.manga.interactor.GetMangaExternalMetadata,
     // KMK <--
 ) {
     private val enhancedServices by lazy { trackerManager.trackers.filterIsInstance<EnhancedTracker>() }
@@ -164,6 +165,16 @@ class MigrateMangaUseCase(
             // Update custom cover (recheck if custom cover exists)
             if (MigrationFlag.CUSTOM_COVER in flags && current.hasCustomCover()) {
                 coverCache.setCustomCoverToCache(target, coverCache.getCustomCoverFile(current.id).inputStream())
+            }
+
+            // Migrate external metadata
+            try {
+                val currentMeta = getMangaExternalMetadata.await(current.id)
+                if (currentMeta != null) {
+                    getMangaExternalMetadata.upsert(currentMeta.copy(mangaId = target.id))
+                }
+            } catch (_: Exception) {
+                // Ignore
             }
 
             val currentMangaUpdate = MangaUpdate(

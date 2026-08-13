@@ -15,8 +15,10 @@ import androidx.compose.foundation.lazy.grid.LazyGridItemScope
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +35,7 @@ import eu.kanade.tachiyomi.ui.manga.RelatedManga
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -130,6 +133,10 @@ fun RelatedMangaTitle(
     onLongClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     showArrow: Boolean = true,
+    // KMK -->
+    toggleSelectionMode: (() -> Unit)? = null,
+    isRunning: Boolean = false,
+    // KMK <--
 ) {
     Row(
         modifier = modifier
@@ -142,7 +149,7 @@ fun RelatedMangaTitle(
                     it.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 }
             },
-        horizontalArrangement = if (showArrow) Arrangement.SpaceBetween else Arrangement.Center,
+        horizontalArrangement = if (showArrow || toggleSelectionMode != null) Arrangement.SpaceBetween else Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
@@ -159,9 +166,32 @@ fun RelatedMangaTitle(
                 Text(text = subtitle)
             }
         }
-        if (showArrow) {
-            Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+        // KMK -->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (toggleSelectionMode != null) {
+                if (isRunning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .padding(end = MaterialTheme.padding.small),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    IconButton(onClick = toggleSelectionMode) {
+                        Icon(
+                            imageVector = Icons.Outlined.Checklist,
+                            contentDescription = stringResource(KMR.strings.action_bulk_select),
+                        )
+                    }
+                }
+            }
+            if (showArrow) {
+                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+            }
         }
+        // KMK <--
     }
 }
 

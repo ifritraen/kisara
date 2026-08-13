@@ -31,6 +31,9 @@ fun RelatedMangasRow(
     getMangaState: @Composable (Manga) -> State<Manga>,
     onMangaClick: (Manga) -> Unit,
     onMangaLongClick: (Manga) -> Unit,
+    // KMK -->
+    selection: List<Manga> = emptyList(),
+    // KMK <--
 ) {
     when {
         relatedMangas == null -> {
@@ -43,6 +46,9 @@ fun RelatedMangasRow(
                 getManga = { getMangaState(it) },
                 onMangaClick = onMangaClick,
                 onMangaLongClick = onMangaLongClick,
+                // KMK -->
+                selection = selection,
+                // KMK <--
             )
         }
 
@@ -58,6 +64,9 @@ fun RelatedMangaCardRow(
     getManga: @Composable (Manga) -> State<Manga>,
     onMangaClick: (Manga) -> Unit,
     onMangaLongClick: (Manga) -> Unit,
+    // KMK -->
+    selection: List<Manga> = emptyList(),
+    // KMK <--
 ) {
     val mangas = relatedMangas.filterIsInstance<RelatedManga.Success>().map { it.mangaList }.flatten()
     val loading = relatedMangas.filterIsInstance<RelatedManga.Loading>().firstOrNull()
@@ -74,7 +83,7 @@ fun RelatedMangaCardRow(
                 isFavorite = manga.favorite,
                 onClick = { onMangaClick(manga) },
                 onLongClick = { onMangaLongClick(manga) },
-                isSelected = false,
+                isSelected = selection.any { it.id == manga.id },
             )
         }
         if (loading != null) {

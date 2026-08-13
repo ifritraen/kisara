@@ -77,6 +77,7 @@ class LandingScreenModel(
     private val uiPreferences: UiPreferences = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
     private val filterMangaByBlockedContent: tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent = Injekt.get(),
+    private val getTrackerRecommendations: eu.kanade.domain.manga.interactor.GetTrackerRecommendations = Injekt.get(),
 ) : StateScreenModel<LandingScreenModel.State>(State()) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -86,25 +87,36 @@ class LandingScreenModel(
         // 1. Load feed cache immediately
         loadFeedCache()
 
-        // 2. Subscribe to suggestions
+        // 2. Load tracker recommendations immediately
+        loadTrackerRecommendations(force = false)
+
+        // 3. Subscribe to suggestions (dynamically filtered against active library)
         screenModelScope.launch {
             combine(
                 getSuggestions.subscribe().distinctUntilChanged(),
                 getSuggestionTags.subscribe().distinctUntilChanged(),
-            ) { suggestions, tags ->
+                getLibraryManga.subscribe().distinctUntilChanged(),
+            ) { suggestions, tags, libraryManga ->
+                val libraryIds = libraryManga.map { it.id }.toSet()
+                val libraryUrls = libraryManga.map { it.manga.url }.toSet()
+                val nonLibrarySuggestions = suggestions.filter {
+                    !it.manga.favorite &&
+                        it.manga.id !in libraryIds &&
+                        it.manga.url !in libraryUrls
+                }
                 val nonBlockedTags = tags.filter { !it.isBlocked }
                 val top10Tags = nonBlockedTags.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
                 val activeTags = nonBlockedTags.filter { top10Tags.contains(it.tag) || it.isUserAdded }
                     .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
 
-                val finalSuggestions = suggestions.take(15)
+                val finalSuggestions = nonLibrarySuggestions.take(15)
                 finalSuggestions to null
             }.collectLatest { (suggestions, tag) ->
                 mutableState.update { it.copy(suggestions = suggestions.toImmutableList(), suggestionsTagName = tag) }
             }
         }
 
-        // 3. Subscribe to history (Continue Reading)
+        // 4. Subscribe to history (Continue Reading)
         screenModelScope.launch {
             getHistory.subscribe("", unfinishedManga = null, unfinishedChapter = null, nonLibraryEntries = null)
                 .distinctUntilChanged()
@@ -117,7 +129,7 @@ class LandingScreenModel(
                 }
         }
 
-        // 4. Subscribe to updates (Fresh Releases) - last 3 months
+        // 5. Subscribe to updates (Fresh Releases) - last 3 months
         screenModelScope.launch {
             val limit = ZonedDateTime.now().minusMonths(3).toInstant()
             getUpdates.subscribe(limit, unread = null, started = null, bookmarked = null, hideExcludedScanlators = false)
@@ -131,11 +143,28 @@ class LandingScreenModel(
                 }
         }
 
-        // 5. Load Forgotten Favorites (shuffled library manga matching top 10 tags)
+        // 6. Load Forgotten Favorites (shuffled library manga matching top 10 tags)
         loadForgottenFavorites()
 
-        // 6. Trigger background fetch for Explore Feed
+        // 7. Trigger background fetch for Explore Feed
         triggerBackgroundFeedFetch(force = false)
+    }
+
+    fun loadTrackerRecommendations(force: Boolean = false) {
+        screenModelScope.launchIO {
+            try {
+                val cached = getTrackerRecommendations.getCached()
+                if (cached.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerRecommendations = cached.toImmutableList()) }
+                }
+                val fresh = getTrackerRecommendations.fetch(force = force)
+                if (fresh.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerRecommendations = fresh.toImmutableList()) }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Failed to load tracker recommendations" }
+            }
+        }
     }
 
     fun loadForgottenFavorites() {
@@ -222,17 +251,31 @@ class LandingScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
+    fun dismissSuggestion(manga: Manga) {
+        screenModelScope.launchIO {
+            try {
+                val suggestionRepository = Injekt.get<tachiyomi.domain.suggestions.repository.SuggestionRepository>()
+                suggestionRepository.dismiss(manga.url, manga.title)
+                mutableState.update { state ->
+                    state.copy(
+                        suggestions = state.suggestions.filterNot { it.manga.id == manga.id || it.manga.url == manga.url }.toImmutableList(),
+                    )
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Failed to dismiss suggestion: ${manga.title}" }
+            }
+        }
+    }
+
     private fun updateLocalFavoriteState(mangaId: Long, favorite: Boolean) {
         mutableState.update { currentState ->
             val updatedFeed = currentState.feed.map { item ->
                 if (item.id == mangaId) item.copy(favorite = favorite) else item
             }
-            val updatedSuggestions = currentState.suggestions.map { suggestion ->
-                if (suggestion.manga.id == mangaId) {
-                    suggestion.copy(manga = suggestion.manga.copy(favorite = favorite))
-                } else {
-                    suggestion
-                }
+            val updatedSuggestions = if (favorite) {
+                currentState.suggestions.filterNot { it.manga.id == mangaId }
+            } else {
+                currentState.suggestions
             }
             val updatedLibraryRandom = currentState.libraryRandom.map { manga ->
                 if (manga.id == mangaId) manga.copy(favorite = favorite) else manga
@@ -382,6 +425,7 @@ class LandingScreenModel(
         val history: ImmutableList<HistoryWithRelations> = emptyList<HistoryWithRelations>().toImmutableList(),
         val updates: ImmutableList<UpdatesWithRelations> = emptyList<UpdatesWithRelations>().toImmutableList(),
         val libraryRandom: ImmutableList<Manga> = emptyList<Manga>().toImmutableList(),
+        val trackerRecommendations: ImmutableList<eu.kanade.domain.manga.interactor.TrackerRecommendation> = emptyList<eu.kanade.domain.manga.interactor.TrackerRecommendation>().toImmutableList(),
         val feed: ImmutableList<CachedFeedManga> = emptyList<CachedFeedManga>().toImmutableList(),
         val isFeedRefreshing: Boolean = false,
         val isLoading: Boolean = true,

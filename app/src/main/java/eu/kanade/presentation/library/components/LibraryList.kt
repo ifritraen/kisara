@@ -65,6 +65,8 @@ internal fun LibraryList(
                 badge = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnreadBadge(count = libraryItem.unreadCount)
+                    libraryItem.score?.let { ScoreBadge(score = it) }
+                    libraryItem.externalStatus?.let { ExternalStatusBadge(status = it) }
                     LanguageBadge(
                         isLocal = libraryItem.isLocal,
                         sourceLanguage = parsed.languageCode ?: libraryItem.sourceLanguage,

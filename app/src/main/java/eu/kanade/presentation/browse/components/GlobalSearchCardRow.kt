@@ -3,6 +3,7 @@ package eu.kanade.presentation.browse.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,6 +17,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAny
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.library.components.CommonMangaItemDefaults
@@ -66,6 +68,55 @@ fun GlobalSearchCardRow(
         }
     }
 }
+
+// KMK -->
+@Composable
+fun GlobalSearchLibraryCardRow(
+    items: List<eu.kanade.tachiyomi.ui.browse.source.globalsearch.SearchScreenModel.LibrarySearchResult>,
+    onClick: (Manga) -> Unit,
+    onLongClick: (Manga) -> Unit,
+    selection: List<Manga> = emptyList(),
+) {
+    if (items.isEmpty()) return
+
+    LazyRow(
+        contentPadding = PaddingValues(MaterialTheme.padding.small),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+    ) {
+        items(
+            items = items,
+            key = { "lib-search-${it.manga.id}" },
+        ) { item ->
+            val manga = item.manga
+            val isSelected = selection.fastAny { it.id == manga.id }
+
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.width(108.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            ) {
+                MangaItem(
+                    title = manga.title,
+                    cover = manga.asMangaCover(),
+                    isFavorite = true,
+                    onClick = { onClick(manga) },
+                    onLongClick = { onLongClick(manga) },
+                    isSelected = isSelected,
+                    manga = manga,
+                )
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = item.categoryNames,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+        }
+    }
+}
+// KMK <--
 
 @Composable
 internal fun MangaItem(

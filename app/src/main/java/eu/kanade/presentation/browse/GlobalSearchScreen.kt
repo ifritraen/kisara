@@ -137,6 +137,7 @@ fun GlobalSearchScreen(
             onLongClickItem = onLongClickItem,
             // KMK -->
             selection = bulkFavoriteState.selection,
+            libraryResults = state.libraryResults,
             // KMK <--
         )
     }
@@ -153,11 +154,32 @@ internal fun GlobalSearchContent(
     fromSourceId: Long? = null,
     // KMK -->
     selection: List<Manga>,
+    libraryResults: List<SearchScreenModel.LibrarySearchResult> = emptyList(),
     // KMK <--
 ) {
     LazyColumn(
         contentPadding = contentPadding,
     ) {
+        // KMK -->
+        if (libraryResults.isNotEmpty()) {
+            item(key = "global-search-library-results") {
+                GlobalSearchResultItem(
+                    title = "In Library (${libraryResults.size})",
+                    subtitle = "From your library",
+                    onClick = {},
+                    modifier = Modifier.animateItem(),
+                ) {
+                    eu.kanade.presentation.browse.components.GlobalSearchLibraryCardRow(
+                        items = libraryResults,
+                        onClick = onClickItem,
+                        onLongClick = onLongClickItem,
+                        selection = selection,
+                    )
+                }
+            }
+        }
+        // KMK <--
+
         items.forEach { (source, result) ->
             item(key = "global-search-${source.id}") {
                 // KMK -->
