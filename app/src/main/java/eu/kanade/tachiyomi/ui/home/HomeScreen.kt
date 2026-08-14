@@ -12,10 +12,14 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -113,6 +117,7 @@ import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
+import cafe.adriel.voyager.navigator.tab.Tab
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -174,6 +179,7 @@ object HomeScreen : Screen() {
     private val TABS = listOf(
         HomeTab,
         LibraryTab,
+        eu.kanade.tachiyomi.ui.track.TrackTab,
         BrowseTab,
         MoreTab,
     )
@@ -195,6 +201,7 @@ object HomeScreen : Screen() {
         val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
         val alwaysShowSubTabsHome by uiPreferences.alwaysShowSubTabsHome().collectAsState()
         val alwaysShowSubTabsBrowse by uiPreferences.alwaysShowSubTabsBrowse().collectAsState()
+        val showTrackSubBarAtTop by uiPreferences.showTrackSubBarAtTop().collectAsState()
         val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
         val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
         val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
@@ -206,6 +213,7 @@ object HomeScreen : Screen() {
 
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
+        var showVerticalActionPopup by remember { mutableStateOf(false) }
         var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
         val subTabButtonBounds = remember { mutableStateMapOf<String, ButtonActionBounds>() }
         var hoveredButtonKey by remember { mutableStateOf<String?>(null) }
@@ -240,9 +248,10 @@ object HomeScreen : Screen() {
                     HomeTab.showSubTab(5)
                     HomeTab
                 }
+                UiPreferences.StartScreen.LIBRARY -> LibraryTab
+                UiPreferences.StartScreen.TRACK -> eu.kanade.tachiyomi.ui.track.TrackTab
                 UiPreferences.StartScreen.BROWSE -> BrowseTab
                 UiPreferences.StartScreen.MORE -> MoreTab
-                UiPreferences.StartScreen.LIBRARY -> LibraryTab
             }
         }
 
@@ -254,6 +263,7 @@ object HomeScreen : Screen() {
                 LaunchedEffect(tabNavigator.current) {
                     showBottomNav(true)
                     showActionPopup = false
+                    showVerticalActionPopup = false
                     activeSubTabPopup = null
                 }
                 // Provide usable navigator to content screen
@@ -409,16 +419,18 @@ object HomeScreen : Screen() {
                                     }
 
                                     // 2. Determine which sub-tab popup is active
+                                    val alwaysShowSubTabsTrack by uiPreferences.alwaysShowSubTabsTrack().collectAsState()
                                     val activePopup = when {
                                         activeSubTabPopup != null -> activeSubTabPopup
                                         currentTab is HomeTab && alwaysShowSubTabsHome -> currentTab
                                         currentTab is BrowseTab && alwaysShowSubTabsBrowse -> currentTab
+                                        currentTab is eu.kanade.tachiyomi.ui.track.TrackTab && alwaysShowSubTabsTrack && !showTrackSubBarAtTop -> currentTab
                                         else -> null
                                     }
 
                                     // 3. Sub-tab popup above bottom bar
                                     AnimatedVisibility(
-                                        visible = bottomNavVisible && activePopup != null,
+                                        visible = bottomNavVisible && activePopup != null && !showVerticalActionPopup,
                                         enter = expandVertically(expandFrom = Alignment.Bottom),
                                         exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                         modifier = Modifier
@@ -728,6 +740,46 @@ object HomeScreen : Screen() {
                                                                     if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                                 }
                                                             }
+                                                            is eu.kanade.tachiyomi.ui.track.TrackTab -> {
+                                                                val trackSubTabNames = listOf(
+                                                                    "New Releases" to 0,
+                                                                    "Top Recommended" to 1,
+                                                                    "Releases" to 2,
+                                                                    "Series Info" to 3,
+                                                                    "Scanlators" to 4,
+                                                                    "Mangaka" to 5,
+                                                                    "Publishers" to 6,
+                                                                    "Reviews" to 7,
+                                                                    "Genres" to 8,
+                                                                    "Search" to 9,
+                                                                    "My Lists" to 10,
+                                                                    "User CP" to 11,
+                                                                )
+                                                                Row(
+                                                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                ) {
+                                                                    trackSubTabNames.forEach { (name, idx) ->
+                                                                        SubTabButton(
+                                                                            text = name,
+                                                                            selected = eu.kanade.tachiyomi.ui.track.TrackTab.currentPageIndex == idx,
+                                                                            hovered = hoveredButtonKey == "Track_$idx",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Track_$idx"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
+                                                                                    eu.kanade.tachiyomi.ui.track.TrackTab.showSubTab(idx)
+                                                                                    if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
+                                                                            tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
+                                                                            eu.kanade.tachiyomi.ui.track.TrackTab.showSubTab(idx)
+                                                                            if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
                                                             else -> {}
                                                         }
                                                     }
@@ -881,312 +933,90 @@ object HomeScreen : Screen() {
                                                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                                                         )
 
-                                                        Row(
-                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                        ) {
-                                                            when (currentTab) {
-                                                                is LibraryTab -> {
-                                                                    var showLibraryMoreMenu by remember { mutableStateOf(false) }
-
-                                                                    IconButton(
-                                                                        onClick = {
-                                                                            LibraryTab.searchEvent.trySend(Unit)
-                                                                            showActionPopup = false
-                                                                        },
-                                                                        modifier = Modifier.size(bottomBarButtonSize),
-                                                                    ) {
-                                                                        Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(bottomBarIconSize))
-                                                                    }
-                                                                    IconButton(
-                                                                        onClick = {
-                                                                            LibraryTab.filterSettingsEvent.trySend(Unit)
-                                                                            showActionPopup = false
-                                                                        },
-                                                                        modifier = Modifier.size(bottomBarButtonSize),
-                                                                    ) {
-                                                                        Icon(Icons.Outlined.FilterList, contentDescription = "Filter", modifier = Modifier.size(bottomBarIconSize))
-                                                                    }
-                                                                    Box {
-                                                                        IconButton(
-                                                                            onClick = { showLibraryMoreMenu = true },
-                                                                            modifier = Modifier.size(bottomBarButtonSize),
-                                                                        ) {
-                                                                            Icon(Icons.Outlined.MoreVert, contentDescription = "More Options", modifier = Modifier.size(bottomBarIconSize))
-                                                                        }
-                                                                        DropdownMenu(
-                                                                            expanded = showLibraryMoreMenu,
-                                                                            onDismissRequest = { showLibraryMoreMenu = false },
-                                                                        ) {
-                                                                            DropdownMenuItem(
-                                                                                text = { Text("Update library") },
-                                                                                onClick = {
-                                                                                    showLibraryMoreMenu = false
-                                                                                    showActionPopup = false
-                                                                                    LibraryTab.globalUpdateEvent.trySend(Unit)
-                                                                                },
-                                                                            )
-                                                                            DropdownMenuItem(
-                                                                                text = { Text("Update category") },
-                                                                                onClick = {
-                                                                                    showLibraryMoreMenu = false
-                                                                                    showActionPopup = false
-                                                                                    LibraryTab.categoryUpdateEvent.trySend(Unit)
-                                                                                },
-                                                                            )
-                                                                            DropdownMenuItem(
-                                                                                text = { Text("Open random entry") },
-                                                                                onClick = {
-                                                                                    showLibraryMoreMenu = false
-                                                                                    showActionPopup = false
-                                                                                    LibraryTab.randomMangaEvent.trySend(Unit)
-                                                                                },
-                                                                            )
-                                                                            DropdownMenuItem(
-                                                                                text = { Text("Reindex download") },
-                                                                                onClick = {
-                                                                                    showLibraryMoreMenu = false
-                                                                                    showActionPopup = false
-                                                                                    LibraryTab.reindexDownloadEvent.trySend(Unit)
-                                                                                },
-                                                                            )
-                                                                            DropdownMenuItem(
-                                                                                text = { Text("Sync EH favorites") },
-                                                                                onClick = {
-                                                                                    showLibraryMoreMenu = false
-                                                                                    showActionPopup = false
-                                                                                    LibraryTab.syncFavoritesEvent.trySend(Unit)
-                                                                                },
-                                                                            )
-                                                                            DropdownMenuItem(
-                                                                                text = { Text("Sync library") },
-                                                                                onClick = {
-                                                                                    showLibraryMoreMenu = false
-                                                                                    showActionPopup = false
-                                                                                    LibraryTab.syncEvent.trySend(Unit)
-                                                                                },
-                                                                            )
-                                                                        }
-                                                                    }
-                                                                }
-                                                                is HomeTab -> {
-                                                                    when (HomeTab.currentPageIndex) {
-                                                                        1 -> { // Feed
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.addFeedEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Add, contentDescription = "Add Feed", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.sortFeedEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.SwapVert, contentDescription = "Sort Feed", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.bulkSelectEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Checklist, contentDescription = "Bulk Select", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                        2 -> { // Suggestions
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.suggestionsRefreshEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Suggestions", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                        3 -> { // Updates
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.updatesUpdateLibraryEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Refresh, contentDescription = "Update Library", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.updatesCalendarEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.CalendarMonth, contentDescription = "Calendar", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.updatesFilterEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.FilterList, contentDescription = "Filter Updates", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                        4 -> { // History
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.historySearchEvent.trySend(null)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Default.Search, contentDescription = "Search History", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.historyFilterEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.FilterList, contentDescription = "Filter History", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    HomeTab.historyChecklistEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Checklist, contentDescription = "Clear History", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                                is BrowseTab -> {
-                                                                    when (BrowseTab.currentPageIndex) {
-                                                                        0 -> { // Sources
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.sourcesGlobalSearchEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.TravelExplore, contentDescription = "Global Search", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            val nsfwTint = if (BrowseTab.sourcesNsfwOnly) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.sourcesNsfwToggleEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined._18UpRating, contentDescription = "NSFW Toggle", modifier = Modifier.size(20.dp), tint = nsfwTint)
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.sourcesFilterEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.FilterList, contentDescription = "Filter Sources", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                        1 -> { // Extensions
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.extensionsSearchEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Default.Search, contentDescription = "Search Extensions", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            val nsfwTint = if (BrowseTab.extensionsNsfwOnly) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.extensionsNsfwToggleEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined._18UpRating, contentDescription = "NSFW Toggle", modifier = Modifier.size(20.dp), tint = nsfwTint)
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.extensionsWebViewRefreshEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Extensions", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.extensionsFilterEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.FilterList, contentDescription = "Filter Extensions", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.extensionsReposEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Folder, contentDescription = "Repos", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.extensionsInstallJarEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Outlined.Extension, contentDescription = "Install Kotatsu JAR", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                        2 -> { // Migrate
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    BrowseTab.migrateHelpEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help Guide", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                        3 -> { // Duplicate
-                                                                            IconButton(
-                                                                                onClick = {
-                                                                                    eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateTab.resolveDuplicatesEvent.trySend(Unit)
-                                                                                    showActionPopup = false
-                                                                                },
-                                                                                modifier = Modifier.size(36.dp),
-                                                                            ) {
-                                                                                Icon(Icons.Default.Check, contentDescription = "Resolve Duplicates", modifier = Modifier.size(20.dp))
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
+                                                        TabActionGroup(
+                                                            currentTab = currentTab,
+                                                            isVertical = false,
+                                                            bottomBarButtonSize = bottomBarButtonSize,
+                                                            bottomBarIconSize = bottomBarIconSize,
+                                                            onActionExecuted = { showActionPopup = false },
+                                                        )
                                                     }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 5. Far right floating three-dot vertical button & Vertical Action Column
+                                    if (hasActions) {
+                                        // Vertical Actions Column (stacked upward above the three-dot button)
+                                        AnimatedVisibility(
+                                            visible = bottomNavVisible && showVerticalActionPopup,
+                                            enter = expandVertically(expandFrom = Alignment.Bottom) + androidx.compose.animation.fadeIn(),
+                                            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + androidx.compose.animation.fadeOut(),
+                                            modifier = Modifier
+                                                .padding(
+                                                    end = 16.dp,
+                                                    bottom = (bottomBarHeight + bottomBarBottomMargin + 12).coerceAtLeast(0).dp,
+                                                )
+                                                .align(Alignment.BottomEnd),
+                                        ) {
+                                            GlassSurface(
+                                                shape = RoundedCornerShape(16.dp),
+                                                style = GlassDefaults.regularStyle(),
+                                                modifier = Modifier.wrapContentWidth(),
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(6.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                ) {
+                                                    TabActionGroup(
+                                                        currentTab = currentTab,
+                                                        isVertical = true,
+                                                        bottomBarButtonSize = 40.dp,
+                                                        bottomBarIconSize = 20.dp,
+                                                        onActionExecuted = { showVerticalActionPopup = false },
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Floating Three-Dot Vertical Button (far right corner, aligned on same line with bottom bar)
+                                        AnimatedVisibility(
+                                            visible = bottomNavVisible,
+                                            enter = expandVertically(),
+                                            exit = shrinkVertically(),
+                                            modifier = Modifier
+                                                .padding(
+                                                    end = 16.dp,
+                                                    bottom = bottomBarBottomMargin.coerceAtLeast(0).dp,
+                                                )
+                                                .align(Alignment.BottomEnd),
+                                        ) {
+                                            GlassSurface(
+                                                shape = CircleShape,
+                                                style = GlassDefaults.prominentStyle(),
+                                                modifier = Modifier.size(bottomBarHeight.dp),
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .clip(CircleShape)
+                                                        .clickable {
+                                                            showVerticalActionPopup = !showVerticalActionPopup
+                                                        },
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.MoreVert,
+                                                        contentDescription = "Toggle Actions Column",
+                                                        tint = if (showVerticalActionPopup) {
+                                                            MaterialTheme.colorScheme.primary
+                                                        } else {
+                                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                                        },
+                                                        modifier = Modifier.size((bottomBarHeight * 0.4f).coerceAtLeast(18f).dp),
+                                                    )
                                                 }
                                             }
                                         }
@@ -1723,5 +1553,319 @@ fun EditCategoryPopup(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TabActionGroup(
+    currentTab: Tab,
+    isVertical: Boolean,
+    bottomBarButtonSize: androidx.compose.ui.unit.Dp,
+    bottomBarIconSize: androidx.compose.ui.unit.Dp,
+    onActionExecuted: () -> Unit,
+) {
+    val buttonModifier = Modifier.size(bottomBarButtonSize)
+    val iconModifier = Modifier.size(bottomBarIconSize)
+
+    when (currentTab) {
+        is LibraryTab -> {
+            var showLibraryMoreMenu by remember { mutableStateOf(false) }
+
+            IconButton(
+                onClick = {
+                    LibraryTab.searchEvent.trySend(Unit)
+                    onActionExecuted()
+                },
+                modifier = buttonModifier,
+            ) {
+                Icon(Icons.Default.Search, contentDescription = "Search", modifier = iconModifier)
+            }
+            IconButton(
+                onClick = {
+                    LibraryTab.filterSettingsEvent.trySend(Unit)
+                    onActionExecuted()
+                },
+                modifier = buttonModifier,
+            ) {
+                Icon(Icons.Outlined.FilterList, contentDescription = "Filter", modifier = iconModifier)
+            }
+            Box {
+                IconButton(
+                    onClick = { showLibraryMoreMenu = true },
+                    modifier = buttonModifier,
+                ) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "More Options", modifier = iconModifier)
+                }
+                DropdownMenu(
+                    expanded = showLibraryMoreMenu,
+                    onDismissRequest = { showLibraryMoreMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Update library") },
+                        onClick = {
+                            showLibraryMoreMenu = false
+                            onActionExecuted()
+                            LibraryTab.globalUpdateEvent.trySend(Unit)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Update category") },
+                        onClick = {
+                            showLibraryMoreMenu = false
+                            onActionExecuted()
+                            LibraryTab.categoryUpdateEvent.trySend(Unit)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Open random entry") },
+                        onClick = {
+                            showLibraryMoreMenu = false
+                            onActionExecuted()
+                            LibraryTab.randomMangaEvent.trySend(Unit)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Reindex download") },
+                        onClick = {
+                            showLibraryMoreMenu = false
+                            onActionExecuted()
+                            LibraryTab.reindexDownloadEvent.trySend(Unit)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sync EH favorites") },
+                        onClick = {
+                            showLibraryMoreMenu = false
+                            onActionExecuted()
+                            LibraryTab.syncFavoritesEvent.trySend(Unit)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sync library") },
+                        onClick = {
+                            showLibraryMoreMenu = false
+                            onActionExecuted()
+                            LibraryTab.syncEvent.trySend(Unit)
+                        },
+                    )
+                }
+            }
+        }
+        is HomeTab -> {
+            when (HomeTab.currentPageIndex) {
+                1 -> { // Feed
+                    IconButton(
+                        onClick = {
+                            HomeTab.addFeedEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = "Add Feed", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            HomeTab.sortFeedEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.SwapVert, contentDescription = "Sort Feed", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            HomeTab.bulkSelectEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Checklist, contentDescription = "Bulk Select", modifier = iconModifier)
+                    }
+                }
+                2 -> { // Suggestions
+                    IconButton(
+                        onClick = {
+                            HomeTab.suggestionsRefreshEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Suggestions", modifier = iconModifier)
+                    }
+                }
+                3 -> { // Updates
+                    IconButton(
+                        onClick = {
+                            HomeTab.updatesUpdateLibraryEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Update Library", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            HomeTab.updatesCalendarEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = "Calendar", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            HomeTab.updatesFilterEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.FilterList, contentDescription = "Filter Updates", modifier = iconModifier)
+                    }
+                }
+                4 -> { // History
+                    IconButton(
+                        onClick = {
+                            HomeTab.historySearchEvent.trySend(null)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = "Search History", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            HomeTab.historyFilterEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.FilterList, contentDescription = "Filter History", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            HomeTab.historyChecklistEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Checklist, contentDescription = "Clear History", modifier = iconModifier)
+                    }
+                }
+            }
+        }
+        is BrowseTab -> {
+            when (BrowseTab.currentPageIndex) {
+                0 -> { // Sources
+                    IconButton(
+                        onClick = {
+                            BrowseTab.sourcesGlobalSearchEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.TravelExplore, contentDescription = "Global Search", modifier = iconModifier)
+                    }
+                    val nsfwTint = if (BrowseTab.sourcesNsfwOnly) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    IconButton(
+                        onClick = {
+                            BrowseTab.sourcesNsfwToggleEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined._18UpRating, contentDescription = "NSFW Toggle", modifier = iconModifier, tint = nsfwTint)
+                    }
+                    IconButton(
+                        onClick = {
+                            BrowseTab.sourcesFilterEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.FilterList, contentDescription = "Filter Sources", modifier = iconModifier)
+                    }
+                }
+                1 -> { // Extensions
+                    IconButton(
+                        onClick = {
+                            BrowseTab.extensionsSearchEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = "Search Extensions", modifier = iconModifier)
+                    }
+                    val nsfwTint = if (BrowseTab.extensionsNsfwOnly) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    IconButton(
+                        onClick = {
+                            BrowseTab.extensionsNsfwToggleEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined._18UpRating, contentDescription = "NSFW Toggle", modifier = iconModifier, tint = nsfwTint)
+                    }
+                    IconButton(
+                        onClick = {
+                            BrowseTab.extensionsWebViewRefreshEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Extensions", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            BrowseTab.extensionsFilterEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.FilterList, contentDescription = "Filter Extensions", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            BrowseTab.extensionsReposEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Folder, contentDescription = "Repos", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            BrowseTab.extensionsInstallJarEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Outlined.Extension, contentDescription = "Install Kotatsu JAR", modifier = iconModifier)
+                    }
+                }
+                2 -> { // Migrate
+                    IconButton(
+                        onClick = {
+                            BrowseTab.migrateHelpEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help Guide", modifier = iconModifier)
+                    }
+                }
+                3 -> { // Duplicate
+                    IconButton(
+                        onClick = {
+                            eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateTab.resolveDuplicatesEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "Resolve Duplicates", modifier = iconModifier)
+                    }
+                }
+            }
+        }
+        else -> {}
     }
 }

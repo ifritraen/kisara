@@ -38,6 +38,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.collections.immutable.toImmutableList
+import tachiyomi.core.common.preference.mapAsCheckboxState
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.core.util.ifSourcesLoaded
@@ -395,7 +397,16 @@ data class BrowseSourceScreen(
                             scope.launchIO {
                                 val duplicates = screenModel.getDuplicateLibraryManga(manga)
                                 when {
-                                    manga.favorite -> screenModel.setDialog(BrowseSourceScreenModel.Dialog.RemoveManga(manga))
+                                    manga.favorite -> {
+                                        val categories = screenModel.getCategories()
+                                        val preselectedIds = screenModel.getCategories.await(manga.id).map { it.id }
+                                        screenModel.setDialog(
+                                            BrowseSourceScreenModel.Dialog.ChangeMangaCategory(
+                                                manga,
+                                                categories.mapAsCheckboxState { it.id in preselectedIds }.toImmutableList(),
+                                            ),
+                                        )
+                                    }
                                     duplicates.isNotEmpty() -> screenModel.setDialog(
                                         BrowseSourceScreenModel.Dialog.AddDuplicateManga(manga, duplicates),
                                     )
@@ -503,6 +514,10 @@ data class BrowseSourceScreen(
                             onDismissRequest()
                             navigator.push(DuplicateMangaScreen(dialog.manga.id))
                         },
+                        onDeleteManga = {
+                            screenModel.changeMangaFavorite(dialog.manga)
+                        },
+                        manga = dialog.manga,
                     )
                 }
                 is BrowseSourceScreenModel.Dialog.CreateSavedSearch -> SavedSearchCreateDialog(

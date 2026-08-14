@@ -169,6 +169,10 @@ fun landingTab(
                         screenModel.dismissDialog()
                         navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(changeCategoryManga.id))
                     },
+                    onDeleteManga = {
+                        screenModel.toggleFavorite(changeCategoryManga.id, true)
+                    },
+                    manga = changeCategoryManga,
                 )
             }
 

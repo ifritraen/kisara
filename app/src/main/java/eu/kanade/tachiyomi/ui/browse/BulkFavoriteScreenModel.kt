@@ -416,7 +416,16 @@ class BulkFavoriteScreenModel(
         screenModelScope.launchIO {
             val duplicates = getDuplicateLibraryManga(manga)
             when {
-                manga.favorite -> setDialog(Dialog.RemoveManga(manga))
+                manga.favorite -> {
+                    val categories = getCategories()
+                    val preselectedIds = getCategories.await(manga.id).map { it.id }
+                    setDialog(
+                        Dialog.ChangeMangasCategory(
+                            listOf(manga),
+                            categories.mapAsCheckboxState { it.id in preselectedIds }.toImmutableList(),
+                        ),
+                    )
+                }
                 duplicates.isNotEmpty() -> setDialog(
                     Dialog.AddDuplicateManga(manga, duplicates),
                 )

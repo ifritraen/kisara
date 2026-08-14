@@ -46,6 +46,13 @@ class AutoTrack(
                         val dbTrack = existingTrack.toDbTrack()
                         tracker.setRemoteStatus(dbTrack, tracker.getReadingStatus())
                         insertTrack.await(existingTrack.copy(status = tracker.getReadingStatus()))
+                        resultsList.add(
+                            AutoTrackResult(
+                                trackerName = tracker.name,
+                                trackTitle = existingTrack.title.ifBlank { manga.title },
+                                mangaId = manga.id,
+                            ),
+                        )
                     } catch (e: Exception) {
                         logcat(LogPriority.WARN, e) { "Failed to update READING status for ${tracker.name}" }
                     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -384,7 +385,12 @@ fun ChangeCategoryDialog(
     val fetchExternalMetadata = remember { Injekt.get<eu.kanade.domain.manga.interactor.FetchExternalMetadata>() }
     val createCategoryWithName = remember { Injekt.get<tachiyomi.domain.category.interactor.CreateCategoryWithName>() }
 
+    val effectiveTracker: Tracker? = remember {
+        primaryTracker ?: trackerManager.loggedInTrackers().firstOrNull() ?: trackerManager.mangaUpdates
+    }
+
     var externalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    var isMetadataLoading by remember { mutableStateOf(false) }
     var isMetadataExpanded by remember { mutableStateOf(false) }
     var isSynopsisExpanded by remember { mutableStateOf(false) }
 
@@ -401,33 +407,36 @@ fun ChangeCategoryDialog(
         if (cached != null) {
             externalMetadata = cached
         } else {
+            isMetadataLoading = true
             val fetched = fetchExternalMetadata.await(currentManga)
             externalMetadata = fetched
+            isMetadataLoading = false
         }
     }
 
-    LaunchedEffect(manga, primaryTracker) {
-        val pTracker = primaryTracker
+    LaunchedEffect(manga, effectiveTracker) {
+        val tracker = effectiveTracker
         val currentManga = manga
-        if (pTracker != null && pTracker.isLoggedIn && currentManga != null) {
+        if (tracker != null && currentManga != null) {
             val tracks = try {
                 getTracks.await(currentManga.id)
             } catch (e: Exception) {
                 emptyList()
             }
-            val existing = tracks.find { it.trackerId == pTracker.id }
+            val existing = tracks.find { it.trackerId == tracker.id }
             if (existing != null) {
                 currentTrack = existing
                 trackerTitle = existing.title.ifBlank { currentManga.title }
                 trackerStatus = existing.status
             } else {
+                trackerTitle = currentManga.title
+                trackerStatus = tracker.getReadingStatus()
                 try {
-                    val searchResults = pTracker.search(currentManga.title)
+                    val searchResults = tracker.search(currentManga.title)
                     val match = searchResults.firstOrNull { it.title.equals(currentManga.title, ignoreCase = true) }
                         ?: searchResults.firstOrNull()
                     if (match != null) {
                         trackerTitle = match.title
-                        trackerStatus = pTracker.getReadingStatus()
                     }
                 } catch (e: Exception) {
                     // Ignore search errors
@@ -465,51 +474,83 @@ fun ChangeCategoryDialog(
         }
     }
 
-    val onDirectAdd: (Long) -> Unit = { targetId ->
-        onConfirm(
-            selection.filter { (it.value.id == targetId) || it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include }.map { it.value.id },
-            selection.filter { (it.value.id != targetId) && (it is CheckboxState.State.None || it is CheckboxState.TriState.None) }.map { it.value.id },
-        )
+    val onDirectToggle: (Long) -> Unit = { targetId ->
+        val targetEntry = selection.find { it.value.id == targetId }
+        val isTargetSelected = targetEntry is CheckboxState.State.Checked || targetEntry is CheckboxState.TriState.Include
+        val newSelectedIds = if (isTargetSelected) {
+            selection.filter { it.value.id != targetId && (it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include) }.map { it.value.id }
+        } else {
+            selection.filter { it.value.id == targetId || it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include }.map { it.value.id }
+        }
+        val newUnselectedIds = selection.map { it.value.id }.filterNot { newSelectedIds.contains(it) }
+        onConfirm(newSelectedIds, newUnselectedIds)
         onDismissRequest()
     }
 
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-        androidx.compose.runtime.SideEffect {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                window?.let {
-                    it.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                    it.attributes.blurBehindRadius = 60
-                    it.setDimAmount(0.15f)
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
+    var createSubcategoryParentId by remember { mutableStateOf<Long?>(null) }
+
+    if (showCreateCategoryDialog) {
+        CategoryCreateDialog(
+            onDismissRequest = { showCreateCategoryDialog = false },
+            onCreate = { name, parentId ->
+                tachiyomi.core.common.util.lang.launchIO {
+                    try {
+                        val createCategory = Injekt.get<tachiyomi.domain.category.interactor.CreateCategoryWithName>()
+                        createCategory.await(name, parentId)
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) { "Failed to create category" }
+                    }
                 }
-            }
-        }
-        Box(
+            },
+            categories = selection.map { it.value.name }.toImmutableList(),
+            parentOptions = parents.map { it.value }.toImmutableList(),
+            initialParentId = null,
+        )
+    }
+
+    if (createSubcategoryParentId != null) {
+        val parentId = createSubcategoryParentId
+        CategoryCreateDialog(
+            onDismissRequest = { createSubcategoryParentId = null },
+            onCreate = { name, selectedParentId ->
+                tachiyomi.core.common.util.lang.launchIO {
+                    try {
+                        val createCategory = Injekt.get<tachiyomi.domain.category.interactor.CreateCategoryWithName>()
+                        createCategory.await(name, selectedParentId ?: parentId)
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) { "Failed to create subcategory" }
+                    }
+                }
+            },
+            categories = selection.map { it.value.name }.toImmutableList(),
+            parentOptions = parents.map { it.value }.toImmutableList(),
+            initialParentId = parentId,
+        )
+    }
+
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+    )
+
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
+        dragHandle = {
+            androidx.compose.material3.BottomSheetDefaults.DragHandle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            )
+        },
+    ) {
+        Column(
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 20.dp)
-                .wrapContentHeight(),
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            GlassSurface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                style = GlassDefaults.prominentStyle(),
-                dialogSurface = true,
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    // Drag Handle (Anymex style)
-                    Box(
-                        modifier = Modifier
-                            .width(36.dp)
-                            .height(4.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
-                            .align(Alignment.CenterHorizontally),
-                    )
 
                     // KMK -->
                     Row(
@@ -517,7 +558,7 @@ fun ChangeCategoryDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (primaryTracker != null && primaryTracker.isLoggedIn && trackerTitle != null) {
+                        if (effectiveTracker != null && trackerTitle != null) {
                             Row(
                                 modifier = Modifier.weight(1f),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -540,8 +581,8 @@ fun ChangeCategoryDialog(
 
                                 // Box 2: Status
                                 Box {
-                                    val statusList = remember(primaryTracker) { primaryTracker.getStatusList() }
-                                    val currentRes = trackerStatus?.let { primaryTracker.getStatus(it) }
+                                    val statusList = remember(effectiveTracker) { effectiveTracker.getStatusList() }
+                                    val currentRes = trackerStatus?.let { effectiveTracker.getStatus(it) }
                                     val statusText = if (currentRes != null) stringResource(currentRes) else "Plan to read"
 
                                     androidx.compose.material3.Surface(
@@ -562,7 +603,7 @@ fun ChangeCategoryDialog(
                                         onDismissRequest = { showStatusDropdown = false },
                                     ) {
                                         statusList.forEach { statusId ->
-                                            val stringRes = primaryTracker.getStatus(statusId) ?: return@forEach
+                                            val stringRes = effectiveTracker.getStatus(statusId) ?: return@forEach
                                             val label = stringResource(stringRes)
                                             DropdownMenuItem(
                                                 text = { Text(label) },
@@ -575,7 +616,7 @@ fun ChangeCategoryDialog(
                                                         tachiyomi.core.common.util.lang.launchIO {
                                                             try {
                                                                 val dbTrack = existing.toDbTrack()
-                                                                primaryTracker.setRemoteStatus(dbTrack, statusId)
+                                                                effectiveTracker.setRemoteStatus(dbTrack, statusId)
                                                                 insertTrack.await(existing.copy(status = statusId))
                                                             } catch (e: Exception) {
                                                                 logcat(LogPriority.WARN, e) { "Failed status update" }
@@ -584,14 +625,26 @@ fun ChangeCategoryDialog(
                                                     } else if (currentManga != null) {
                                                         tachiyomi.core.common.util.lang.launchIO {
                                                             try {
-                                                                val searchResults = primaryTracker.search(currentManga.title)
+                                                                var searchResults = try { effectiveTracker.search(currentManga.title) } catch (_: Exception) { emptyList() }
+                                                                var targetTracker: eu.kanade.tachiyomi.data.track.Tracker = effectiveTracker
+                                                                if (searchResults.isEmpty()) {
+                                                                    // Fallback to AniList
+                                                                    val anilist = trackerManager.trackers.find { it.id == TrackerManager.ANILIST }
+                                                                    if (anilist != null && anilist.id != effectiveTracker.id) {
+                                                                        val alResults = try { anilist.search(currentManga.title) } catch (_: Exception) { emptyList() }
+                                                                        if (alResults.isNotEmpty()) {
+                                                                            searchResults = alResults
+                                                                            targetTracker = anilist
+                                                                        }
+                                                                    }
+                                                                }
                                                                 val match = searchResults.firstOrNull() ?: return@launchIO
                                                                 match.manga_id = currentManga.id
-                                                                addTracks.bind(primaryTracker, match, currentManga.id)
+                                                                addTracks.bind(targetTracker, match, currentManga.id)
                                                                 val newTracks = getTracks.await(currentManga.id)
-                                                                val newlyAdded = newTracks.find { it.trackerId == primaryTracker.id }
+                                                                val newlyAdded = newTracks.find { it.trackerId == targetTracker.id }
                                                                 if (newlyAdded != null) {
-                                                                    primaryTracker.setRemoteStatus(newlyAdded.toDbTrack(), statusId)
+                                                                    targetTracker.setRemoteStatus(newlyAdded.toDbTrack(), statusId)
                                                                     insertTrack.await(newlyAdded.copy(status = statusId))
                                                                     currentTrack = newlyAdded
                                                                 }
@@ -637,9 +690,37 @@ fun ChangeCategoryDialog(
                                 )
                             }
                         }
+
+                        IconButton(onClick = { showCreateCategoryDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = stringResource(MR.strings.action_add_category),
+                            )
+                        }
                     }
 
-                    if (externalMetadata != null) {
+                    if (isMetadataLoading) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "Fetching external details…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else if (externalMetadata != null) {
                         val meta = externalMetadata!!
                         val suggestedTags = remember(meta) {
                             (meta.genres + meta.tags + listOfNotNull(meta.demographic)).distinct().filter { it.isNotBlank() }
@@ -797,7 +878,7 @@ fun ChangeCategoryDialog(
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         parents.forEach { parentEntry ->
                             val parent = parentEntry.value
@@ -808,19 +889,13 @@ fun ChangeCategoryDialog(
                             }
 
                             Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable {
-                                            if (isParentChecked) {
-                                                onUnselect(parentEntry)
-                                            } else {
-                                                onChange(parentEntry)
-                                            }
-                                        },
+                                        .clickable { onDirectToggle(parent.id) },
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     when (parentEntry) {
@@ -846,15 +921,15 @@ fun ChangeCategoryDialog(
                                         modifier = Modifier.weight(1f),
                                     )
 
-                                    androidx.compose.material3.IconButton(
-                                        onClick = { onDirectAdd(parent.id) },
-                                        modifier = Modifier.size(36.dp),
+                                    IconButton(
+                                        onClick = { createSubcategoryParentId = parent.id },
+                                        modifier = Modifier.size(32.dp),
                                     ) {
-                                        androidx.compose.material3.Icon(
+                                        Icon(
                                             imageVector = Icons.Default.Add,
-                                            contentDescription = "Direct Add",
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            contentDescription = "Add Subcategory",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }
@@ -878,20 +953,14 @@ fun ChangeCategoryDialog(
                                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                                                 color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                                 contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.clickable {
-                                                    if (isChecked) {
-                                                        onUnselect(subEntry)
-                                                    } else {
-                                                        onChange(subEntry)
-                                                    }
-                                                },
+                                                modifier = Modifier.clickable { onDirectToggle(sub.id) },
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.padding(start = 6.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                 ) {
-                                                    // Check button
+                                                    // Check button to toggle without closing
                                                     Box(
                                                         modifier = Modifier
                                                             .size(16.dp)
@@ -1007,7 +1076,5 @@ fun ChangeCategoryDialog(
                         }
                     }
                 }
-            }
-        }
     }
 }

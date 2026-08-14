@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -146,22 +147,60 @@ fun MangaCompactGridItem(
         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
     }
 
+    val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
+    var cachedExternalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    LaunchedEffect(manga?.id) {
+        val id = manga?.id ?: return@LaunchedEffect
+        cachedExternalMetadata = getMangaExternalMetadata.await(id)
+    }
+
+    val finalBadgeStart: @Composable RowScope.() -> Unit = {
+        val score = cachedExternalMetadata?.score?.takeIf { it > 0.0 }
+        val status = cachedExternalMetadata?.status?.takeIf { it.isNotBlank() }
+
+        if (score != null && status != null) {
+            androidx.compose.foundation.layout.Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+            ) {
+                ScoreBadge(score = score)
+                ExternalStatusBadge(status = status)
+            }
+        } else {
+            score?.let { ScoreBadge(score = it) }
+            status?.let { ExternalStatusBadge(status = it) }
+        }
+
+        if (coverBadgeStart != null) {
+            coverBadgeStart()
+        }
+    }
+
     val finalBadgeEnd: @Composable RowScope.() -> Unit = {
         if (coverBadgeEnd != null) {
             coverBadgeEnd()
         } else {
+            val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
+            val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
             val lang = parsed.languageCode ?: eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, rawTitle)
-            if (lang != null) {
-                LanguageBadge(isLocal = false, sourceLanguage = lang)
+
+            if (lang != null || hasColor) {
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+                ) {
+                    if (lang != null) {
+                        LanguageBadge(isLocal = false, sourceLanguage = lang)
+                    }
+                    if (hasColor) {
+                        ColorizedBadge()
+                    }
+                }
             }
-        }
-        val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
-        if (hasColor) {
-            ColorizedBadge()
-        }
-        val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
-        if (hasUncensored) {
-            UncensoredBadge()
+
+            if (hasUncensored) {
+                UncensoredBadge()
+            }
         }
     }
 
@@ -176,7 +215,7 @@ fun MangaCompactGridItem(
             title = cleanTitle,
             coverData = coverData,
             subtitle = artistAuthorText,
-            coverBadgeStart = coverBadgeStart,
+            coverBadgeStart = finalBadgeStart,
             coverBadgeEnd = finalBadgeEnd,
             coverTitleStyle = coverTitleStyleKey,
             onClick = onClick,
@@ -225,7 +264,7 @@ fun MangaCompactGridItem(
                     )
                 }
             },
-            badgesStart = coverBadgeStart,
+            badgesStart = finalBadgeStart,
             badgesEnd = finalBadgeEnd,
             content = {
                 if (title != null) {
@@ -411,23 +450,81 @@ fun MangaComfortableGridItem(
         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
     }
 
+    val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
+    var cachedExternalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    LaunchedEffect(manga?.id) {
+        val id = manga?.id ?: return@LaunchedEffect
+        cachedExternalMetadata = getMangaExternalMetadata.await(id)
+    }
+
+    val finalBadgeStart: @Composable RowScope.() -> Unit = {
+        val score = cachedExternalMetadata?.score?.takeIf { it > 0.0 }
+        val status = cachedExternalMetadata?.status?.takeIf { it.isNotBlank() }
+
+        if (score != null && status != null) {
+            androidx.compose.foundation.layout.Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+            ) {
+                ScoreBadge(score = score)
+                ExternalStatusBadge(status = status)
+            }
+        } else {
+            score?.let { ScoreBadge(score = it) }
+            status?.let { ExternalStatusBadge(status = it) }
+        }
+
+        if (coverBadgeStart != null) {
+            coverBadgeStart()
+        }
+    }
+
     val finalBadgeEnd: @Composable RowScope.() -> Unit = {
         if (coverBadgeEnd != null) {
             coverBadgeEnd()
         } else {
+            val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
+            val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
             val lang = parsed.languageCode ?: eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, rawTitle)
-            if (lang != null) {
-                LanguageBadge(isLocal = false, sourceLanguage = lang)
+
+            if (lang != null || hasColor) {
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+                ) {
+                    if (lang != null) {
+                        LanguageBadge(isLocal = false, sourceLanguage = lang)
+                    }
+                    if (hasColor) {
+                        ColorizedBadge()
+                    }
+                }
+            }
+
+            if (hasUncensored) {
+                UncensoredBadge()
             }
         }
-        val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
-        if (hasColor) {
-            ColorizedBadge()
-        }
-        val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
-        if (hasUncensored) {
-            UncensoredBadge()
-        }
+    }
+
+    val normalStyleKey by uiPreferences.normalCardStyle().collectAsState()
+    val normalStyle = remember(normalStyleKey) { eu.kanade.presentation.components.cards.NormalCardStyle.fromKey(normalStyleKey) }
+    val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+
+    if (normalStyle != eu.kanade.presentation.components.cards.NormalCardStyle.DEFAULT) {
+        eu.kanade.presentation.components.cards.KisaraNormalCard(
+            style = normalStyle,
+            title = cleanTitle,
+            coverData = coverData,
+            subtitle = artistAuthorText,
+            coverBadgeStart = finalBadgeStart,
+            coverBadgeEnd = finalBadgeEnd,
+            coverTitleStyle = coverTitleStyleKey,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
     }
 
     GridItemSelectable(
@@ -508,7 +605,7 @@ fun MangaComfortableGridItem(
                     MangaCover.Book.ratio
                 },
                 // KMK <--
-                badgesStart = coverBadgeStart,
+                badgesStart = finalBadgeStart,
                 badgesEnd = finalBadgeEnd,
                 content = {
                     if (shouldBlur) {
@@ -770,8 +867,25 @@ fun MangaListItem(
         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
     }
 
+    val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
+    var cachedExternalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    LaunchedEffect(manga?.id) {
+        val id = manga?.id ?: return@LaunchedEffect
+        cachedExternalMetadata = getMangaExternalMetadata.await(id)
+    }
+
     val finalBadge: @Composable RowScope.() -> Unit = {
         badge()
+        cachedExternalMetadata?.score?.let { score ->
+            if (score > 0.0) {
+                ScoreBadge(score = score)
+            }
+        }
+        cachedExternalMetadata?.status?.let { status ->
+            if (status.isNotBlank()) {
+                ExternalStatusBadge(status = status)
+            }
+        }
         if (parsed.isColorized) {
             ColorizedBadge()
         }

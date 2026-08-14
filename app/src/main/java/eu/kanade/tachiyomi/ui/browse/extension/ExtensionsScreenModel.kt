@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.source.JarCatalogueSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -701,6 +702,7 @@ class ExtensionsScreenModel(
 
     sealed class Dialog {
         data class ExtensionTags(val extension: Extension) : Dialog()
+        data class BulkExtensionTags(val extensions: List<Extension>) : Dialog()
     }
 
     @Immutable
@@ -717,9 +719,23 @@ class ExtensionsScreenModel(
         val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"),
         val selectedTag: String? = null,
         val extensionTagMappings: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
+        val selectedExtensions: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         // KMK <--
     ) {
         val isEmpty = items.isEmpty()
+        val isBulkMode = selectedExtensions.isNotEmpty()
+    }
+
+    fun toggleExtensionSelection(pkgName: String) {
+        mutableState.update {
+            val current = it.selectedExtensions
+            val updated = if (current.contains(pkgName)) current - pkgName else current + pkgName
+            it.copy(selectedExtensions = updated.toImmutableSet())
+        }
+    }
+
+    fun clearExtensionSelection() {
+        mutableState.update { it.copy(selectedExtensions = persistentSetOf()) }
     }
 
     fun setSelectedTag(tag: String?) {
@@ -743,6 +759,24 @@ class ExtensionsScreenModel(
             currentMappings.add("$prefix$tag")
         }
         preferences.sourceTagMappings().set(currentMappings)
+    }
+
+    fun saveBulkExtensionTags(pkgNames: List<String>, tagsToAdd: Set<String>, newTag: String?) {
+        val currentAllTags = preferences.customSourceTags().get().toMutableSet()
+        if (newTag != null) {
+            currentAllTags.add(newTag)
+            preferences.customSourceTags().set(currentAllTags)
+        }
+
+        val currentMappings = preferences.sourceTagMappings().get().toMutableSet()
+        pkgNames.forEach { pkgName ->
+            val prefix = "ext_$pkgName:"
+            tagsToAdd.forEach { tag ->
+                currentMappings.add("$prefix$tag")
+            }
+        }
+        preferences.sourceTagMappings().set(currentMappings)
+        clearExtensionSelection()
     }
 
     fun cleanupTemporaryExtensions() {

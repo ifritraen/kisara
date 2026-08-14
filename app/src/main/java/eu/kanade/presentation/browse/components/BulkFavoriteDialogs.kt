@@ -45,6 +45,7 @@ fun Screen.BulkFavoriteDialogs(
             ChangeMangasCategoryDialog(
                 dialog = dialog,
                 navigator = navigator,
+                bulkFavoriteScreenModel = bulkFavoriteScreenModel,
                 onDismiss = bulkFavoriteScreenModel::dismissDialog,
                 onConfirm = { include, exclude ->
                     bulkFavoriteScreenModel.setMangasCategories(dialog.mangas, include, exclude)
@@ -172,6 +173,7 @@ private fun RemoveMangaDialog(
 private fun ChangeMangasCategoryDialog(
     dialog: Dialog.ChangeMangasCategory,
     navigator: Navigator?,
+    bulkFavoriteScreenModel: BulkFavoriteScreenModel,
     onDismiss: () -> Unit,
     onConfirm: (List<Long>, List<Long>) -> Unit,
 ) {
@@ -184,6 +186,12 @@ private fun ChangeMangasCategoryDialog(
             onDismiss()
             navigator?.push(DuplicateMangaScreen(dialog.mangas.map { it.id }))
         },
+        onDeleteManga = {
+            dialog.mangas.forEach { manga ->
+                bulkFavoriteScreenModel.changeMangaFavorite(manga)
+            }
+        },
+        manga = dialog.mangas.singleOrNull(),
     )
 }
 

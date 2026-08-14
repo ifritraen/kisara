@@ -346,6 +346,10 @@ fun Screen.historyTab(
                             onDismissRequest()
                             navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(dialog.manga.id))
                         },
+                        onDeleteManga = {
+                            screenModel.removeFavorite(dialog.manga)
+                        },
+                        manga = dialog.manga,
                     )
                 }
                 is HistoryScreenModel.Dialog.Migrate -> {

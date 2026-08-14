@@ -160,6 +160,7 @@ fun NamespaceTags(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TagsChip(
     text: String,
@@ -168,78 +169,57 @@ fun TagsChip(
     onLongClick: (() -> Unit)? = null,
     border: ChipBorder? = SuggestionChipDefaults.suggestionChipBorder(),
     // KMK -->
-    // borderM3: BorderStroke? = SuggestionChipDefaultsM3.suggestionChipBorder(enabled = true),
     borderM3: BorderStroke? = null,
     pureDarkMode: Boolean = false,
     // KMK <--
 ) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-        if (onClick != null) {
-            val chipModifier = if (onLongClick != null) {
-                modifier.combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                )
-            } else {
-                modifier
-            }
-            val chipOnClick: () -> Unit = if (onLongClick != null) {
-                {}
-            } else {
-                onClick
-            }
-            // KMK -->
-            if (borderM3 != null || pureDarkMode) {
-                // KMK <--
-                SuggestionChip(
-                    modifier = chipModifier,
-                    onClick = chipOnClick,
-                    label = {
-                        Text(
-                            text = text,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    border = borderM3
-                        // KMK -->
-                        ?: SuggestionChipDefaultsM3.suggestionChipBorder(
-                            enabled = true,
-                            borderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                )
-            } else {
-                ElevatedSuggestionChip(
-                    modifier = chipModifier,
-                    onClick = chipOnClick,
-                    label = {
-                        Text(
-                            text = text,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    colors = SuggestionChipDefaultsM3.elevatedSuggestionChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ),
-                )
-            }
-            // KMK <--
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+        val containerColor = if (borderM3 != null || pureDarkMode) {
+            androidx.compose.ui.graphics.Color.Transparent
         } else {
-            SuggestionChip(
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+        val chipBorder = borderM3 ?: if (borderM3 != null || pureDarkMode) {
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        } else {
+            null
+        }
+
+        if (onClick != null || onLongClick != null) {
+            Surface(
+                shape = shape,
+                color = containerColor,
+                border = chipBorder,
+                modifier = modifier
+                    .combinedClickable(
+                        onClick = { onClick?.invoke() },
+                        onLongClick = onLongClick,
+                    ),
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        } else {
+            Surface(
+                shape = shape,
+                color = containerColor,
+                border = chipBorder,
                 modifier = modifier,
-                label = {
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                border = border,
-            )
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
         }
     }
 }

@@ -428,4 +428,23 @@
     <string name="extension_tags">Extension Tags</string>
     <string name="filter_by_extension_tag">Filter by Extension Tag</string>
     <string name="action_add_to_tracker">Add to Tracker</string>
+
+    <!-- Track Tab & MangaUpdates Explorer -->
+    <string name="label_track_tab">Track</string>
+    <string name="label_mu_new_releases">New Releases</string>
+    <string name="label_mu_recommended">Recommended</string>
+    <string name="label_mu_releases">Releases</string>
+    <string name="label_mu_scanlators">Scanlators</string>
+    <string name="label_mu_series_info">Series Info</string>
+    <string name="label_mu_mangaka">Mangaka</string>
+    <string name="label_mu_publishers">Publishers</string>
+    <string name="label_mu_reviews">Reviews</string>
+    <string name="label_mu_genres">Genres</string>
+    <string name="label_mu_categories">Categories</string>
+    <string name="label_mu_user_cp">User CP</string>
+    <string name="label_mu_my_inbox">My Inbox</string>
+    <string name="label_mu_my_lists">My Lists</string>
+    <string name="label_mu_search">Search</string>
+    <string name="label_mu_advanced_search">Adv. Search</string>
+    <string name="mu_login_prompt">Log in to MangaUpdates to access personal lists, inbox, and user CP.</string>
 </resources>

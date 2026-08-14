@@ -160,6 +160,10 @@ fun Screen.sourcesTab(
                         onClickManageTags = {
                             screenModel.dialog = SourcesScreenModel.Dialog.SourceTags(source)
                         },
+                        onClickSelectMultiple = {
+                            screenModel.toggleSourceSelection(source.id)
+                            screenModel.closeDialog()
+                        },
                         onClickUninstall = {
                             screenModel.uninstallExtension(source)
                             screenModel.closeDialog()
@@ -201,6 +205,18 @@ fun Screen.sourcesTab(
                         onDismissRequest = screenModel::closeDialog,
                         onSaveTags = { selectedTags, newTag ->
                             screenModel.saveSourceTags(source.id, selectedTags, newTag)
+                        },
+                    )
+                }
+                is SourcesScreenModel.Dialog.BulkSourceTags -> {
+                    val sources = dialog.sources
+                    eu.kanade.presentation.browse.SourceTagsDialog(
+                        itemName = "${sources.size} Sources",
+                        allTags = state.allTags,
+                        currentTags = emptySet(),
+                        onDismissRequest = screenModel::closeDialog,
+                        onSaveTags = { selectedTags, newTag ->
+                            screenModel.saveBulkSourceTags(sources.map { it.id }, selectedTags, newTag)
                         },
                     )
                 }

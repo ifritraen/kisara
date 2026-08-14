@@ -585,6 +585,7 @@ fun DuplicateScreen(
                     onConfirm = { include, _ ->
                         onConfirmCategory(state.activeCategoryManga.id, include)
                     },
+                    manga = state.activeCategoryManga,
                 )
             }
         }

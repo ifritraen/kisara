@@ -69,7 +69,7 @@ class FetchExternalMetadata(
         return try {
             val mangaUpdates = trackerManager.mangaUpdates
             val searchResults = mangaUpdates.api.search(title)
-            val bestMatch = searchResults.firstOrNull() ?: return null
+            val bestMatch = searchResults.firstOrNull { isMatchingTitle(title, it.title) } ?: return null
             val seriesId = bestMatch.seriesId ?: return null
             val series = mangaUpdates.api.getSeries(seriesId)
 
@@ -109,7 +109,7 @@ class FetchExternalMetadata(
             val url = "https://api.mangabaka.dev/v1/series?q=$encodedQuery"
             val response = client.newCall(GET(url)).awaitSuccess()
             val searchResult = with(json) { response.parseAs<MBSearchResponse>() }
-            val series = searchResult.data?.firstOrNull() ?: return null
+            val series = searchResult.data?.firstOrNull { isMatchingTitle(title, it.title) } ?: return null
 
             val score = series.score
             val status = series.status
@@ -145,6 +145,11 @@ class FetchExternalMetadata(
                 query (${'$'}search: String) {
                     Media(search: ${'$'}search, type: MANGA) {
                         id
+                        title {
+                            romaji
+                            english
+                            native
+                        }
                         averageScore
                         status
                         chapters
@@ -157,7 +162,7 @@ class FetchExternalMetadata(
                         tags {
                             name
                         }
-                        description(asHtml: false)
+                        description
                     }
                 }
             """.trimIndent()
@@ -180,13 +185,19 @@ class FetchExternalMetadata(
             val alResult = with(json) { response.parseAs<ALMetadataResponse>() }
             val media = alResult.data?.media ?: return null
 
+            val alTitles = listOfNotNull(media.title?.romaji, media.title?.english, media.title?.native)
+            if (alTitles.isNotEmpty() && !alTitles.any { isMatchingTitle(title, it) }) {
+                return null
+            }
+
             val score = media.averageScore?.let { it / 10.0 }
             val status = media.status
             val startDate = media.startDate?.year?.toString()
             val totalChapters = media.chapters
             val genres = media.genres.orEmpty()
             val tags = media.tags?.mapNotNull { it.name }.orEmpty()
-            val synopsis = media.description
+            val rawSynopsis = media.description?.htmlDecode()
+            val synopsis = cleanHtmlFormatting(rawSynopsis)
 
             MangaExternalMetadata(
                 mangaId = mangaId,
@@ -206,6 +217,30 @@ class FetchExternalMetadata(
             logcat(LogPriority.DEBUG, e) { "AniList metadata fetch failed for: $title" }
             null
         }
+    }
+
+    private fun cleanHtmlFormatting(html: String?): String? {
+        if (html.isNullOrBlank()) return null
+        return html
+            .replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("""</?p\s*/?>""", RegexOption.IGNORE_CASE), "\n\n")
+            .replace(Regex("""<[^>]*>"""), "")
+            .replace(Regex("""\n{3,}"""), "\n\n")
+            .trim()
+            .ifEmpty { null }
+    }
+
+    private fun isMatchingTitle(searched: String, candidate: String?): Boolean {
+        if (candidate == null) return false
+        val sNorm = normalizeForMatch(searched)
+        val cNorm = normalizeForMatch(candidate)
+        if (sNorm.isEmpty() || cNorm.isEmpty()) return false
+        return sNorm == cNorm || sNorm.startsWith(cNorm) || cNorm.startsWith(sNorm) || sNorm.contains(cNorm) || cNorm.contains(sNorm)
+    }
+
+    private fun normalizeForMatch(text: String): String {
+        return text.lowercase()
+            .replace(Regex("""[^a-z0-9]"""), "")
     }
 
     private fun cleanMangaTitle(title: String): String {
@@ -249,6 +284,7 @@ private data class ALMediaData(
 @Serializable
 private data class ALMediaItem(
     val id: Long? = null,
+    val title: ALTitle? = null,
     val averageScore: Int? = null,
     val status: String? = null,
     val chapters: Int? = null,
@@ -256,6 +292,13 @@ private data class ALMediaItem(
     val genres: List<String>? = null,
     val tags: List<ALTagItem>? = null,
     val description: String? = null,
+)
+
+@Serializable
+private data class ALTitle(
+    val romaji: String? = null,
+    val english: String? = null,
+    val native: String? = null,
 )
 
 @Serializable

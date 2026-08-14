@@ -245,6 +245,12 @@ class HistoryScreenModel(
         }
     }
 
+    fun removeFavorite(manga: Manga) {
+        screenModelScope.launchIO {
+            updateManga.awaitUpdateFavorite(manga.id, false)
+        }
+    }
+
     fun addFavorite(manga: Manga) {
         screenModelScope.launchIO {
             // Move to default category if applicable

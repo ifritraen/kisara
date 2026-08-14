@@ -231,41 +231,38 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
         // KMK <--
 
-        // TLS 1.3 support for Android < 10
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            scope.launchIO {
-                val tid = android.os.Process.myTid()
-                val oldPriority = android.os.Process.getThreadPriority(tid)
+        // TLS 1.3 support for Android < 10 & background systems
+        scope.launchIO {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 try {
-                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
                     Security.insertProviderAt(Conscrypt.newProvider(), 1)
-                } finally {
-                    android.os.Process.setThreadPriority(tid, oldPriority)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.WARN, e) { "Failed to insert Conscrypt provider" }
                 }
             }
-        }
 
-        // Updates widget update
-        scope.launchIO {
-            WidgetManager(Injekt.get(), Injekt.get()).apply { this@App.init(scope) }
-        }
+            // Updates widget update
+            try {
+                WidgetManager(Injekt.get(), Injekt.get()).apply { this@App.init(scope) }
+            } catch (e: Throwable) {
+                logcat(LogPriority.WARN, e) { "Failed to init WidgetManager" }
+            }
 
-        if (!WorkManager.isInitialized()) {
-            WorkManager.initialize(this, Configuration.Builder().build())
-        }
-        val syncPreferences: SyncPreferences = Injekt.get()
-        val syncTriggerOpt = syncPreferences.getSyncTriggerOptions()
-        if (syncPreferences.isSyncEnabled() && syncTriggerOpt.syncOnAppStart) {
-            SyncDataJob.startNow(this@App)
+            if (!WorkManager.isInitialized()) {
+                WorkManager.initialize(this@App, Configuration.Builder().build())
+            }
+            val syncPreferences: SyncPreferences = Injekt.get()
+            val syncTriggerOpt = syncPreferences.getSyncTriggerOptions()
+            if (syncPreferences.isSyncEnabled() && syncTriggerOpt.syncOnAppStart) {
+                SyncDataJob.startNow(this@App)
+            }
+
+            eu.kanade.tachiyomi.extension.util.ExtensionLoader.cleanTemporaryExtensions(this@App)
+            eu.kanade.tachiyomi.extension.JarExtensionManager.cleanTemporaryJars(this@App)
+            eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this@App)
         }
 
         initializeMigrator()
-        scope.launchIO {
-            eu.kanade.tachiyomi.extension.util.ExtensionLoader.cleanTemporaryExtensions(this@App)
-            eu.kanade.tachiyomi.extension.JarExtensionManager.cleanTemporaryJars(this@App)
-            delay(10000)
-            eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this@App)
-        }
     }
 
     private fun initializeMigrator() {

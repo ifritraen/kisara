@@ -76,7 +76,7 @@ fun UncensoredBadge() {
 fun ScoreBadge(score: Double) {
     if (score > 0.0) {
         Badge(
-            text = "★ " + String.format(java.util.Locale.US, "%.1f", score),
+            text = String.format(java.util.Locale.US, "%.1f", score),
             color = MaterialTheme.colorScheme.primaryContainer,
             textColor = MaterialTheme.colorScheme.onPrimaryContainer,
         )
@@ -86,8 +86,15 @@ fun ScoreBadge(score: Double) {
 @Composable
 fun ExternalStatusBadge(status: String) {
     if (status.isNotBlank()) {
+        val shortStatus = when (status.lowercase()) {
+            "completed", "complete" -> "CMP"
+            "ongoing", "publishing" -> "ONG"
+            "hiatus" -> "HIA"
+            "cancelled", "canceled" -> "CAN"
+            else -> if (status.length > 4) status.take(3).uppercase() else status
+        }
         Badge(
-            text = status,
+            text = shortStatus,
             color = MaterialTheme.colorScheme.secondaryContainer,
             textColor = MaterialTheme.colorScheme.onSecondaryContainer,
         )
@@ -128,8 +135,8 @@ internal fun LanguageBadge(
                 painter = painterResource(id = iconResId),
                 color = Color.Transparent,
                 modifier = Modifier
-                    .width(25.dp)
-                    .height(18.dp),
+                    .width(18.dp)
+                    .height(13.dp),
             )
         } else {
             // KMK <--
@@ -173,8 +180,7 @@ fun SourceIconBadge(
             Badge(
                 imageBitmap = displayIcon,
                 modifier = Modifier
-                    .scale(1.3f)
-                    .height(18.dp),
+                    .size(14.dp),
             )
         }
         installedExt != null -> {
@@ -190,8 +196,7 @@ fun SourceIconBadge(
                 Badge(
                     painter = painter,
                     modifier = Modifier
-                        .scale(1.3f)
-                        .height(18.dp),
+                        .size(14.dp),
                 )
             } else {
                 val iconState by installedExt.getIcon()
@@ -200,8 +205,7 @@ fun SourceIconBadge(
                         Badge(
                             imageBitmap = iconResult.value,
                             modifier = Modifier
-                                .scale(1.3f)
-                                .height(18.dp),
+                                .size(14.dp),
                         )
                     }
                     else -> {

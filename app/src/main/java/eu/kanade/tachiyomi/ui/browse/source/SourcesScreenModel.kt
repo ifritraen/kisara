@@ -20,6 +20,7 @@ import eu.kanade.presentation.browse.SourceUiModel
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.Dispatchers
@@ -310,6 +311,7 @@ class SourcesScreenModel(
         data class SourceLongClick(val source: Source) : Dialog()
         data class SourceCategories(val source: Source) : Dialog()
         data class SourceTags(val source: Source) : Dialog()
+        data class BulkSourceTags(val sources: List<Source>) : Dialog()
     }
 
     @Immutable
@@ -329,9 +331,23 @@ class SourcesScreenModel(
         val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"),
         val selectedTag: String? = null,
         val sourceTagMappings: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
+        val selectedSources: kotlinx.collections.immutable.ImmutableSet<Long> = kotlinx.collections.immutable.persistentSetOf(),
         // KMK <--
     ) {
         val isEmpty = items.isEmpty()
+        val isBulkMode = selectedSources.isNotEmpty()
+    }
+
+    fun toggleSourceSelection(sourceId: Long) {
+        mutableState.update {
+            val current = it.selectedSources
+            val updated = if (current.contains(sourceId)) current - sourceId else current + sourceId
+            it.copy(selectedSources = updated.toImmutableSet())
+        }
+    }
+
+    fun clearSourceSelection() {
+        mutableState.update { it.copy(selectedSources = persistentSetOf()) }
     }
 
     fun setSelectedTag(tag: String?) {
@@ -351,6 +367,24 @@ class SourcesScreenModel(
             currentMappings.add("$prefix$tag")
         }
         sourcePreferences.sourceTagMappings().set(currentMappings)
+    }
+
+    fun saveBulkSourceTags(sourceIds: List<Long>, tagsToAdd: Set<String>, newTag: String?) {
+        val currentAllTags = sourcePreferences.customSourceTags().get().toMutableSet()
+        if (newTag != null) {
+            currentAllTags.add(newTag)
+            sourcePreferences.customSourceTags().set(currentAllTags)
+        }
+
+        val currentMappings = sourcePreferences.sourceTagMappings().get().toMutableSet()
+        sourceIds.forEach { sourceId ->
+            val prefix = "$sourceId:"
+            tagsToAdd.forEach { tag ->
+                currentMappings.add("$prefix$tag")
+            }
+        }
+        sourcePreferences.sourceTagMappings().set(currentMappings)
+        clearSourceSelection()
     }
 
     fun uninstallExtension(source: Source) {

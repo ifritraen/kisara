@@ -350,6 +350,7 @@ fun SourceOptionsDialog(
     // KMK -->
     onClickSettings: (() -> Unit)? = null,
     onClickManageTags: (() -> Unit)? = null,
+    onClickSelectMultiple: (() -> Unit)? = null,
     onClickUninstall: (() -> Unit)? = null,
     // KMK <--
     onClickMoveUp: (() -> Unit)? = null,
@@ -366,6 +367,15 @@ fun SourceOptionsDialog(
                         text = "Tags",
                         modifier = Modifier
                             .clickable(onClick = onClickManageTags)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+                }
+                if (onClickSelectMultiple != null) {
+                    Text(
+                        text = "Select Multiple",
+                        modifier = Modifier
+                            .clickable(onClick = onClickSelectMultiple)
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
                     )

@@ -551,16 +551,24 @@ class LibraryScreenModel(
             if (extTag.isBlank()) return@extTag true
             val sourceMappings = sourcePreferences.sourceTagMappings().get()
             val extPrefix = "ext_"
-            val sourcePrefix = "source_${item.libraryManga.manga.source}:"
+            val sourceId = item.libraryManga.manga.source
+            val sourcePrefix = "source_$sourceId:"
+            val directPrefix = "$sourceId:"
 
-            val hasDirectTag = sourceMappings.contains("$sourcePrefix$extTag")
+            val hasDirectTag = sourceMappings.any {
+                (it.startsWith(directPrefix, ignoreCase = true) && it.removePrefix(directPrefix).equals(extTag, ignoreCase = true)) ||
+                    (it.startsWith(sourcePrefix, ignoreCase = true) && it.removePrefix(sourcePrefix).equals(extTag, ignoreCase = true))
+            }
             if (hasDirectTag) return@extTag true
 
             val parentExt = extensionManager.installedExtensionsFlow.value.find { ext ->
-                ext.sources.any { it.id == item.libraryManga.manga.source }
+                ext.sources.any { it.id == sourceId }
             }
             if (parentExt != null) {
-                val hasExtTag = sourceMappings.contains("$extPrefix${parentExt.pkgName}:$extTag")
+                val extPkgPrefix = "$extPrefix${parentExt.pkgName}:"
+                val hasExtTag = sourceMappings.any {
+                    it.startsWith(extPkgPrefix, ignoreCase = true) && it.removePrefix(extPkgPrefix).equals(extTag, ignoreCase = true)
+                }
                 if (hasExtTag) return@extTag true
             }
             false
@@ -1389,13 +1397,19 @@ class LibraryScreenModel(
                             if (!targetTag.isNullOrBlank()) {
                                 val sourceMappings = sourcePreferences.sourceTagMappings().get()
                                 val extPrefix = "ext_"
-                                val sourcePrefix = "source_${manga.source}:"
-                                val hasDirectTag = sourceMappings.any { it.startsWith(sourcePrefix) && it.removePrefix(sourcePrefix).equals(targetTag, true) }
+                                val sourceId = manga.source
+                                val sourcePrefix = "source_$sourceId:"
+                                val directPrefix = "$sourceId:"
+                                val hasDirectTag = sourceMappings.any {
+                                    (it.startsWith(directPrefix, ignoreCase = true) && it.removePrefix(directPrefix).equals(targetTag, true)) ||
+                                        (it.startsWith(sourcePrefix, ignoreCase = true) && it.removePrefix(sourcePrefix).equals(targetTag, true))
+                                }
                                 val parentExt = extensionManager.installedExtensionsFlow.value.find { ext ->
-                                    ext.sources.any { it.id == manga.source }
+                                    ext.sources.any { it.id == sourceId }
                                 }
                                 val hasExtTag = parentExt != null && sourceMappings.any {
-                                    it.startsWith("$extPrefix${parentExt.pkgName}:") && it.removePrefix("$extPrefix${parentExt.pkgName}:").equals(targetTag, true)
+                                    it.startsWith("$extPrefix${parentExt.pkgName}:", ignoreCase = true) &&
+                                        it.removePrefix("$extPrefix${parentExt.pkgName}:").equals(targetTag, true)
                                 }
                                 hasDirectTag || hasExtTag
                             } else {
@@ -1442,13 +1456,19 @@ class LibraryScreenModel(
                             if (!targetTag.isNullOrBlank()) {
                                 val sourceMappings = sourcePreferences.sourceTagMappings().get()
                                 val extPrefix = "ext_"
-                                val sourcePrefix = "source_${manga.source}:"
-                                val hasDirectTag = sourceMappings.any { it.startsWith(sourcePrefix) && it.removePrefix(sourcePrefix).equals(targetTag, true) }
+                                val sourceId = manga.source
+                                val sourcePrefix = "source_$sourceId:"
+                                val directPrefix = "$sourceId:"
+                                val hasDirectTag = sourceMappings.any {
+                                    (it.startsWith(directPrefix, ignoreCase = true) && it.removePrefix(directPrefix).equals(targetTag, true)) ||
+                                        (it.startsWith(sourcePrefix, ignoreCase = true) && it.removePrefix(sourcePrefix).equals(targetTag, true))
+                                }
                                 val parentExt = extensionManager.installedExtensionsFlow.value.find { ext ->
-                                    ext.sources.any { it.id == manga.source }
+                                    ext.sources.any { it.id == sourceId }
                                 }
                                 val hasExtTag = parentExt != null && sourceMappings.any {
-                                    it.startsWith("$extPrefix${parentExt.pkgName}:") && it.removePrefix("$extPrefix${parentExt.pkgName}:").equals(targetTag, true)
+                                    it.startsWith("$extPrefix${parentExt.pkgName}:", ignoreCase = true) &&
+                                        it.removePrefix("$extPrefix${parentExt.pkgName}:").equals(targetTag, true)
                                 }
                                 !(hasDirectTag || hasExtTag)
                             } else {

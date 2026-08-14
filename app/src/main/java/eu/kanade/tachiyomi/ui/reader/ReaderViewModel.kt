@@ -506,11 +506,12 @@ class ReaderViewModel @JvmOverloads constructor(
                     viewModelScope.launchIO {
                         val autoTrackResults = autoTrack.execute(manga, isReading = true)
                         if (autoTrackResults.isNotEmpty()) {
+                            val trackerNames = autoTrackResults.map { it.trackerName }.distinct().joinToString(", ")
                             val firstResult = autoTrackResults.first()
                             mutableState.update {
                                 it.copy(
                                     autoTrackNotification = AutoTrackNotification(
-                                        trackerName = firstResult.trackerName,
+                                        trackerName = trackerNames,
                                         trackTitle = firstResult.trackTitle,
                                         mangaId = firstResult.mangaId,
                                     ),

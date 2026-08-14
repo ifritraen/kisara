@@ -50,6 +50,24 @@ fun BadgeGroup(
 }
 
 @Composable
+fun VerticalBadgeGroup(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(6.dp),
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    androidx.compose.foundation.layout.Column(
+        modifier = modifier
+            .clip(shape)
+            .background(Color.Black.copy(alpha = 0.22f))
+            .padding(2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+    ) {
+        content()
+    }
+}
+
+@Composable
 fun Badge(
     text: String,
     modifier: Modifier = Modifier,

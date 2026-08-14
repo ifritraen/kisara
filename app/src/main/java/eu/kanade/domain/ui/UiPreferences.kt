@@ -5,8 +5,11 @@ import com.materialkolor.PaletteStyle
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
+import dev.icerock.moko.resources.StringResource
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -115,6 +118,8 @@ class UiPreferences(
     fun alwaysShowSubTabsHome() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_home", true)
     fun alwaysShowSubTabsLibrary() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_library", true)
     fun alwaysShowSubTabsBrowse() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_browse", true)
+    fun alwaysShowSubTabsTrack() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_track", true)
+    fun showTrackSubBarAtTop() = preferenceStore.getBoolean("kisara_show_track_sub_bar_at_top", false)
     fun subTabsBottomMargin() = preferenceStore.getInt("kisara_sub_tabs_bottom_margin", 0)
     fun bottomBarBottomMargin() = preferenceStore.getInt("kisara_bottom_bar_bottom_margin", 12)
     fun showTopTabBar() = preferenceStore.getBoolean("kisara_show_top_tab_bar", false)
@@ -201,16 +206,17 @@ class UiPreferences(
 
     fun startScreen() = preferenceStore.getEnum("pref_start_screen_key", StartScreen.LIBRARY)
 
-    enum class StartScreen {
-        LIBRARY,
-        HOME_LANDING,
-        HOME_FEED,
-        HOME_SUGGESTIONS,
-        HOME_UPDATES,
-        HOME_HISTORY,
-        HOME_FAVORITES,
-        BROWSE,
-        MORE,
+    enum class StartScreen(val titleRes: StringResource) {
+        HOME_LANDING(KMR.strings.label_home),
+        HOME_FEED(KMR.strings.saved_searches_feeds),
+        HOME_SUGGESTIONS(KMR.strings.pref_home_section_names_spotlight),
+        HOME_UPDATES(MR.strings.label_recent_updates),
+        HOME_HISTORY(MR.strings.label_recent_manga),
+        HOME_FAVORITES(KMR.strings.pref_home_section_names_forgotten_favorites),
+        LIBRARY(MR.strings.label_library),
+        TRACK(KMR.strings.label_track_tab),
+        BROWSE(MR.strings.browse),
+        MORE(MR.strings.label_more),
     }
 
     // SY <--

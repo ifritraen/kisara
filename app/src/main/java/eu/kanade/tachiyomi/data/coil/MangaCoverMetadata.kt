@@ -132,7 +132,7 @@ object MangaCoverMetadata {
         }
 
         if (bitmap != null) {
-            Palette.from(bitmap).resizeBitmapArea(64 * 64).generate {
+            Palette.from(bitmap).resizeBitmapArea(32 * 32).maximumColorCount(8).generate {
                 if (it == null) return@generate
                 if (mangaCover.isMangaFavorite) {
                     it.dominantSwatch?.let { swatch ->
@@ -160,5 +160,5 @@ object MangaCoverMetadata {
         preferences.coverColors().set(mapColorCopy.map { "${it.key}|${it.value.first}|${it.value.second}" }.toSet())
     }
 
-    private const val SUB_SAMPLE = 4
+    private const val SUB_SAMPLE = 8
 }

@@ -898,23 +898,8 @@ private fun MangaScreenSmallImpl(
                                 }
                             }
                         }
-                        if (state.isFetchingTrackerDetails) {
-                            item(
-                                key = MangaScreenItem.TRACKER_DETAILS,
-                                contentType = MangaScreenItem.TRACKER_DETAILS,
-                            ) {
-                                TrackerDetailsSkeleton()
-                            }
-                        } else if (state.trackerDetails != null) {
-                            item(
-                                key = MangaScreenItem.TRACKER_DETAILS,
-                                contentType = MangaScreenItem.TRACKER_DETAILS,
-                            ) {
-                                TrackerDetailsCard(trackDetails = state.trackerDetails)
-                            }
-                        }
-
-                        if (state.isFetchingExternalMetadata || state.externalMetadata != null) {
+                        val showExternalCard = state.isFetchingExternalMetadata || state.externalMetadata != null
+                        if (showExternalCard) {
                             item(
                                 key = MangaScreenItem.EXTERNAL_METADATA,
                                 contentType = MangaScreenItem.EXTERNAL_METADATA,
@@ -928,6 +913,20 @@ private fun MangaScreenSmallImpl(
                                     selectedTags = selectedTags,
                                     isMultiSelectMode = isTagMultiSelectMode,
                                 )
+                            }
+                        } else if (state.isFetchingTrackerDetails) {
+                            item(
+                                key = MangaScreenItem.TRACKER_DETAILS,
+                                contentType = MangaScreenItem.TRACKER_DETAILS,
+                            ) {
+                                TrackerDetailsSkeleton()
+                            }
+                        } else if (state.trackerDetails != null) {
+                            item(
+                                key = MangaScreenItem.TRACKER_DETAILS,
+                                contentType = MangaScreenItem.TRACKER_DETAILS,
+                            ) {
+                                TrackerDetailsCard(trackDetails = state.trackerDetails)
                             }
                         }
 

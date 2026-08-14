@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,7 +50,7 @@ import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ExternalMetadataCard(
     metadata: MangaExternalMetadata?,
@@ -61,11 +62,12 @@ fun ExternalMetadataCard(
     onTagLongClick: ((String) -> Unit)? = null,
     selectedTags: Set<String> = emptySet(),
     isMultiSelectMode: Boolean = false,
+    onQuickBindTracker: (() -> Unit)? = null,
     // KMK <--
 ) {
     if (metadata == null && !isLoading) return
 
-    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var isExpanded by rememberSaveable { mutableStateOf(true) }
     val arrowRotation by animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
         label = "arrowRotation",
@@ -93,10 +95,10 @@ fun ExternalMetadataCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                FlowRow(
+                    verticalArrangement = Arrangement.Center,
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f),
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
@@ -154,11 +156,30 @@ fun ExternalMetadataCard(
                             }
                         }
 
+                        // Chapters & Source info
+                        val totalChapters = metadata.totalChapters
+                        if (totalChapters != null && totalChapters > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Text(
+                                    text = "$totalChapters Ch",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+
                         // Source Label
                         Text(
                             text = "via ${metadata.sourceName}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(start = 2.dp),
                         )
                     }
                 }
@@ -234,6 +255,33 @@ fun ExternalMetadataCard(
                             )
                         }
 
+                        // Synopsis
+                        val synopsis = metadata.synopsis
+                        if (!synopsis.isNullOrBlank()) {
+                            var isSynopsisExpanded by rememberSaveable { mutableStateOf(false) }
+                            Spacer(modifier = Modifier.height(MaterialTheme.padding.small))
+                            Text(
+                                text = "Synopsis (${metadata.sourceName})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = synopsis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = if (isSynopsisExpanded) Int.MAX_VALUE else 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+                                    .clickable { isSynopsisExpanded = !isSynopsisExpanded }
+                                    .padding(8.dp),
+                            )
+                        }
+
                         // Tags & Tropes
                         val allTags = (metadata.genres + metadata.tags).distinct().filter { it.isNotBlank() }
                         if (allTags.isNotEmpty()) {
@@ -251,41 +299,46 @@ fun ExternalMetadataCard(
                             ) {
                                 allTags.take(15).forEach { tag ->
                                     val isSelected = selectedTags.contains(tag)
-                                    SuggestionChip(
-                                        onClick = { onTagClick?.invoke(tag) },
-                                        label = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                if (isMultiSelectMode && isSelected) {
-                                                    Icon(
-                                                        imageVector = androidx.compose.material.icons.Icons.Default.Star,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(12.dp),
-                                                        tint = MaterialTheme.colorScheme.primary,
-                                                    )
-                                                    Spacer(modifier = Modifier.width(3.dp))
-                                                }
-                                                Text(
-                                                    text = tag,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                )
-                                            }
+                                    androidx.compose.material3.Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
                                         },
-                                        colors = SuggestionChipDefaults.suggestionChipColors(
-                                            containerColor = if (isSelected) {
-                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                            } else {
-                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
-                                            },
-                                        ),
                                         border = if (isSelected) {
                                             androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                                         } else {
                                             null
                                         },
-                                        modifier = Modifier.height(28.dp),
-                                    )
+                                        modifier = Modifier
+                                            .height(28.dp)
+                                            .combinedClickable(
+                                                onClick = { onTagClick?.invoke(tag) },
+                                                onLongClick = { onTagLongClick?.invoke(tag) },
+                                            ),
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        ) {
+                                            if (isMultiSelectMode && isSelected) {
+                                                Icon(
+                                                    imageVector = androidx.compose.material.icons.Icons.Default.Star,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(12.dp),
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                )
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                            }
+                                            Text(
+                                                text = tag,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.library.LibraryItem
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.manga.model.MangaCover
@@ -56,20 +58,47 @@ internal fun LibraryCompactGrid(
                 coverBadgeStart = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnreadBadge(count = libraryItem.unreadCount)
-                    libraryItem.score?.let { ScoreBadge(score = it) }
-                    libraryItem.externalStatus?.let { ExternalStatusBadge(status = it) }
                 },
                 coverBadgeEnd = {
-                    LanguageBadge(
-                        isLocal = libraryItem.isLocal,
-                        sourceLanguage = parsed.languageCode ?: libraryItem.sourceLanguage,
-                        // KMK -->
-                        useLangIcon = libraryItem.useLangIcon,
-                        // KMK <--
-                    )
-                    // KMK -->
-                    SourceIconBadge(source = libraryItem.source)
-                    // KMK <--
+                    val lang = parsed.languageCode ?: libraryItem.sourceLanguage
+                    val hasLang = !libraryItem.isLocal && lang.isNotEmpty()
+                    val hasSource = libraryItem.source != null
+                    val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, manga.title)
+                    val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, manga.title)
+
+                    // Column 1: Language (top) + Color (bottom)
+                    if (hasLang || hasColor) {
+                        androidx.compose.foundation.layout.Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+                        ) {
+                            if (hasLang) {
+                                LanguageBadge(
+                                    isLocal = libraryItem.isLocal,
+                                    sourceLanguage = lang,
+                                    useLangIcon = libraryItem.useLangIcon,
+                                )
+                            }
+                            if (hasColor) {
+                                ColorizedBadge()
+                            }
+                        }
+                    }
+
+                    // Column 2: Extension/Source (top) + UN (bottom)
+                    if (hasSource || hasUncensored) {
+                        androidx.compose.foundation.layout.Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+                        ) {
+                            if (hasSource) {
+                                SourceIconBadge(source = libraryItem.source)
+                            }
+                            if (hasUncensored) {
+                                UncensoredBadge()
+                            }
+                        }
+                    }
                 },
                 onLongClick = { onLongClick(libraryItem.libraryManga) },
                 onClick = { onClick(libraryItem.libraryManga) },

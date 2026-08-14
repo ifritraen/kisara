@@ -251,6 +251,18 @@ fun extensionsTab(
                         },
                     )
                 }
+                is ExtensionsScreenModel.Dialog.BulkExtensionTags -> {
+                    val extensions = dialog.extensions
+                    eu.kanade.presentation.browse.SourceTagsDialog(
+                        itemName = "${extensions.size} Extensions",
+                        allTags = state.allTags,
+                        currentTags = emptySet(),
+                        onDismissRequest = { extensionsScreenModel.setDialog(null) },
+                        onSaveTags = { selectedTags, newTag ->
+                            extensionsScreenModel.saveBulkExtensionTags(extensions.map { it.pkgName }, selectedTags, newTag)
+                        },
+                    )
+                }
                 null -> Unit
             }
 

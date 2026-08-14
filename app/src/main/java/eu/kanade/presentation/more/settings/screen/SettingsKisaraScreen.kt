@@ -802,6 +802,11 @@ object SettingsKisaraScreen : SearchableSettings {
                         title = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_browse),
                         subtitle = stringResource(KMR.strings.pref_kisara_always_show_sub_tabs_browse_summary),
                     ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showTrackSubBarAtTop(),
+                        title = "Show MangaUpdates sub-bar at top",
+                        subtitle = "Positions the sub-tab bar at the top of the screen instead of the bottom",
+                    ),
                     Preference.PreferenceItem.SliderPreference(
                         value = subTabsBottomMargin,
                         valueRange = -40..80,

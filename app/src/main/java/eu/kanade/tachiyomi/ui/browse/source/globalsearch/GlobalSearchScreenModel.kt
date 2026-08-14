@@ -36,7 +36,8 @@ class GlobalSearchScreenModel(
                     val installedExts = extensionManager.installedExtensionsFlow.value
 
                     base.filter { source ->
-                        val hasDirectTag = sourceMappings.contains("$sourcePrefix${source.id}:$tag")
+                        val hasDirectTag = sourceMappings.contains("${source.id}:$tag") ||
+                            sourceMappings.contains("$sourcePrefix${source.id}:$tag")
                         if (hasDirectTag) return@filter true
                         val parentExt = installedExts.find { ext -> ext.sources.any { it.id == source.id } }
                         if (parentExt != null) {

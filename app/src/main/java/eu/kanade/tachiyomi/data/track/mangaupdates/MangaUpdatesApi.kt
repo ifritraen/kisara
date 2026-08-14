@@ -3,11 +3,22 @@ package eu.kanade.tachiyomi.data.track.mangaupdates
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.READING_LIST
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.WISH_LIST
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorRecord
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorsSearchResponse
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUContext
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGenreItem
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGroupRecord
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGroupsSearchResponse
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUListItem
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MULoginResponse
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUPublisherRecord
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUPublishersSearchResponse
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURating
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURecord
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReleaseRecord
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReleasesDaysResponse
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReviewRecord
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReviewsSearchResponse
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUSearchResult
 import eu.kanade.tachiyomi.network.DELETE
 import eu.kanade.tachiyomi.network.GET
@@ -150,15 +161,13 @@ class MangaUpdatesApi(
     }
 
     suspend fun search(query: String): List<MURecord> {
+        val q = query.trim().ifBlank { "a" }
         val body = buildJsonObject {
-            put("search", query)
-            put(
-                "filter_types",
-                buildJsonArray {
-                    add("drama cd")
-                    add("novel")
-                },
-            )
+            put("stype", "title")
+            put("search", q)
+            put("orderby", "rating")
+            put("asc", "desc")
+            put("perpage", 25)
         }
 
         return with(json) {
@@ -170,6 +179,104 @@ class MangaUpdatesApi(
             )
                 .awaitSuccess()
                 .parseAs<MUSearchResult>()
+                .results
+                .map { it.record }
+        }
+    }
+
+    suspend fun getRecentReleases(): List<MUReleaseRecord> {
+        return with(json) {
+            client.newCall(
+                GET(url = "$BASE_URL/v1/releases/days"),
+            )
+                .awaitSuccess()
+                .parseAs<MUReleasesDaysResponse>()
+                .results
+                .map { it.record }
+        }
+    }
+
+    suspend fun getGenres(): List<MUGenreItem> {
+        return with(json) {
+            client.newCall(
+                GET(url = "$BASE_URL/v1/genres"),
+            )
+                .awaitSuccess()
+                .parseAs<List<MUGenreItem>>()
+        }
+    }
+
+    suspend fun searchGroups(query: String): List<MUGroupRecord> {
+        val body = buildJsonObject {
+            put("search", query.trim().ifBlank { "a" })
+            put("perpage", 25)
+        }
+        return with(json) {
+            client.newCall(
+                POST(
+                    url = "$BASE_URL/v1/groups/search",
+                    body = body.toString().toRequestBody(CONTENT_TYPE),
+                ),
+            )
+                .awaitSuccess()
+                .parseAs<MUGroupsSearchResponse>()
+                .results
+                .map { it.record }
+        }
+    }
+
+    suspend fun searchAuthors(query: String): List<MUAuthorRecord> {
+        val body = buildJsonObject {
+            put("search", query.trim().ifBlank { "a" })
+            put("perpage", 25)
+        }
+        return with(json) {
+            client.newCall(
+                POST(
+                    url = "$BASE_URL/v1/authors/search",
+                    body = body.toString().toRequestBody(CONTENT_TYPE),
+                ),
+            )
+                .awaitSuccess()
+                .parseAs<MUAuthorsSearchResponse>()
+                .results
+                .map { it.record }
+        }
+    }
+
+    suspend fun searchPublishers(query: String): List<MUPublisherRecord> {
+        val body = buildJsonObject {
+            put("search", query.trim().ifBlank { "a" })
+            put("perpage", 25)
+        }
+        return with(json) {
+            client.newCall(
+                POST(
+                    url = "$BASE_URL/v1/publishers/search",
+                    body = body.toString().toRequestBody(CONTENT_TYPE),
+                ),
+            )
+                .awaitSuccess()
+                .parseAs<MUPublishersSearchResponse>()
+                .results
+                .map { it.record }
+        }
+    }
+
+    suspend fun searchReviews(query: String): List<MUReviewRecord> {
+        val body = buildJsonObject {
+            put("search", query.trim().ifBlank { "a" })
+            put("perpage", 25)
+        }
+        return with(json) {
+            client.newCall(
+                POST(
+                    url = "$BASE_URL/v1/reviews/search",
+                    body = body.toString().toRequestBody(CONTENT_TYPE),
+                ),
+            )
+                .awaitSuccess()
+                .parseAs<MUReviewsSearchResponse>()
                 .results
                 .map { it.record }
         }
