@@ -1,21 +1,24 @@
 package tachiyomi.data.source
 
+import androidx.paging.PagingSource
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.online.HttpSource
+import exh.metadata.metadata.RaisedSearchMetadata
 import exh.source.MERGED_SOURCE_ID
-import exh.source.isEhBasedSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import tachiyomi.data.DatabaseHandler
+import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.model.SourceWithCount
 import tachiyomi.domain.source.model.StubSource
-import tachiyomi.domain.source.repository.SourcePagingSource
 import tachiyomi.domain.source.repository.SourceRepository
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.source.model.Source as DomainSource
+
+private fun CatalogueSource.isEhBasedSource() = id in exh.source.eHentaiSourceIds
 
 class SourceRepositoryImpl(
     private val sourceManager: SourceManager,
@@ -77,7 +80,7 @@ class SourceRepositoryImpl(
         sourceId: Long,
         query: String,
         filterList: FilterList,
-    ): SourcePagingSource {
+    ): PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>> {
         val source = sourceManager.get(sourceId) as CatalogueSource
         // SY -->
         if (source.isEhBasedSource()) {
@@ -87,7 +90,7 @@ class SourceRepositoryImpl(
         return SourceSearchPagingSource(source, query, filterList)
     }
 
-    override fun getPopular(sourceId: Long): SourcePagingSource {
+    override fun getPopular(sourceId: Long): PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>> {
         val source = sourceManager.get(sourceId) as CatalogueSource
         // SY -->
         if (source.isEhBasedSource()) {
@@ -97,7 +100,7 @@ class SourceRepositoryImpl(
         return SourcePopularPagingSource(source)
     }
 
-    override fun getLatest(sourceId: Long): SourcePagingSource {
+    override fun getLatest(sourceId: Long): PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>> {
         val source = sourceManager.get(sourceId) as CatalogueSource
         // SY -->
         if (source.isEhBasedSource()) {

@@ -233,37 +233,60 @@ private fun SetAsDefaultDialog(
     onConfirmed: (optionalChecked: Boolean) -> Unit,
 ) {
     var optionalChecked by rememberSaveable { mutableStateOf(false) }
+    val colorScheme = MaterialTheme.colorScheme
 
-    AlertDialog(
+    eu.kanade.presentation.components.KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        title = { Text(text = stringResource(MR.strings.chapter_settings)) },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+        title = stringResource(MR.strings.chapter_settings),
+        footer = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(text = stringResource(MR.strings.confirm_set_chapter_settings))
+                androidx.compose.material3.OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    onClick = onDismissRequest,
+                ) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+                androidx.compose.material3.Button(
+                    modifier = Modifier.weight(1f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    onClick = {
+                        onConfirmed(optionalChecked)
+                        onDismissRequest()
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_ok))
+                }
+            }
+        },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(MR.strings.confirm_set_chapter_settings),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colorScheme.onSurfaceVariant,
+            )
 
-                LabeledCheckbox(
-                    label = stringResource(MR.strings.also_set_chapter_settings_for_library),
-                    checked = optionalChecked,
-                    onCheckedChange = { optionalChecked = it },
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirmed(optionalChecked)
-                    onDismissRequest()
-                },
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(text = stringResource(MR.strings.action_ok))
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    LabeledCheckbox(
+                        label = stringResource(MR.strings.also_set_chapter_settings_for_library),
+                        checked = optionalChecked,
+                        onCheckedChange = { optionalChecked = it },
+                    )
+                }
             }
-        },
-    )
+        }
+    }
 }

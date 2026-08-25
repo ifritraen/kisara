@@ -116,12 +116,73 @@ class ExtensionManager(
         if (pkgName != null) {
             val cachedIcon = iconMap[pkgName]
             if (cachedIcon != null) return cachedIcon
-            val icon = try {
+
+            val cleanPkgName = when {
+                pkgName.contains("-") -> {
+                    val suffix = pkgName.substringAfterLast("-")
+                    if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                        val base = pkgName.substringBeforeLast("-")
+                        if (base.endsWith("_")) base.dropLast(1) else base
+                    } else {
+                        pkgName
+                    }
+                }
+                pkgName.contains("_") -> {
+                    val suffix = pkgName.substringAfterLast("_")
+                    if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                        pkgName.substringBeforeLast("_")
+                    } else {
+                        pkgName
+                    }
+                }
+                else -> pkgName
+            }
+
+            val sourceIconFile = java.io.File(context.filesDir, "source_icons/$sourceId.png")
+            val extIconFile = java.io.File(context.cacheDir, "extension_icons/$pkgName.png")
+            val cleanExtIconFile = java.io.File(context.cacheDir, "extension_icons/$cleanPkgName.png")
+            val diskIcon = when {
+                sourceIconFile.isFile -> android.graphics.drawable.BitmapDrawable(context.resources, sourceIconFile.absolutePath)
+                extIconFile.isFile -> android.graphics.drawable.BitmapDrawable(context.resources, extIconFile.absolutePath)
+                cleanExtIconFile.isFile -> android.graphics.drawable.BitmapDrawable(context.resources, cleanExtIconFile.absolutePath)
+                else -> null
+            }
+
+            val icon = diskIcon ?: run {
+                val candidateFiles = listOfNotNull(
+                    java.io.File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk"),
+                    java.io.File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$cleanPkgName.apk"),
+                    java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "sideloaded_extensions/$pkgName.apk"),
+                    java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "sideloaded_extensions/$cleanPkgName.apk"),
+                    java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext"),
+                    java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$cleanPkgName.ext"),
+                    java.io.File(context.filesDir, "sideloaded_apk_cache/$pkgName.apk"),
+                    ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)?.applicationInfo?.sourceDir?.let { java.io.File(it) },
+                )
+                val existingApk = candidateFiles.firstOrNull { it.isFile && it.exists() }
+                    ?: eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getLocalApkFiles(context).firstOrNull { file ->
+                        file.nameWithoutExtension == pkgName || file.nameWithoutExtension == cleanPkgName ||
+                            file.nameWithoutExtension.startsWith("${pkgName}_") || file.nameWithoutExtension.startsWith("${cleanPkgName}_")
+                    }
+
+                if (existingApk != null) {
+                    val bmp = eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.extractIconFromApk(context, existingApk)
+                    if (bmp != null) {
+                        eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.extractAndCacheApkIcon(
+                            context = context,
+                            apkFile = existingApk,
+                            packageName = pkgName,
+                            sourceIds = listOf(sourceId),
+                        )
+                        android.graphics.drawable.BitmapDrawable(context.resources, bmp)
+                    } else null
+                } else null
+            } ?: try {
                 ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)?.applicationInfo
                     ?.loadIcon(context.packageManager)
             } catch (e: Exception) {
                 null
-            }
+            } ?: installedExtensionMapFlow.value[pkgName]?.icon
             if (icon != null) {
                 iconMap[pkgName] = icon
                 return icon

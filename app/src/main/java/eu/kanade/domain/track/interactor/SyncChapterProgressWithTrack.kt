@@ -7,7 +7,7 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
-import tachiyomi.domain.chapter.model.toChapterUpdate
+import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.domain.track.model.Track
 import kotlin.math.max
@@ -68,8 +68,23 @@ class SyncChapterProgressWithTrack(
                 chapter.chapterNumber >= lastCheckChapter && chapter.chapterNumber <= remoteTrack.lastChapterRead
             }
             .filter { chapter -> !chapter.read }
-            // KMK <--
-            .map { it.copy(read = true).toChapterUpdate() }
+            .map {
+                ChapterUpdate(
+                    id = it.id,
+                    mangaId = it.mangaId,
+                    read = true,
+                    bookmark = it.bookmark,
+                    lastPageRead = it.lastPageRead,
+                    dateFetch = it.dateFetch,
+                    sourceOrder = it.sourceOrder,
+                    url = it.url,
+                    name = it.name,
+                    dateUpload = it.dateUpload,
+                    chapterNumber = it.chapterNumber,
+                    scanlator = it.scanlator,
+                    version = it.version,
+                )
+            }
 
         // only take into account continuous reading
         val localLastRead = sortedChapters.takeWhile { it.read }.lastOrNull()?.chapterNumber ?: 0F

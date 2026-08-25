@@ -224,6 +224,7 @@ class MainActivity : BaseActivity() {
     }
 
     private var runExhConfigureDialog by mutableStateOf(false)
+    private var didMigration by mutableStateOf(false)
     // SY <--
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -233,16 +234,39 @@ class MainActivity : BaseActivity() {
         val splashScreen = if (isLaunch) installSplashScreen() else null
 
         super.onCreate(savedInstanceState)
+        enforceHighRefreshRate()
 
-        val didMigration = if (isLaunch) {
-            Migrator.awaitAndRelease()
-        } else {
-            false
+        // KMK --> ponytail: await preference migrations without blocking the main thread (Tadami parity)
+        if (isLaunch) {
+            lifecycleScope.launch {
+                val migrationStart = System.currentTimeMillis()
+                val result = runCatching {
+                    kotlinx.coroutines.withTimeout(2000L) {
+                        didMigration = Migrator.await()
+                    }
+                }
+                result.exceptionOrNull()?.let { error ->
+                    logcat(LogPriority.ERROR, error) {
+                        "Preference migration failed or timed out after ${System.currentTimeMillis() - migrationStart}ms"
+                    }
+                }
+                runCatching { Migrator.release() }
+                    .onFailure { error ->
+                        logcat(LogPriority.ERROR, error) { "Failed to release preference migrator" }
+                    }
+            }
         }
+        // KMK <--
 
         if (isLaunch) {
-            eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.triggerOnAppStart(this)
-            eu.kanade.tachiyomi.data.suggestions.HomeFeedWorker.scheduleBackground(this, uiPreferences.homeFeedBackgroundPrefetch().get())
+            // KMK --> ponytail: delay background suggestion and feed workers by 30s to keep startup instant and CPU idle
+            lifecycleScope.launch(Dispatchers.Default) {
+                kotlinx.coroutines.delay(30000L)
+                eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.triggerOnAppStart(this@MainActivity)
+                if (uiPreferences.homeFeedBackgroundPrefetch().get()) {
+                    eu.kanade.tachiyomi.data.suggestions.HomeFeedWorker.scheduleBackground(this@MainActivity, true)
+                }
+            }
             lifecycleScope.launch {
                 if (uiPreferences.vpnAutoConnectAtStart().get()) {
                     val defaultProfile = wireguardManager.getDefaultProfile()
@@ -253,19 +277,8 @@ class MainActivity : BaseActivity() {
                     }
                 }
             }
-            lifecycleScope.launch {
-                val detector = BubbleDetector(this@MainActivity)
-                if (!detector.isReady && !translationPreferences.hasAutoDownloadedBubbleModel().get()) {
-                    translationPreferences.hasAutoDownloadedBubbleModel().set(true)
-                    try {
-                        logcat(LogPriority.INFO) { "Auto-starting Bubble detector model download..." }
-                        detector.downloadModel()
-                        logcat(LogPriority.INFO) { "Bubble detector model auto-download complete!" }
-                    } catch (e: Exception) {
-                        logcat(LogPriority.ERROR, e) { "Bubble detector model auto-download failed" }
-                    }
-                }
-            }
+            // Bubble detector MLKit model is initialized on-demand when reader translation is invoked
+            // KMK <--
         }
 
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
@@ -342,6 +355,11 @@ class MainActivity : BaseActivity() {
                 screen = HomeScreen,
                 disposeBehavior = NavigatorDisposeBehavior(disposeNestedNavigators = false, disposeSteps = true),
             ) { navigator ->
+                // KMK --> ponytail: dismiss splash screen as soon as HomeScreen starts composing first frame (Tadami parity)
+                if (isLaunch) {
+                    ready = true
+                }
+                // KMK <--
                 LaunchedEffect(navigator) {
                     this@MainActivity.navigator = navigator
 
@@ -895,6 +913,13 @@ class MainActivity : BaseActivity() {
                 }
                 null
             }
+            INTENT_OPEN_NOVEL_CHAPTER -> {
+                val chapterId = intent.getLongExtra(INTENT_NOVEL_CHAPTER_ID, -1L)
+                if (chapterId != -1L) {
+                    navigator.push(eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(chapterId))
+                }
+                null
+            }
             Intent.ACTION_VIEW -> {
                 // Handling opening of backup files
                 if (intent.data.toString().endsWith(".tachibk")) {
@@ -921,14 +946,38 @@ class MainActivity : BaseActivity() {
         return true
     }
 
+    private fun enforceHighRefreshRate() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    display
+                } else {
+                    @Suppress("DEPRECATION")
+                    windowManager.defaultDisplay
+                }
+                val modes = display?.supportedModes.orEmpty()
+                val maxRefreshMode = modes.maxByOrNull { it.refreshRate }
+                if (maxRefreshMode != null && maxRefreshMode.refreshRate > 60f) {
+                    val params = window.attributes
+                    params.preferredDisplayModeId = maxRefreshMode.modeId
+                    window.attributes = params
+                }
+            } catch (_: Exception) {
+                // Ignore failure on devices without dynamic refresh rate switching
+            }
+        }
+    }
+
     companion object {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"
         const val INTENT_SEARCH_QUERY = "query"
         const val INTENT_SEARCH_FILTER = "filter"
+        const val INTENT_OPEN_NOVEL_CHAPTER = "eu.kanade.tachiyomi.OPEN_NOVEL_CHAPTER"
+        const val INTENT_NOVEL_CHAPTER_ID = "novel_chapter_id"
     }
 }
 
 // Splash screen
-private const val SPLASH_MIN_DURATION = 500 // ms
-private const val SPLASH_MAX_DURATION = 5000 // ms
-private const val SPLASH_EXIT_ANIM_DURATION = 400L // ms
+private const val SPLASH_MIN_DURATION = 0 // ms
+private const val SPLASH_MAX_DURATION = 2000 // ms
+private const val SPLASH_EXIT_ANIM_DURATION = 200L // ms

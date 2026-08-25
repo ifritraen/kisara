@@ -4,9 +4,10 @@ import android.content.pm.PackageInfo
 import androidx.core.content.pm.PackageInfoCompat
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.util.system.isDebugBuildType
-import mihon.domain.extension.model.KOMIKKU_SIGNATURE
 import mihon.domain.extension.repository.ExtensionStoreRepository
 import tachiyomi.core.common.preference.getAndSet
+
+private const val KOMIKKU_SIGNATURE = "cbec121aa82ebb02aaa73806992e0368a97d47b5451ed6524816d03084c45905"
 
 class TrustExtension(
     private val repository: ExtensionStoreRepository,

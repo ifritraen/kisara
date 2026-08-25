@@ -106,155 +106,149 @@ fun TagActionDialog(
     val isBlocked = remember(tag) { sourcePreferences.blockedTags().get().contains(tag) }
     val tropeDefinition = remember(tag) { TropeDictionary.getDefinition(tag) }
 
-    AlertDialog(
+    val colorScheme = MaterialTheme.colorScheme
+
+    eu.kanade.presentation.components.KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        shape = RoundedCornerShape(20.dp),
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Explore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
-                )
-                Text(
-                    text = tag,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        },
-        text = {
-            Column(
+        title = tag,
+        subtitle = tropeDefinition?.let { "Trope & Genre Actions" },
+        footer = {
+            androidx.compose.material3.OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                shape = RoundedCornerShape(16.dp),
+                onClick = onDismissRequest,
             ) {
-                if (tropeDefinition != null) {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "Trope / Tag Definition",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = tropeDefinition,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
-                TagActionItem(
-                    icon = Icons.Outlined.Public,
-                    label = stringResource(MR.strings.action_global_search),
-                    description = "Search all extensions for \"$tag\"",
-                    onClick = {
-                        onDismissRequest()
-                        onGlobalSearch(tag)
-                    },
-                )
-
-                TagActionItem(
-                    icon = Icons.Outlined.Search,
-                    label = stringResource(MR.strings.action_search),
-                    description = "Search inside this source",
-                    onClick = {
-                        onDismissRequest()
-                        onSearchInSource(tag)
-                    },
-                )
-
-                TagActionItem(
-                    icon = Icons.Outlined.CollectionsBookmark,
-                    label = "Find in Library",
-                    description = "Filter saved manga with this tag",
-                    onClick = {
-                        onDismissRequest()
-                        onLibrarySearch(tag)
-                    },
-                )
-
-                TagActionItem(
-                    icon = if (isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
-                    label = if (isFavorite) "Remove from Favorite Tags" else "Add to Favorite Tags",
-                    description = "Used for smart suggestions & home feed",
-                    iconTint = if (isFavorite) MaterialTheme.colorScheme.primary else null,
-                    onClick = {
-                        val added = favoriteManager.toggleFavoriteTag(tag)
-                        val msg = if (added) {
-                            context.getString(KMR.strings.added_to_favorite_tags.resourceId)
-                        } else {
-                            context.getString(KMR.strings.removed_from_favorite_tags.resourceId)
-                        }
-                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                        onDismissRequest()
-                    },
-                )
-
-                TagActionItem(
-                    icon = Icons.Outlined.Block,
-                    label = if (isBlocked) "Unblock Tag" else "Block Tag (Blacklist)",
-                    description = if (isBlocked) "Remove from blocked list" else "Hide titles with this tag",
-                    iconTint = if (isBlocked) MaterialTheme.colorScheme.error else null,
-                    onClick = {
-                        val currentBlocked = sourcePreferences.blockedTags().get().toMutableSet()
-                        if (isBlocked) {
-                            currentBlocked.remove(tag)
-                            android.widget.Toast.makeText(context, "Unblocked: $tag", android.widget.Toast.LENGTH_SHORT).show()
-                        } else {
-                            currentBlocked.add(tag)
-                            android.widget.Toast.makeText(context, "Blocked: $tag", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                        sourcePreferences.blockedTags().set(currentBlocked)
-                        onDismissRequest()
-                    },
-                )
-
-                TagActionItem(
-                    icon = Icons.Outlined.Checklist,
-                    label = "Select Multiple Tags...",
-                    description = "Combine tags for multi-search & actions",
-                    onClick = {
-                        onDismissRequest()
-                        onStartMultiSelect()
-                    },
-                )
-
-                TagActionItem(
-                    icon = Icons.Outlined.ContentCopy,
-                    label = stringResource(MR.strings.action_copy_to_clipboard),
-                    description = "Copy tag text",
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(tag))
-                        android.widget.Toast.makeText(context, "Copied: $tag", android.widget.Toast.LENGTH_SHORT).show()
-                        onDismissRequest()
-                    },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) {
                 Text(stringResource(MR.strings.action_cancel))
             }
         },
-    )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (tropeDefinition != null) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.25f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Trope / Tag Definition",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = tropeDefinition,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp)) {
+                    TagActionItem(
+                        icon = Icons.Outlined.Public,
+                        label = stringResource(MR.strings.action_global_search),
+                        description = "Search all extensions for \"$tag\"",
+                        onClick = {
+                            onDismissRequest()
+                            onGlobalSearch(tag)
+                        },
+                    )
+
+                    TagActionItem(
+                        icon = Icons.Outlined.Search,
+                        label = stringResource(MR.strings.action_search),
+                        description = "Search inside this source",
+                        onClick = {
+                            onDismissRequest()
+                            onSearchInSource(tag)
+                        },
+                    )
+
+                    TagActionItem(
+                        icon = Icons.Outlined.CollectionsBookmark,
+                        label = "Find in Library",
+                        description = "Filter saved manga with this tag",
+                        onClick = {
+                            onDismissRequest()
+                            onLibrarySearch(tag)
+                        },
+                    )
+
+                    TagActionItem(
+                        icon = if (isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                        label = if (isFavorite) "Remove from Favorite Tags" else "Add to Favorite Tags",
+                        description = "Used for smart suggestions & home feed",
+                        iconTint = if (isFavorite) colorScheme.primary else null,
+                        onClick = {
+                            val added = favoriteManager.toggleFavoriteTag(tag)
+                            val msg = if (added) {
+                                context.getString(KMR.strings.added_to_favorite_tags.resourceId)
+                            } else {
+                                context.getString(KMR.strings.removed_from_favorite_tags.resourceId)
+                            }
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                            onDismissRequest()
+                        },
+                    )
+
+                    TagActionItem(
+                        icon = Icons.Outlined.Block,
+                        label = if (isBlocked) "Unblock Tag" else "Block Tag (Blacklist)",
+                        description = if (isBlocked) "Remove from blocked list" else "Hide titles with this tag",
+                        iconTint = if (isBlocked) colorScheme.error else null,
+                        onClick = {
+                            val currentBlocked = sourcePreferences.blockedTags().get().toMutableSet()
+                            if (isBlocked) {
+                                currentBlocked.remove(tag)
+                                android.widget.Toast.makeText(context, "Unblocked: $tag", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                currentBlocked.add(tag)
+                                android.widget.Toast.makeText(context, "Blocked: $tag", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            sourcePreferences.blockedTags().set(currentBlocked)
+                            onDismissRequest()
+                        },
+                    )
+
+                    TagActionItem(
+                        icon = Icons.Outlined.Checklist,
+                        label = "Select Multiple Tags...",
+                        description = "Combine tags for multi-search & actions",
+                        onClick = {
+                            onDismissRequest()
+                            onStartMultiSelect()
+                        },
+                    )
+
+                    TagActionItem(
+                        icon = Icons.Outlined.ContentCopy,
+                        label = stringResource(MR.strings.action_copy_to_clipboard),
+                        description = "Copy tag text",
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(tag))
+                            android.widget.Toast.makeText(context, "Copied: $tag", android.widget.Toast.LENGTH_SHORT).show()
+                            onDismissRequest()
+                        },
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

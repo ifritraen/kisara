@@ -104,6 +104,22 @@ class StorageManager(
         return baseDir?.createDirectory(LOCAL_SOURCE_PATH)
     }
 
+    fun getLocalAnimeSourceDirectory(): UniFile? {
+        return baseDir?.createDirectory(LOCAL_ANIME_SOURCE_PATH)
+    }
+
+    fun getLocalNovelSourceDirectory(): UniFile? {
+        return baseDir?.createDirectory(LOCAL_NOVEL_SOURCE_PATH)
+    }
+
+    fun getAnimeDownloadsDirectory(): UniFile? {
+        return baseDir?.createDirectory(ANIME_DOWNLOADS_PATH)
+    }
+
+    fun getNovelDownloadsDirectory(): UniFile? {
+        return baseDir?.createDirectory(NOVEL_DOWNLOADS_PATH)
+    }
+
     // SY -->
     fun getLogsDirectory(): UniFile? {
         return baseDir?.createDirectory(LOGS_PATH)
@@ -117,6 +133,22 @@ class StorageManager(
 
     fun getColorizerDirectory(): UniFile? {
         return baseDir?.createDirectory(COLORIZER_PATH)
+    }
+
+    fun getFontsDirectory(): UniFile? {
+        return baseDir?.createDirectory(FONTS_PATH)
+    }
+
+    fun getScriptsDirectory(): UniFile? {
+        return baseDir?.createDirectory(SCRIPTS_PATH)
+    }
+
+    fun getScriptOptsDirectory(): UniFile? {
+        return baseDir?.createDirectory(SCRIPT_OPTS_PATH)
+    }
+
+    fun getShadersDirectory(): UniFile? {
+        return baseDir?.createDirectory(SHADERS_PATH)
     }
     // KMK <--
 
@@ -254,12 +286,20 @@ class StorageManager(
 private const val AUTOMATIC_BACKUPS_PATH = "autobackup"
 private const val DOWNLOADS_PATH = "downloads"
 private const val LOCAL_SOURCE_PATH = "local"
+private const val LOCAL_ANIME_SOURCE_PATH = "localanime"
+private const val LOCAL_NOVEL_SOURCE_PATH = "localnovel"
+private const val ANIME_DOWNLOADS_PATH = "animedownloads"
+private const val NOVEL_DOWNLOADS_PATH = "noveldownloads"
 
 // SY -->
 private const val LOGS_PATH = "logs"
 // SY <--
 
 // KMK -->
+private const val FONTS_PATH = "fonts"
+private const val SCRIPTS_PATH = "scripts"
+private const val SCRIPT_OPTS_PATH = "script-opts"
+private const val SHADERS_PATH = "shaders"
 private const val TRANSLATION_PATH = "translations"
 private const val COLORIZER_PATH = "colorizer"
 // KMK <--

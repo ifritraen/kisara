@@ -3,10 +3,19 @@ package eu.kanade.presentation.util
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.ScreenModelStore
 import cafe.adriel.voyager.core.screen.Screen
@@ -74,23 +83,64 @@ fun Navigator?.openManga(context: android.content.Context, mangaId: Long, fromSo
     }
 }
 
+// KMK --> ponytail: modern cubic bezier screen transitions matching Tadami
+private const val MODERN_ENTER_DURATION = 300
+private const val MODERN_EXIT_DURATION = 300
+private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+private val MODERN_SLIDE_DISTANCE = 30.dp
+
 @Composable
 fun DefaultNavigatorScreenTransition(
     navigator: Navigator,
     modifier: Modifier = Modifier,
 ) {
-    val slideDistance = rememberSlideDistance()
+    val density = LocalDensity.current
+    val modernSlideDistance = with(density) { MODERN_SLIDE_DISTANCE.roundToPx() }
     ScreenTransition(
         navigator = navigator,
         transition = {
-            materialSharedAxisX(
+            modernSharedAxisX(
                 forward = navigator.lastEvent != StackEvent.Pop,
-                slideDistance = slideDistance,
+                slideDistance = modernSlideDistance,
             )
         },
         modifier = modifier,
     )
 }
+
+private fun AnimatedContentTransitionScope<Screen>.modernSharedAxisX(
+    forward: Boolean,
+    slideDistance: Int,
+): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = MODERN_ENTER_DURATION,
+            easing = AURORA_EASING,
+        ),
+    ) + slideInHorizontally(
+        initialOffsetX = { if (forward) slideDistance else -slideDistance },
+        animationSpec = tween(
+            durationMillis = MODERN_ENTER_DURATION,
+            easing = AURORA_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = MODERN_EXIT_DURATION,
+            easing = AURORA_EASING,
+        ),
+    ) + slideOutHorizontally(
+        targetOffsetX = { if (forward) -slideDistance else slideDistance },
+        animationSpec = tween(
+            durationMillis = MODERN_EXIT_DURATION,
+            easing = AURORA_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
+// KMK <--
 
 @Composable
 fun ScreenTransition(

@@ -162,3 +162,7 @@ WHERE _id = :chapterId;
 
 selectLastInsertedRowId:
 SELECT last_insert_rowid();
+
+getTotalReadChapterCount:
+SELECT COUNT(*) FROM chapters
+WHERE read = 1;

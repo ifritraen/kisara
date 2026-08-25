@@ -1,6 +1,7 @@
 package eu.kanade.domain.manga.interactor
 
 import android.app.Application
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -15,7 +16,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 import logcat.LogPriority
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -47,12 +47,21 @@ class GetTrackerRecommendations(
 ) {
     private val client: OkHttpClient by lazy { networkHelper.client }
     private val json = Json { ignoreUnknownKeys = true }
-    private val cacheFile by lazy { File(app.cacheDir, "tracker_recommendations_cache.json") }
 
-    fun getCached(): List<TrackerRecommendation> {
+    private fun getCacheFile(mediaType: MediaType): File {
+        val suffix = when (mediaType) {
+            MediaType.MANGA -> "manga"
+            MediaType.ANIME -> "anime"
+            MediaType.NOVEL -> "novel"
+        }
+        return File(app.cacheDir, "tracker_recommendations_${suffix}_cache.json")
+    }
+
+    fun getCached(mediaType: MediaType = MediaType.MANGA): List<TrackerRecommendation> {
         return try {
-            if (cacheFile.exists()) {
-                json.decodeFromString<List<TrackerRecommendation>>(cacheFile.readText())
+            val file = getCacheFile(mediaType)
+            if (file.exists()) {
+                json.decodeFromString<List<TrackerRecommendation>>(file.readText())
             } else {
                 emptyList()
             }
@@ -61,60 +70,125 @@ class GetTrackerRecommendations(
         }
     }
 
-    suspend fun fetch(force: Boolean = false): List<TrackerRecommendation> = withIOContext {
+    suspend fun fetch(mediaType: MediaType = MediaType.MANGA, force: Boolean = false): List<TrackerRecommendation> = withIOContext {
         if (!force) {
-            val cached = getCached()
+            val cached = getCached(mediaType)
             if (cached.isNotEmpty()) return@withIOContext cached
         }
 
-        val anilistResults = tryFetchAniListRecommendations()
+        val anilistResults = tryFetchAniListRecommendations(mediaType)
         if (anilistResults.isNotEmpty()) {
-            saveCache(anilistResults)
+            saveCache(mediaType, anilistResults)
             return@withIOContext anilistResults
         }
 
-        val mangaUpdatesResults = tryFetchMangaUpdatesRecommendations()
-        if (mangaUpdatesResults.isNotEmpty()) {
-            saveCache(mangaUpdatesResults)
-            return@withIOContext mangaUpdatesResults
+        if (mediaType == MediaType.MANGA) {
+            val mangaUpdatesResults = tryFetchMangaUpdatesRecommendations()
+            if (mangaUpdatesResults.isNotEmpty()) {
+                saveCache(mediaType, mangaUpdatesResults)
+                return@withIOContext mangaUpdatesResults
+            }
         }
 
-        getCached()
+        getCached(mediaType)
     }
 
-    private fun saveCache(items: List<TrackerRecommendation>) {
+    private fun saveCache(mediaType: MediaType, items: List<TrackerRecommendation>) {
         try {
-            cacheFile.writeText(json.encodeToString(items))
+            getCacheFile(mediaType).writeText(json.encodeToString(items))
         } catch (e: Exception) {
-            logcat(LogPriority.WARN, e) { "Failed to save tracker recommendations cache" }
+            logcat(LogPriority.WARN, e) { "Failed to save tracker recommendations cache for $mediaType" }
         }
     }
 
-    private suspend fun tryFetchAniListRecommendations(): List<TrackerRecommendation> {
+    private suspend fun tryFetchAniListRecommendations(mediaType: MediaType): List<TrackerRecommendation> {
         return try {
-            val libraryMangas = getLibraryManga.await()
-            val anilistTrackedMediaIds = mutableListOf<Long>()
+            val trackedMediaIds = mutableListOf<Long>()
 
-            for (manga in libraryMangas.take(20)) {
-                val tracks = try {
-                    getTracks.await(manga.id)
-                } catch (_: Exception) {
-                    emptyList()
+            when (mediaType) {
+                MediaType.MANGA -> {
+                    val libraryMangas = getLibraryManga.await()
+                    for (manga in libraryMangas.take(20)) {
+                        val tracks = try { getTracks.await(manga.id) } catch (_: Exception) { emptyList() }
+                        val alTrack = tracks.find { it.trackerId == TrackerManager.ANILIST && it.remoteId > 0 }
+                        if (alTrack != null) trackedMediaIds.add(alTrack.remoteId)
+                    }
                 }
-                val alTrack = tracks.find { it.trackerId == TrackerManager.ANILIST && it.remoteId > 0 }
-                if (alTrack != null) {
-                    anilistTrackedMediaIds.add(alTrack.remoteId)
+                MediaType.ANIME -> {
+                    try {
+                        val getLibraryAnime = Injekt.get<tachiyomi.domain.entries.anime.interactor.GetLibraryAnime>()
+                        val getAnimeTracks = Injekt.get<tachiyomi.domain.track.anime.interactor.GetAnimeTracks>()
+                        val libraryAnime = getLibraryAnime.await()
+                        for (anime in libraryAnime.take(20)) {
+                            val tracks = try { getAnimeTracks.await(anime.id) } catch (_: Exception) { emptyList() }
+                            val alTrack = tracks.find { it.trackerId == TrackerManager.ANILIST && it.remoteId > 0 }
+                            if (alTrack != null) trackedMediaIds.add(alTrack.remoteId)
+                        }
+                    } catch (_: Exception) {}
+                }
+                MediaType.NOVEL -> {
+                    // Novels are tracked as MANGA format NOVEL on AniList
                 }
             }
 
-            val query = if (anilistTrackedMediaIds.isNotEmpty()) {
-                val randomTargetId = anilistTrackedMediaIds.shuffled().first()
-                """
-                query {
-                  Media(id: $randomTargetId, type: MANGA) {
-                    recommendations(sort: RATING_DESC, perPage: 15) {
-                      nodes {
-                        mediaRecommendation {
+            val query = when (mediaType) {
+                MediaType.ANIME -> {
+                    if (trackedMediaIds.isNotEmpty()) {
+                        val randomTargetId = trackedMediaIds.shuffled().first()
+                        """
+                        query {
+                          Media(id: $randomTargetId, type: ANIME) {
+                            recommendations(sort: RATING_DESC, perPage: 15) {
+                              nodes {
+                                mediaRecommendation {
+                                  id
+                                  title {
+                                    userPreferred
+                                    romaji
+                                    english
+                                  }
+                                  coverImage {
+                                    large
+                                  }
+                                  averageScore
+                                  status
+                                  genres
+                                  description(asHtml: false)
+                                }
+                              }
+                            }
+                          }
+                        }
+                        """.trimIndent()
+                    } else {
+                        """
+                        query {
+                          Page(page: 1, perPage: 15) {
+                            media(type: ANIME, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
+                              id
+                              title {
+                                userPreferred
+                                romaji
+                                english
+                              }
+                              coverImage {
+                                large
+                              }
+                              averageScore
+                              status
+                              genres
+                              description(asHtml: false)
+                            }
+                          }
+                        }
+                        """.trimIndent()
+                    }
+                }
+                MediaType.NOVEL -> {
+                    """
+                    query {
+                      Page(page: 1, perPage: 15) {
+                        media(type: MANGA, format: NOVEL, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
                           id
                           title {
                             userPreferred
@@ -131,31 +205,60 @@ class GetTrackerRecommendations(
                         }
                       }
                     }
-                  }
+                    """.trimIndent()
                 }
-                """.trimIndent()
-            } else {
-                """
-                query {
-                  Page(page: 1, perPage: 15) {
-                    media(type: MANGA, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
-                      id
-                      title {
-                        userPreferred
-                        romaji
-                        english
-                      }
-                      coverImage {
-                        large
-                      }
-                      averageScore
-                      status
-                      genres
-                      description(asHtml: false)
+                MediaType.MANGA -> {
+                    if (trackedMediaIds.isNotEmpty()) {
+                        val randomTargetId = trackedMediaIds.shuffled().first()
+                        """
+                        query {
+                          Media(id: $randomTargetId, type: MANGA) {
+                            recommendations(sort: RATING_DESC, perPage: 15) {
+                              nodes {
+                                mediaRecommendation {
+                                  id
+                                  title {
+                                    userPreferred
+                                    romaji
+                                    english
+                                  }
+                                  coverImage {
+                                    large
+                                  }
+                                  averageScore
+                                  status
+                                  genres
+                                  description(asHtml: false)
+                                }
+                              }
+                            }
+                          }
+                        }
+                        """.trimIndent()
+                    } else {
+                        """
+                        query {
+                          Page(page: 1, perPage: 15) {
+                            media(type: MANGA, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
+                              id
+                              title {
+                                userPreferred
+                                romaji
+                                english
+                              }
+                              coverImage {
+                                large
+                              }
+                              averageScore
+                              status
+                              genres
+                              description(asHtml: false)
+                            }
+                          }
+                        }
+                        """.trimIndent()
                     }
-                  }
                 }
-                """.trimIndent()
             }
 
             val payload = buildJsonObject {
@@ -233,7 +336,7 @@ class GetTrackerRecommendations(
 
             list
         } catch (e: Exception) {
-            logcat(LogPriority.WARN, e) { "Failed to query AniList recommendations" }
+            logcat(LogPriority.WARN, e) { "Failed to query AniList recommendations for $mediaType" }
             emptyList()
         }
     }

@@ -10,13 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AdaptiveSheet
+import eu.kanade.presentation.components.KisaraBottomSheet
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import eu.kanade.presentation.more.settings.LocalPreferenceMinHeight
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
@@ -38,25 +40,43 @@ fun SourceFeedAddDialog(
     name: String,
     addFeed: () -> Unit,
 ) {
-    AlertDialog(
+    val colorScheme = MaterialTheme.colorScheme
+
+    KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        confirmButton = {
-            TextButton(onClick = addFeed) {
-                Text(text = stringResource(MR.strings.action_add))
+        title = stringResource(SYMR.strings.feed),
+        footer = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    onClick = onDismissRequest,
+                ) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+                Button(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    onClick = {
+                        addFeed()
+                        onDismissRequest()
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_add))
+                }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-        title = {
-            Text(text = stringResource(SYMR.strings.feed))
-        },
-        text = {
-            Text(text = stringResource(SYMR.strings.feed_add, name))
-        },
-    )
+    ) {
+        Text(
+            text = stringResource(SYMR.strings.feed_add, name),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+    }
 }
 
 @Composable
@@ -64,25 +84,47 @@ fun SourceFeedDeleteDialog(
     onDismissRequest: () -> Unit,
     deleteFeed: () -> Unit,
 ) {
-    AlertDialog(
+    val colorScheme = MaterialTheme.colorScheme
+
+    KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        confirmButton = {
-            TextButton(onClick = deleteFeed) {
-                Text(text = stringResource(MR.strings.action_delete))
+        title = stringResource(SYMR.strings.feed),
+        footer = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    onClick = onDismissRequest,
+                ) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+                Button(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colorScheme.error,
+                        contentColor = colorScheme.onError,
+                    ),
+                    onClick = {
+                        deleteFeed()
+                        onDismissRequest()
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_delete))
+                }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-        title = {
-            Text(text = stringResource(SYMR.strings.feed))
-        },
-        text = {
-            Text(text = stringResource(SYMR.strings.feed_delete))
-        },
-    )
+    ) {
+        Text(
+            text = stringResource(SYMR.strings.feed_delete),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+    }
 }
 
 // KMK -->

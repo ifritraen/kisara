@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.ui.more.WhatsNewScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.lang.toDateTimestampString
 import eu.kanade.tachiyomi.util.system.copyToClipboard
+import eu.kanade.tachiyomi.util.system.isAlphaBuildType
 import eu.kanade.tachiyomi.util.system.isDebugBuildType
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
@@ -356,6 +357,16 @@ class AboutScreen : Screen() {
 
         fun getVersionName(withBuildDate: Boolean): String {
             return when {
+                isAlphaBuildType -> {
+                    "Alpha r${BuildConfig.COMMIT_COUNT}".let {
+                        if (withBuildDate) {
+                            "$it (${BuildConfig.COMMIT_SHA}, ${getFormattedBuildTime()})"
+                        } else {
+                            "$it (${BuildConfig.COMMIT_SHA})"
+                        }
+                    }
+                }
+
                 isDebugBuildType -> {
                     "Debug ${BuildConfig.COMMIT_SHA}".let {
                         if (withBuildDate) {

@@ -53,6 +53,12 @@ dependencies {
     // JavaScript engine
     implementation(libs.bundles.js.engine)
 
+    // FFmpeg-kit
+    implementation(aniyomilibs.ffmpeg.kit)
+
+    // TorrServer
+    implementation(aniyomilibs.torrserver)
+
     testImplementation(libs.bundles.test)
     testRuntimeOnly(libs.junit.platform.launcher)
 

@@ -59,6 +59,7 @@ class ExtensionStoresScreen(
                 screenModel.refreshExtensionList()
                 context.toast(KMR.strings.extensions_page_need_refresh)
             },
+            onSelectMediaTab = screenModel::selectMediaIndex,
             // KMK <--
             onClickDelete = { screenModel.showDialog(ExtensionStoreDialog.Delete(it)) },
             onClickRefresh = { screenModel.refreshRepos() },

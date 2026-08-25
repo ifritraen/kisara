@@ -2,7 +2,9 @@ package eu.kanade.presentation.library.components
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -24,6 +26,9 @@ internal fun LibraryComfortableGrid(
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
     // KMK -->
+    gridState: LazyGridState = rememberLazyGridState(),
+    // KMK <--
+    // KMK -->
     usePanoramaCover: Boolean = false,
     // KMK <--
 ) {
@@ -31,18 +36,13 @@ internal fun LibraryComfortableGrid(
         modifier = Modifier.fillMaxSize(),
         columns = columns,
         contentPadding = contentPadding,
+        state = gridState,
     ) {
         globalSearchItem(searchQuery, onGlobalSearchClicked)
 
         items(
             items = items,
-            key = {
-                try {
-                    it.libraryManga.manga.id
-                } catch (e: Throwable) {
-                    it.hashCode()
-                }
-            },
+            key = { it.libraryManga.manga.id },
             contentType = { "library_comfortable_grid_item" },
         ) { libraryItem ->
             val manga = libraryItem.libraryManga.manga
@@ -60,13 +60,15 @@ internal fun LibraryComfortableGrid(
                 coverBadgeStart = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnreadBadge(count = libraryItem.unreadCount)
+                    libraryItem.score?.takeIf { it > 0.0 }?.let { ScoreBadge(score = it) }
+                    libraryItem.externalStatus?.takeIf { it.isNotBlank() }?.let { ExternalStatusBadge(status = it) }
                 },
                 coverBadgeEnd = {
                     val lang = parsed.languageCode ?: libraryItem.sourceLanguage
                     val hasLang = !libraryItem.isLocal && lang.isNotEmpty()
                     val hasSource = libraryItem.source != null
-                    val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, manga.title)
-                    val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, manga.title)
+                    val hasColor = parsed.isColorized
+                    val hasUncensored = parsed.isUncensored
 
                     // Column 1: Language (top) + Color (bottom)
                     if (hasLang || hasColor) {

@@ -2,12 +2,16 @@ package eu.kanade.tachiyomi.ui.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -63,7 +67,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -162,7 +166,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -200,6 +204,19 @@ data object LibraryTab : Tab {
 
     @Composable
     override fun Content() {
+        val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+        val activeMediaType by uiPreferences.activeMediaType().collectAsStateWithLifecycle()
+
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.NOVEL) {
+            eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab.Content()
+            return
+        }
+
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+            eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab.Content()
+            return
+        }
+
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
@@ -207,7 +224,7 @@ data object LibraryTab : Tab {
 
         val screenModel = rememberScreenModel { LibraryScreenModel() }
         val settingsScreenModel = rememberScreenModel { LibrarySettingsScreenModel() }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
         val useNewCategorySubbar = true
 
         val snackbarHostState = remember { SnackbarHostState() }
@@ -247,7 +264,7 @@ data object LibraryTab : Tab {
             previousCategoryIndex = state.activeCategoryIndex
         }
 
-        val kisaraShowSubcategoriesInMainBar = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.kisaraShowSubcategoriesInMainBar().collectAsState().value
+        val kisaraShowSubcategoriesInMainBar = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.kisaraShowSubcategoriesInMainBar().collectAsStateWithLifecycle().value
         val parentCategories = remember(state.categories) {
             state.categories.filter { it.parentId == null }.sortedBy { it.order }
         }
@@ -262,7 +279,7 @@ data object LibraryTab : Tab {
         } else {
             state.categories
         }
-        val activeCategory = tabCategories.getOrNull(state.activeCategoryIndex)
+        val activeCategory = state.categories.getOrNull(state.activeCategoryIndex)
         val activeParent = remember(activeCategory, parentCategories) {
             if (activeCategory == null) {
                 null
@@ -343,24 +360,23 @@ data object LibraryTab : Tab {
 
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
         val categoryBarPinnedPref = libraryPreferences.categoryBarPinned()
-        val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
+        val isCategoryBarPinned by categoryBarPinnedPref.collectAsStateWithLifecycle()
 
-        val uiPreferences = remember { Injekt.get<UiPreferences>() }
-        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsState()
-        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
-        val showCategoryTabs by uiPreferences.showCategoryTabs().collectAsState()
-        val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
-        val categoryBarCarouselStyle by uiPreferences.categoryBarCarouselStyle().collectAsState()
-        val alwaysShowSubTabsLibrary by uiPreferences.alwaysShowSubTabsLibrary().collectAsState()
-        val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
-        val kisaraShowItemCountInTabs by uiPreferences.kisaraShowItemCountInTabs().collectAsState()
-        val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
-        val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
-        val standardBottomBarHeight by uiPreferences.standardBottomBarHeight().collectAsState()
-        val standardBottomBarBottomMargin by uiPreferences.standardBottomBarBottomMargin().collectAsState()
+        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsStateWithLifecycle()
+        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsStateWithLifecycle()
+        val showCategoryTabs by uiPreferences.showCategoryTabs().collectAsStateWithLifecycle()
+        val showTopTabBar by uiPreferences.showTopTabBar().collectAsStateWithLifecycle()
+        val categoryBarCarouselStyle by uiPreferences.categoryBarCarouselStyle().collectAsStateWithLifecycle()
+        val alwaysShowSubTabsLibrary by uiPreferences.alwaysShowSubTabsLibrary().collectAsStateWithLifecycle()
+        val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsStateWithLifecycle()
+        val kisaraShowItemCountInTabs by uiPreferences.kisaraShowItemCountInTabs().collectAsStateWithLifecycle()
+        val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsStateWithLifecycle()
+        val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsStateWithLifecycle()
+        val standardBottomBarHeight by uiPreferences.standardBottomBarHeight().collectAsStateWithLifecycle()
+        val standardBottomBarBottomMargin by uiPreferences.standardBottomBarBottomMargin().collectAsStateWithLifecycle()
 
-        val categoryBarSelectedFontColorType by uiPreferences.categoryBarSelectedFontColorType().collectAsState()
-        val categoryBarSelectedFontCustomColor by uiPreferences.categoryBarSelectedFontCustomColor().collectAsState()
+        val categoryBarSelectedFontColorType by uiPreferences.categoryBarSelectedFontColorType().collectAsStateWithLifecycle()
+        val categoryBarSelectedFontCustomColor by uiPreferences.categoryBarSelectedFontCustomColor().collectAsStateWithLifecycle()
 
         val categorySelectedLabelColor = when (categoryBarSelectedFontColorType) {
             0 -> MaterialTheme.colorScheme.onSurface
@@ -369,28 +385,18 @@ data object LibraryTab : Tab {
         }
 
         var topBarVisible by remember { mutableStateOf(true) }
-        var bottomBarVisible by remember { mutableStateOf(true) }
+        val bottomBarVisible by HomeScreen.showBottomNavFlow.collectAsStateWithLifecycle()
         val nestedScrollConnection = remember {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                     val delta = available.y
                     if (delta < -10f) {
-                        if (hideTopBarOnScroll) {
-                            if (topBarVisible) topBarVisible = false
-                        }
-                        if (bottomBarVisible) {
-                            bottomBarVisible = false
-                            scope.launch { HomeScreen.showBottomNav(false) }
+                        if (hideTopBarOnScroll && topBarVisible) {
+                            topBarVisible = false
                         }
                     } else if (delta > 10f) {
-                        if (hideTopBarOnScroll) {
-                            if (!topBarVisible) topBarVisible = true
-                        } else {
+                        if (!topBarVisible) {
                             topBarVisible = true
-                        }
-                        if (!bottomBarVisible) {
-                            bottomBarVisible = true
-                            scope.launch { HomeScreen.showBottomNav(true) }
                         }
                     }
                     return Offset.Zero
@@ -411,8 +417,8 @@ data object LibraryTab : Tab {
             Box(
                 modifier = Modifier.fillMaxSize(),
             ) {
-                val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
-                val showSubcategoryTabs by libraryPreferences.subcategoryTabs().collectAsState()
+                val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsStateWithLifecycle()
+                val showSubcategoryTabs by libraryPreferences.subcategoryTabs().collectAsStateWithLifecycle()
 
                 Box(
                     modifier = Modifier
@@ -430,9 +436,9 @@ data object LibraryTab : Tab {
                                 )
                                 // KMK -->
                                 val sourcePrefs = remember { Injekt.get<SourcePreferences>() }
-                                val searchClean by sourcePrefs.searchClean().collectAsState()
-                                val searchFormat by sourcePrefs.searchFormat().collectAsState()
-                                val searchFuzzy by sourcePrefs.searchFuzzy().collectAsState()
+                                val searchClean by sourcePrefs.searchClean().collectAsStateWithLifecycle()
+                                val searchFormat by sourcePrefs.searchFormat().collectAsStateWithLifecycle()
+                                val searchFuzzy by sourcePrefs.searchFuzzy().collectAsStateWithLifecycle()
                                 Column {
                                     // KMK <--
                                     LibraryToolbar(
@@ -734,101 +740,142 @@ data object LibraryTab : Tab {
                     }
                 }
 
-                // Floating Horizontally Scrollable Category Bar (with Scroll-to-Hide and Swapped Rows)
-                val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
-                val categoryRowState = rememberLazyListState()
+                // Floating Horizontally Scrollable Category Bar (True Carousel with Auto-Centering)
+                val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsStateWithLifecycle()
+                val parentCategoryRowState = rememberLazyListState()
+                val subcategoryRowState = rememberLazyListState()
 
-                LaunchedEffect(state.activeCategoryIndex) {
-                    if (categoryBarCarouselStyle && state.categories.isNotEmpty()) {
-                        val index = state.activeCategoryIndex.coerceIn(0, state.categories.lastIndex)
-                        val layoutInfo = categoryRowState.layoutInfo
+                // KMK --> ponytail: auto-center active parent category in carousel
+                LaunchedEffect(state.activeCategoryIndex, tabCategories.size, categoryBarCarouselStyle) {
+                    if (categoryBarCarouselStyle && tabCategories.isNotEmpty()) {
+                        val activeParentId = state.categories.getOrNull(state.activeCategoryIndex)?.let {
+                            if (it.parentId == null) it.id else it.parentId
+                        }
+                        val activeIndex = tabCategories.indexOfFirst { it.id == activeParentId }.coerceAtLeast(0)
+                        val layoutInfo = parentCategoryRowState.layoutInfo
                         val visibleItems = layoutInfo.visibleItemsInfo
                         val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                        val targetItem = visibleItems.firstOrNull { it.index == index }
-                        if (targetItem != null) {
+                        val targetItem = visibleItems.firstOrNull { it.index == activeIndex }
+                        if (targetItem != null && viewportWidth > 0) {
                             val offset = (viewportWidth - targetItem.size) / 2
-                            categoryRowState.scrollToItem(index, -offset)
+                            parentCategoryRowState.animateScrollToItem(activeIndex, -offset)
                         } else {
-                            categoryRowState.scrollToItem(index)
-                            val targetItemNext = categoryRowState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-                            if (targetItemNext != null) {
-                                val offset = (viewportWidth - targetItemNext.size) / 2
-                                categoryRowState.scrollToItem(index, -offset)
-                            }
+                            parentCategoryRowState.animateScrollToItem(activeIndex)
                         }
                     }
                 }
 
-                val fabBottomPadding = if (bottomBarVisible) {
-                    ((if (floatingBottomBar) (bottomBarHeight + bottomBarBottomMargin) else (standardBottomBarHeight + standardBottomBarBottomMargin)) + subTabsBottomMargin).coerceAtLeast(0).dp
-                } else {
-                    16.dp
+                // Auto-center active subcategory in carousel
+                LaunchedEffect(activeSubcategoryIdOfActivePage, subcategories.size, categoryBarCarouselStyle) {
+                    if (categoryBarCarouselStyle && subcategories.isNotEmpty()) {
+                        val activeIndex = if (activeSubcategoryIdOfActivePage == null) {
+                            0
+                        } else {
+                            val idx = subcategories.indexOfFirst { it.id == activeSubcategoryIdOfActivePage }
+                            if (idx != -1) idx + 1 else 0
+                        }
+                        val layoutInfo = subcategoryRowState.layoutInfo
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                        val targetItem = visibleItems.firstOrNull { it.index == activeIndex }
+                        if (targetItem != null && viewportWidth > 0) {
+                            val offset = (viewportWidth - targetItem.size) / 2
+                            subcategoryRowState.animateScrollToItem(activeIndex, -offset)
+                        } else {
+                            subcategoryRowState.animateScrollToItem(activeIndex)
+                        }
+                    }
                 }
+                // KMK <--
+
+                val fabBottomPadding = ((if (floatingBottomBar) (bottomBarHeight + bottomBarBottomMargin + 12) else (standardBottomBarHeight + standardBottomBarBottomMargin + 8)) + subTabsBottomMargin.coerceAtLeast(0)).dp
 
                 val activeSubTabPopup = LocalActiveSubTabPopup.current
-                val categoryBarVisible = showCategoryTabs && activeSubTabPopup == null && (
-                    (((alwaysShowSubTabsLibrary || showCategoryBar) && bottomBarVisible) || isCategoryBarPinned) &&
+                val categoryBarVisible = !floatingBottomBar && showCategoryTabs && activeSubTabPopup == null && (
+                    (alwaysShowSubTabsLibrary || showCategoryBar || isCategoryBarPinned) &&
                         state.searchQuery == null && !state.selectionMode && !state.isLoading && !state.isLibraryEmpty
                     )
 
-                AnimatedVisibility(
-                    visible = categoryBarVisible,
-                    enter = expandVertically(expandFrom = Alignment.Bottom),
-                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
+                val categoryBarTranslationY by animateFloatAsState(
+                    targetValue = if (categoryBarVisible) 0f else 150f,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "categoryBarTranslationY",
+                )
+                val categoryBarAlpha by animateFloatAsState(
+                    targetValue = if (categoryBarVisible) 1f else 0f,
+                    animationSpec = tween(durationMillis = 150),
+                    label = "categoryBarAlpha",
+                )
+
+                Box(
                     modifier = Modifier
                         .align(if (useNewCategorySubbar) Alignment.BottomCenter else Alignment.BottomStart)
                         .padding(start = 16.dp, end = 16.dp, bottom = fabBottomPadding)
-                        .let { if (useNewCategorySubbar) it.wrapContentWidth() else it.fillMaxWidth() },
+                        .let { if (useNewCategorySubbar) it.wrapContentWidth() else it.fillMaxWidth() }
+                        .graphicsLayer {
+                            translationY = categoryBarTranslationY
+                            alpha = categoryBarAlpha
+                        },
                 ) {
-                    val editCategory = LocalEditCategory.current
-                    // Main Category Bar Surface
-                    GlassSurface(
-                        shape = RoundedCornerShape(24.dp),
-                        style = GlassDefaults.prominentStyle(),
-                        isCategoryBar = true,
-                    ) {
+                    if (categoryBarAlpha > 0.01f) {
+                        val editCategory = LocalEditCategory.current
+                        val syncControlsWithDockRadius by uiPreferences.syncControlsWithDockRadius().collectAsStateWithLifecycle()
+                        val bottomBarCornerRadius by uiPreferences.bottomBarCornerRadius().collectAsStateWithLifecycle()
+                        val bottomControlsCornerRadius by uiPreferences.bottomControlsCornerRadius().collectAsStateWithLifecycle()
+                        val effectiveCornerRadius = if (syncControlsWithDockRadius) bottomBarCornerRadius.dp else bottomControlsCornerRadius.dp
+                        // Main Category Bar Surface
+                        GlassSurface(
+                            shape = RoundedCornerShape(effectiveCornerRadius),
+                            style = GlassDefaults.regularStyle(),
+                            isCategoryBar = false,
+                        ) {
                         Column(
                             modifier = Modifier
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            // Subcategories Row (if present) - Rendered ABOVE Parent Categories
+                            // Subcategories Row (if present) - Rendered ABOVE Parent Categories (True Carousel)
                             if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
-                                Row(
-                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                LazyRow(
+                                    state = subcategoryRowState,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically,
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
                                 ) {
                                     // "All" button
-                                    val allCount = remember(activeParent, state.libraryData.favorites, childrenByParent, kisaraShowItemCountInTabs) {
-                                        if (kisaraShowItemCountInTabs && activeParent != null) {
-                                            val childCategories = childrenByParent[activeParent.id].orEmpty()
-                                            val allCategoryIds = listOf(activeParent.id) + childCategories.map { it.id }
-                                            state.libraryData.favorites.count { item ->
-                                                item.libraryManga.categories.any { it in allCategoryIds }
+                                    item(key = "sub_all") {
+                                        val allCount = remember(activeParent, state.libraryData.favorites, childrenByParent, kisaraShowItemCountInTabs) {
+                                            if (kisaraShowItemCountInTabs && activeParent != null) {
+                                                val childCategories = childrenByParent[activeParent.id].orEmpty()
+                                                val allCategoryIds = listOf(activeParent.id) + childCategories.map { it.id }
+                                                state.libraryData.favorites.count { item ->
+                                                    item.libraryManga.categories.any { it in allCategoryIds }
+                                                }
+                                            } else {
+                                                0
                                             }
-                                        } else {
-                                            0
                                         }
-                                    }
-                                    val allText = if (kisaraShowItemCountInTabs) "All ($allCount)" else "All"
-                                    SubTabButton(
-                                        text = allText,
-                                        selected = activeSubcategoryIdOfActivePage == null,
-                                        onLongClick = { activeParent?.let { editCategory(it) } },
-                                    ) {
-                                        if (showParentFilters) {
-                                            activeSubcategoryId = null
-                                        } else {
-                                            activeParent?.let { parent ->
-                                                val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
-                                                if (actualIndex != -1) {
-                                                    LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                        val allText = if (kisaraShowItemCountInTabs) "All ($allCount)" else "All"
+                                        SubTabButton(
+                                            text = allText,
+                                            selected = activeSubcategoryIdOfActivePage == null,
+                                            carouselStyle = categoryBarCarouselStyle,
+                                            onLongClick = { activeParent?.let { editCategory(it) } },
+                                        ) {
+                                            if (showParentFilters) {
+                                                activeSubcategoryId = null
+                                            } else {
+                                                activeParent?.let { parent ->
+                                                    val actualIndex = state.categories.indexOfFirst { it.id == parent.id }
+                                                    if (actualIndex != -1) {
+                                                        LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                    subcategories.forEach { sub ->
+                                    items(subcategories, key = { it.id }) { sub ->
                                         val subCount = remember(sub, state, kisaraShowItemCountInTabs) {
                                             if (kisaraShowItemCountInTabs) {
                                                 state.getItemCountForCategory(sub, force = true)
@@ -840,10 +887,11 @@ data object LibraryTab : Tab {
                                         SubTabButton(
                                             text = subText,
                                             selected = activeSubcategoryIdOfActivePage == sub.id,
+                                            carouselStyle = categoryBarCarouselStyle,
                                             onLongClick = { editCategory(sub) },
                                         ) {
                                             if (showParentFilters) {
-                                                activeSubcategoryId = sub.id
+                                                activeSubcategoryId = if (activeSubcategoryId == sub.id) null else sub.id
                                             } else {
                                                 val actualIndex = state.categories.indexOfFirst { it.id == sub.id }
                                                 if (actualIndex != -1) {
@@ -855,46 +903,54 @@ data object LibraryTab : Tab {
                                 }
                             }
 
-                            // Parent Categories Row (with Pin on the right)
+                            // Parent Categories Row (with Pin on the right) (True Carousel)
                             Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                tabCategories.forEachIndexed { index, category ->
-                                    val count = remember(category, state.libraryData.favorites, childrenByParent, kisaraShowItemCountInTabs) {
-                                        if (kisaraShowItemCountInTabs) {
-                                            val childCategories = childrenByParent[category.id].orEmpty()
-                                            if (childCategories.isEmpty()) {
-                                                state.getItemCountForCategory(category, force = true)?.toInt() ?: 0
-                                            } else {
-                                                val allCategoryIds = listOf(category.id) + childCategories.map { it.id }
-                                                state.libraryData.favorites.count { item ->
-                                                    item.libraryManga.categories.any { it in allCategoryIds }
+                                LazyRow(
+                                    state = parentCategoryRowState,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                ) {
+                                    itemsIndexed(tabCategories, key = { _, category -> category.id }) { index, category ->
+                                        val count = remember(category, state.libraryData.favorites, childrenByParent, kisaraShowItemCountInTabs) {
+                                            if (kisaraShowItemCountInTabs) {
+                                                val childCategories = childrenByParent[category.id].orEmpty()
+                                                if (childCategories.isEmpty()) {
+                                                    state.getItemCountForCategory(category, force = true)?.toInt() ?: 0
+                                                } else {
+                                                    val allCategoryIds = listOf(category.id) + childCategories.map { it.id }
+                                                    state.libraryData.favorites.count { item ->
+                                                        item.libraryManga.categories.any { it in allCategoryIds }
+                                                    }
                                                 }
+                                            } else {
+                                                0
                                             }
-                                        } else {
-                                            0
                                         }
-                                    }
-                                    val text = if (kisaraShowItemCountInTabs) "${category.visualName} ($count)" else category.visualName
-                                    SubTabButton(
-                                        text = text,
-                                        selected = if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
-                                            val activeParentId = state.categories.getOrNull(state.activeCategoryIndex)?.let {
-                                                if (it.parentId == null) it.id else it.parentId
-                                            }
-                                            category.id == activeParentId
-                                        } else {
-                                            state.activeCategoryIndex == index
-                                        },
-                                        onLongClick = { editCategory(category) },
-                                    ) {
-                                        val actualIndex = state.categories.indexOfFirst { it.id == category.id }
-                                        if (actualIndex != -1) {
-                                            LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                            if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
-                                                activeSubcategoryId = null
+                                        val text = if (kisaraShowItemCountInTabs) "${category.visualName} ($count)" else category.visualName
+                                        SubTabButton(
+                                            text = text,
+                                            selected = if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
+                                                val activeParentId = state.categories.getOrNull(state.activeCategoryIndex)?.let {
+                                                    if (it.parentId == null) it.id else it.parentId
+                                                }
+                                                category.id == activeParentId
+                                            } else {
+                                                state.activeCategoryIndex == index
+                                            },
+                                            carouselStyle = categoryBarCarouselStyle,
+                                            onLongClick = { editCategory(category) },
+                                        ) {
+                                            val actualIndex = state.categories.indexOfFirst { it.id == category.id }
+                                            if (actualIndex != -1) {
+                                                LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
+                                                    activeSubcategoryId = null
+                                                }
                                             }
                                         }
                                     }
@@ -905,7 +961,8 @@ data object LibraryTab : Tab {
                                     imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                                     contentDescription = "Pin category bar",
                                     modifier = Modifier
-                                        .size(12.dp)
+                                        .padding(start = 4.dp)
+                                        .size(14.dp)
                                         .clickable {
                                             scope.launch {
                                                 categoryBarPinnedPref.set(!isCategoryBarPinned)
@@ -1015,13 +1072,13 @@ data object LibraryTab : Tab {
 
             // SY -->
             SyncFavoritesProgressDialog(
-                status = screenModel.favoritesSync.status.collectAsState().value,
+                status = screenModel.favoritesSync.status.collectAsStateWithLifecycle().value,
                 setStatusIdle = { screenModel.favoritesSync.status.value = FavoritesSyncStatus.Idle },
                 openManga = { navigator.push(MangaScreen(it)) },
             )
 
             RecommendationSearchProgressDialog(
-                status = screenModel.recommendationSearch.status.collectAsState().value,
+                status = screenModel.recommendationSearch.status.collectAsStateWithLifecycle().value,
                 setStatusIdle = { screenModel.recommendationSearch.status.value = SearchStatus.Idle },
                 setStatusCancelling = { screenModel.recommendationSearch.status.value = SearchStatus.Cancelling },
             )
@@ -1034,8 +1091,11 @@ data object LibraryTab : Tab {
                 }
             }
 
-            LaunchedEffect(state.selectionMode, state.dialog) {
-                HomeScreen.showBottomNav(!state.selectionMode)
+            LaunchedEffect(Unit) {
+                HomeScreen.showBottomNav(true)
+                androidx.compose.runtime.snapshotFlow { state.selectionMode to state.selection.size }.collect { (selectionMode, size) ->
+                    HomeScreen.showBottomNav(!selectionMode && size == 0)
+                }
             }
 
             LaunchedEffect(state.isLoading) {
@@ -1051,7 +1111,7 @@ data object LibraryTab : Tab {
             }
 
             // SY -->
-            val recSearchState by screenModel.recommendationSearch.status.collectAsState()
+            val recSearchState by screenModel.recommendationSearch.status.collectAsStateWithLifecycle()
             LaunchedEffect(recSearchState) {
                 when (val current = recSearchState) {
                     is SearchStatus.Finished.WithResults -> {
@@ -1080,6 +1140,7 @@ data object LibraryTab : Tab {
             }
         }
     }
+}
 
     // For invoking search from other screen
     private val queryEvent = Channel<String>()
@@ -1088,6 +1149,8 @@ data object LibraryTab : Tab {
     // For opening settings sheet in LibraryController
     private val requestSettingsSheetEvent = Channel<Unit>()
     private suspend fun requestOpenSettingsSheet() = requestSettingsSheetEvent.send(Unit)
+
+    var selectedCategoryIndex: Int = 0
 }
 
 @Composable
@@ -1095,17 +1158,35 @@ private fun SubTabButton(
     text: String,
     selected: Boolean,
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+    carouselStyle: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    val subBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.subBarHeight().collectAsState().value
+    val subBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.subBarHeight().collectAsStateWithLifecycle().value
     val fontSize = (subBarHeight * 0.35f).coerceIn(6f, 14f).sp
+
+    val scale by animateFloatAsState(
+        targetValue = if (selected && carouselStyle) 1.08f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "subTabScale",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (selected || !carouselStyle) 1.0f else 0.72f,
+        animationSpec = tween(150),
+        label = "subTabAlpha",
+    )
+
     androidx.compose.material3.Surface(
         shape = RoundedCornerShape(8.dp),
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
         contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .height(subBarHeight.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,

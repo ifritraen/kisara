@@ -25,15 +25,6 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun Screen.migrateSourceTab(): TabContent {
     val uriHandler = LocalUriHandler.current
-    val navigator = LocalNavigator.currentOrThrow
-    val screenModel = rememberScreenModel { MigrateSourceScreenModel() }
-    val state by screenModel.state.collectAsState()
-
-    LaunchedEffect(Unit) {
-        BrowseTab.migrateHelpEvent.receiveAsFlow().collectLatest {
-            uriHandler.openUri("https://komikku-app.github.io/docs/guides/source-migration")
-        }
-    }
 
     return TabContent(
         titleRes = MR.strings.label_migration,
@@ -47,6 +38,16 @@ fun Screen.migrateSourceTab(): TabContent {
             ),
         ),
         content = { contentPadding, _ ->
+            val navigator = LocalNavigator.currentOrThrow
+            val screenModel = rememberScreenModel { MigrateSourceScreenModel() }
+            val state by screenModel.state.collectAsState()
+
+            LaunchedEffect(Unit) {
+                BrowseTab.migrateHelpEvent.receiveAsFlow().collectLatest {
+                    uriHandler.openUri("https://komikku-app.github.io/docs/guides/source-migration")
+                }
+            }
+
             MigrateSourceScreen(
                 state = state,
                 contentPadding = contentPadding,

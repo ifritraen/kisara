@@ -1,11 +1,11 @@
 package tachiyomi.data.source
 
+import androidx.paging.PagingSource
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.MetadataMangasPage
 import exh.metadata.metadata.RaisedSearchMetadata
-import mihon.domain.manga.model.toDomainManga
 import tachiyomi.core.common.util.QuerySanitizer.sanitize
 import tachiyomi.domain.manga.model.Manga
 
@@ -20,12 +20,12 @@ abstract class EHentaiPagingSource(
         mangasPage as MetadataMangasPage
         val metadata = mangasPage.mangasMetadata
 
-        val manga = mangasPage.mangas
+        val mangaPairs = mangasPage.mangas
             .mapIndexed { index, sManga -> sManga.toDomainManga(source.id) to metadata.getOrNull(index) }
             .filter { seenManga.add(it.first.url) }
-            // KMK -->
-            .let { pairs -> networkToLocalManga(pairs.map { it.first }).zip(pairs.map { it.second }) }
-        // KMK <--
+
+        val localMangas = networkToLocalManga(mangaPairs.map { it.first })
+        val manga = localMangas.zip(mangaPairs.map { it.second })
 
         return LoadResult.Page(
             data = manga,

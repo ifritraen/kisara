@@ -1,8 +1,10 @@
 package eu.kanade.presentation.manga
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -833,6 +835,13 @@ private fun MangaScreenSmallImpl(
                 val layoutDirection = LocalLayoutDirection.current
 
                 Box(modifier = Modifier.fillMaxSize()) {
+                    // Fullscreen dynamic blurred poster backdrop
+                    eu.kanade.presentation.entries.components.EntryPosterBackground(
+                        coverData = state.manga.thumbnailUrl ?: state.manga,
+                        scrollOffset = chapterListState.firstVisibleItemScrollOffset,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
                     // Details Screen Content
                     LazyColumn(
                         modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
@@ -1054,8 +1063,16 @@ private fun MangaScreenSmallImpl(
                     // Floating frosted glass chapters sheet
                     val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
                     val maxHeightPct by uiPreferences.chapterSheetMaxHeightPct().collectAsState()
+                    val targetMaxHeight = maxHeight * (maxHeightPct / 100f)
+                    val estimatedContentHeight = 64.dp + (chapters.size * 56).dp
+                    val calculatedExpandedHeight = if (chapters.isEmpty()) minHeightDp.dp else minOf(targetMaxHeight, maxOf(minHeightDp.dp, estimatedContentHeight))
+
                     val sheetHeight by animateDpAsState(
-                        targetValue = if (isSheetExpanded) maxHeight * (maxHeightPct / 100f) else minHeightDp.dp,
+                        targetValue = if (isSheetExpanded) calculatedExpandedHeight else minHeightDp.dp,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
                         label = "Chapters Sheet Height",
                     )
 

@@ -94,6 +94,39 @@ data object UpdatesTab : Tab {
     override fun Content() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
+        val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
+        val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.NOVEL) {
+            val novelScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel() }
+            val novelState by novelScreenModel.state.collectAsState()
+            eu.kanade.presentation.updates.novel.NovelUpdatesScreen(
+                state = novelState,
+                lastUpdated = novelScreenModel.lastUpdated,
+                onNovelClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(it)) },
+                onChapterClick = { navigator.push(eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(it)) },
+                onToggleSelection = novelScreenModel::toggleSelection,
+                onMultiBookmarkClicked = novelScreenModel::bookmarkUpdates,
+                onMultiMarkAsReadClicked = novelScreenModel::markUpdatesRead,
+            )
+            return
+        }
+
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+            val animeScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel() }
+            val animeState by animeScreenModel.state.collectAsState()
+            eu.kanade.presentation.updates.anime.AnimeUpdatesScreen(
+                state = animeState,
+                onAnimeClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it)) },
+                onPlayClick = { animeId, episodeId ->
+                    val intent = eu.kanade.tachiyomi.ui.player.PlayerActivity.newIntent(context, animeId, episodeId)
+                    context.startActivity(intent)
+                },
+                onToggleSelection = animeScreenModel::toggleSelection,
+            )
+            return
+        }
+
         val screenModel = rememberScreenModel { UpdatesScreenModel() }
         val settingsScreenModel = rememberScreenModel { UpdatesSettingsScreenModel() }
         val state by screenModel.state.collectAsState()
@@ -229,22 +262,7 @@ fun Screen.updatesTab(
             val context = LocalContext.current
             val usePanoramaCover by settingsScreenModel.updatesPreferences.usePanoramaCover().collectAsState()
 
-            val scope = rememberCoroutineScope()
-            val nestedScrollConnection = remember {
-                object : NestedScrollConnection {
-                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                        val delta = available.y
-                        if (delta < -10f) {
-                            scope.launch { HomeScreen.showBottomNav(false) }
-                        } else if (delta > 10f) {
-                            scope.launch { HomeScreen.showBottomNav(true) }
-                        }
-                        return Offset.Zero
-                    }
-                }
-            }
-
-            Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
+            Box(modifier = Modifier) {
                 UpdateScreen(
                     state = state,
                     snackbarHostState = screenModel.snackbarHostState,

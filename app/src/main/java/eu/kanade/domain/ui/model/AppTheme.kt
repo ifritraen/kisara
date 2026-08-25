@@ -43,3 +43,7 @@ enum class AppTheme(val titleRes: StringResource?) {
     PURE_RED(null),
     // SY <--
 }
+
+val AppTheme.isAuroraStyle: Boolean
+    get() = true
+

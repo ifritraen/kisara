@@ -65,6 +65,26 @@ class FetchExternalMetadata(
         metadata
     }
 
+    suspend fun fetchAnime(anime: tachiyomi.domain.entries.anime.model.Anime): MangaExternalMetadata? = withContext(Dispatchers.IO) {
+        val cleanTitle = cleanMangaTitle(anime.title)
+        fetchFromAniListAnime(cleanTitle, anime.id)
+    }
+
+    suspend fun fetchNovel(novel: tachiyomi.domain.entries.novel.model.Novel): MangaExternalMetadata? = withContext(Dispatchers.IO) {
+        val cleanTitle = cleanMangaTitle(novel.title)
+        // 1. MangaUpdates
+        var metadata = fetchFromMangaUpdates(cleanTitle, novel.id)
+        // 2. MangaBaka
+        if (metadata == null) {
+            metadata = fetchFromMangaBaka(cleanTitle, novel.id)
+        }
+        // 3. AniList
+        if (metadata == null) {
+            metadata = fetchFromAniList(cleanTitle, novel.id)
+        }
+        metadata
+    }
+
     private suspend fun fetchFromMangaUpdates(title: String, mangaId: Long): MangaExternalMetadata? {
         return try {
             val mangaUpdates = trackerManager.mangaUpdates
@@ -219,6 +239,86 @@ class FetchExternalMetadata(
         }
     }
 
+    private suspend fun fetchFromAniListAnime(title: String, animeId: Long): MangaExternalMetadata? {
+        return try {
+            val query = """
+                query (${'$'}search: String) {
+                    Media(search: ${'$'}search, type: ANIME) {
+                        id
+                        title {
+                            romaji
+                            english
+                            native
+                        }
+                        averageScore
+                        status
+                        episodes
+                        startDate {
+                            year
+                            month
+                            day
+                        }
+                        genres
+                        tags {
+                            name
+                        }
+                        description
+                    }
+                }
+            """.trimIndent()
+
+            val body = buildJsonObject {
+                put("query", query)
+                put(
+                    "variables",
+                    buildJsonObject {
+                        put("search", title)
+                    },
+                )
+            }
+
+            val request = POST(
+                url = "https://graphql.anilist.co/",
+                body = body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()),
+            )
+            val response = client.newCall(request).awaitSuccess()
+            val alResult = with(json) { response.parseAs<ALMetadataResponse>() }
+            val media = alResult.data?.media ?: return null
+
+            val alTitles = listOfNotNull(media.title?.romaji, media.title?.english, media.title?.native)
+            if (alTitles.isNotEmpty() && !alTitles.any { isMatchingTitle(title, it) }) {
+                return null
+            }
+
+            val score = media.averageScore?.let { it / 10.0 }
+            val status = media.status
+            val startDate = media.startDate?.year?.toString()
+            val totalEpisodes = media.episodes ?: media.chapters
+            val genres = media.genres.orEmpty()
+            val tags = media.tags?.mapNotNull { it.name }.orEmpty()
+            val rawSynopsis = media.description?.htmlDecode()
+            val synopsis = cleanHtmlFormatting(rawSynopsis)
+
+            MangaExternalMetadata(
+                mangaId = animeId,
+                score = score,
+                status = status,
+                startDate = startDate,
+                totalChapters = totalEpisodes,
+                genres = genres,
+                tags = tags,
+                licensor = null,
+                demographic = null,
+                synopsis = synopsis,
+                sourceName = "AniList",
+                fetchedAt = System.currentTimeMillis(),
+            )
+        } catch (e: Throwable) {
+            logcat(LogPriority.DEBUG, e) { "AniList anime metadata fetch failed for: $title" }
+            null
+        }
+    }
+
     private fun cleanHtmlFormatting(html: String?): String? {
         if (html.isNullOrBlank()) return null
         return html
@@ -288,6 +388,7 @@ private data class ALMediaItem(
     val averageScore: Int? = null,
     val status: String? = null,
     val chapters: Int? = null,
+    val episodes: Int? = null,
     val startDate: ALFuzzyDate? = null,
     val genres: List<String>? = null,
     val tags: List<ALTagItem>? = null,

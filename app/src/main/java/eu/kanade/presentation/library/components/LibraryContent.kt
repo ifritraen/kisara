@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -187,12 +188,37 @@ fun LibraryContent(
             val isCollapsed = activeParent?.id?.let { it in collapsedParentIds } ?: false
             val isExcludingSubcategories = activeParent?.id?.let { it in excludeSubcategoriesParentIds } ?: false
 
+            val subLazyRowState = rememberLazyListState()
+
             // Reset activeSubcategoryId if no subcategories for current parent
             LaunchedEffect(subcategoriesForActiveParent) {
                 if (subcategoriesForActiveParent.isEmpty()) {
                     onSubcategorySelected(null)
                 }
             }
+
+            // KMK --> ponytail: auto-center selected subcategory in top chip carousel
+            LaunchedEffect(activeSubcategoryId, subcategoriesForActiveParent.size) {
+                if (subcategoriesForActiveParent.isNotEmpty()) {
+                    val activeIndex = if (activeSubcategoryId == null) {
+                        0
+                    } else {
+                        val idx = subcategoriesForActiveParent.indexOfFirst { it.id == activeSubcategoryId }
+                        if (idx != -1) idx + 1 else 0
+                    }
+                    val layoutInfo = subLazyRowState.layoutInfo
+                    val visibleItems = layoutInfo.visibleItemsInfo
+                    val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                    val targetItem = visibleItems.firstOrNull { it.index == activeIndex }
+                    if (targetItem != null && viewportWidth > 0) {
+                        val offset = (viewportWidth - targetItem.size) / 2
+                        subLazyRowState.animateScrollToItem(activeIndex, -offset)
+                    } else {
+                        subLazyRowState.animateScrollToItem(activeIndex)
+                    }
+                }
+            }
+            // KMK <--
 
             // Animated visibility for subcategory chips with smooth expand/collapse
             AnimatedVisibility(
@@ -207,13 +233,14 @@ fun LibraryContent(
                 ) + fadeOut(animationSpec = tween(durationMillis = 300)),
             ) {
                 LazyRow(
+                    state = subLazyRowState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = MaterialTheme.padding.medium),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 ) {
                     // "All" chip with integrated exclude mode toggle
-                    item {
+                    item(key = "subcategory_all", contentType = "subcategory_chip") {
                         FilterChip(
                             selected = activeSubcategoryId == null,
                             onClick = {
@@ -255,7 +282,11 @@ fun LibraryContent(
                     }
 
                     // Subcategory chips
-                    items(subcategoriesForActiveParent) { sub ->
+                    items(
+                        subcategoriesForActiveParent,
+                        key = { it.id },
+                        contentType = { "subcategory_chip" },
+                    ) { sub ->
                         val selected = activeSubcategoryId == sub.id
                         FilterChip(
                             selected = selected,
@@ -289,150 +320,101 @@ fun LibraryContent(
                 }
             },
         ) {
-            // Wrapper function to handle item fetching based on parent filter state
-            val wrappedGetItemsForCategory: (Category) -> List<LibraryItem> = { pageCategory ->
-                if (showParentFilters) {
-                    val isExcludingSubcategories = pageCategory.id in excludeSubcategoriesParentIds
-
-                    // Parent filters enabled: respect subcategory selection
-                    val selectedSub = activeSubcategoryId?.let { id ->
-                        categories.firstOrNull { it.id == id }
-                    }
-
-                    if (selectedSub != null && selectedSub.parentId == pageCategory.id) {
-                        // Show only the selected subcategory's items
-                        getItemsForCategory(selectedSub)
-                    } else if (activeSubcategoryId == null) {
-                        // "All" selected
-                        if (isExcludingSubcategories) {
-                            // Exclude mode: show only parent's own items (no subcategory items)
-                            getItemsForCategory(pageCategory)
-                        } else {
-                            // Include mode: merge parent + all subcategory items (deduped) and sort by parent category sort
-                            val parentItems = getItemsForCategory(pageCategory)
-                            val children = childrenByParent[pageCategory.id].orEmpty()
-                            val childItems = children.flatMap { child -> getItemsForCategory(child) }
-
-                            val seen = mutableSetOf<Long>()
-                            val merged = mutableListOf<LibraryItem>()
-                            (parentItems + childItems).forEach { item ->
-                                val mangaId = item.libraryManga.manga.id
-                                if (seen.add(mangaId)) merged.add(item)
-                            }
-
-                            val sort = pageCategory.sort
-                            if (merged.size > 1) {
-                                val sortAlpha: (LibraryItem, LibraryItem) -> Int = { m1, m2 ->
-                                    val t1 = m1.libraryManga.manga.title.lowercase()
-                                    val t2 = m2.libraryManga.manga.title.lowercase()
-                                    t1.compareToWithCollator(t2)
-                                }
-                                val comp = Comparator<LibraryItem> { manga1, manga2 ->
-                                    when (sort.type) {
-                                        tachiyomi.domain.library.model.LibrarySort.Type.Alphabetical -> sortAlpha(manga1, manga2)
-                                        tachiyomi.domain.library.model.LibrarySort.Type.LastRead -> manga1.libraryManga.lastRead.compareTo(manga2.libraryManga.lastRead)
-                                        tachiyomi.domain.library.model.LibrarySort.Type.LastUpdate -> manga1.libraryManga.manga.lastUpdate.compareTo(manga2.libraryManga.manga.lastUpdate)
-                                        tachiyomi.domain.library.model.LibrarySort.Type.UnreadCount -> when {
-                                            manga1.libraryManga.unreadCount == manga2.libraryManga.unreadCount -> 0
-                                            manga1.libraryManga.unreadCount == 0L -> if (sort.isAscending) 1 else -1
-                                            manga2.libraryManga.unreadCount == 0L -> if (sort.isAscending) -1 else 1
-                                            else -> manga1.libraryManga.unreadCount.compareTo(manga2.libraryManga.unreadCount)
-                                        }
-                                        tachiyomi.domain.library.model.LibrarySort.Type.TotalChapters -> manga1.libraryManga.totalChapters.compareTo(manga2.libraryManga.totalChapters)
-                                        tachiyomi.domain.library.model.LibrarySort.Type.LatestChapter -> manga1.libraryManga.latestUpload.compareTo(manga2.libraryManga.latestUpload)
-                                        tachiyomi.domain.library.model.LibrarySort.Type.ChapterFetchDate -> manga1.libraryManga.chapterFetchedAt.compareTo(manga2.libraryManga.chapterFetchedAt)
-                                        tachiyomi.domain.library.model.LibrarySort.Type.DateAdded -> manga1.libraryManga.manga.dateAdded.compareTo(manga2.libraryManga.manga.dateAdded)
-                                        else -> sortAlpha(manga1, manga2)
-                                    }
-                                }
-                                val finalComp = (if (sort.isAscending) comp else comp.reversed()).thenComparator(sortAlpha)
-                                merged.sortedWith(finalComp)
-                            } else {
-                                merged
-                            }
-                        }
-                    } else {
-                        // Subcategory selected but doesn't belong to current parent
-                        getItemsForCategory(pageCategory)
-                    }
-                } else {
-                    getItemsForCategory(pageCategory)
-                }
+            val cachedCategoryItems = remember(
+                categories,
+                activeSubcategoryId,
+                excludeSubcategoriesParentIds,
+                showParentFilters,
+                parentCategories,
+                childrenByParent,
+                getItemsForCategory,
+            ) {
+                mutableMapOf<Long, List<LibraryItem>>()
             }
 
-            var containerHeight by remember { mutableIntStateOf(0) }
-            var touchY by remember { mutableFloatStateOf(0f) }
-            var totalDragX by remember { mutableFloatStateOf(0f) }
-            var isDragHandled by remember { mutableStateOf(false) }
+            // KMK --> ponytail: remember lambda to avoid closure re-allocation on recomposition
+            val wrappedGetItemsForCategory: (Category) -> List<LibraryItem> = remember(
+                cachedCategoryItems, showParentFilters, parentCategories,
+                activeSubcategoryId, excludeSubcategoriesParentIds,
+                categories, childrenByParent, getItemsForCategory,
+            ) { { pageCategory: Category ->
+                cachedCategoryItems.getOrPut(pageCategory.id) {
+                    if (showParentFilters && parentCategories.isNotEmpty()) {
+                        val isExcludingSubcategories = pageCategory.id in excludeSubcategoriesParentIds
 
-            val activeParentForSwipe = tabCategories.getOrNull(pagerState.currentPage)
-            val subcategoriesForSwipe = activeParentForSwipe?.let { childrenByParent[it.id] }.orEmpty()
+                        // Parent filters enabled: respect subcategory selection
+                        val selectedSub = activeSubcategoryId?.let { id ->
+                            categories.firstOrNull { it.id == id }
+                        }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onSizeChanged { containerHeight = it.height }
-                    .pointerInput(pagerState.currentPage, activeSubcategoryId, subcategoriesForSwipe) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                touchY = offset.y
-                                totalDragX = 0f
-                                isDragHandled = false
-                            },
-                            onDragEnd = {
-                                totalDragX = 0f
-                                isDragHandled = false
-                            },
-                            onDragCancel = {
-                                totalDragX = 0f
-                                isDragHandled = false
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                totalDragX += dragAmount
-                                if (!isDragHandled && kotlin.math.abs(totalDragX) > 60f) {
-                                    isDragHandled = true
-                                    val isTopHalf = touchY < (containerHeight / 2f)
-                                    val isLeftSwipe = totalDragX < 0
+                        if (selectedSub != null && selectedSub.parentId == pageCategory.id) {
+                            // Show only the selected subcategory's items
+                            getItemsForCategory(selectedSub)
+                        } else if (activeSubcategoryId == null) {
+                            if (isExcludingSubcategories) {
+                                // Exclude mode: show only parent's own items (no subcategory items)
+                                getItemsForCategory(pageCategory)
+                            } else {
+                                // Include mode: merge parent + all subcategory items (deduped) and sort by parent category sort
+                                val parentItems = getItemsForCategory(pageCategory)
+                                val children = childrenByParent[pageCategory.id].orEmpty()
+                                if (children.isEmpty()) {
+                                    parentItems
+                                } else {
+                                    val childItems = children.flatMap { child -> getItemsForCategory(child) }
 
-                                    if (isTopHalf) {
-                                        // Top Half: Direct parent category swipe
-                                        scope.launch {
-                                            if (isLeftSwipe && pagerState.currentPage < pagerState.pageCount - 1) {
-                                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                            } else if (!isLeftSwipe && pagerState.currentPage > 0) {
-                                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                    val seen = mutableSetOf<Long>()
+                                    val merged = mutableListOf<LibraryItem>()
+                                    (parentItems + childItems).forEach { item ->
+                                        val mangaId = item.libraryManga.manga.id
+                                        if (seen.add(mangaId)) merged.add(item)
+                                    }
+
+                                    val sort = pageCategory.sort
+                                    if (merged.size > 1) {
+                                        val sortAlpha: (LibraryItem, LibraryItem) -> Int = { m1, m2 ->
+                                            val t1 = m1.libraryManga.manga.title.lowercase()
+                                            val t2 = m2.libraryManga.manga.title.lowercase()
+                                            t1.compareToWithCollator(t2)
+                                        }
+                                        val comp = Comparator<LibraryItem> { manga1, manga2 ->
+                                            when (sort.type) {
+                                                tachiyomi.domain.library.model.LibrarySort.Type.Alphabetical -> sortAlpha(manga1, manga2)
+                                                tachiyomi.domain.library.model.LibrarySort.Type.LastRead -> manga1.libraryManga.lastRead.compareTo(manga2.libraryManga.lastRead)
+                                                tachiyomi.domain.library.model.LibrarySort.Type.LastUpdate -> manga1.libraryManga.manga.lastUpdate.compareTo(manga2.libraryManga.manga.lastUpdate)
+                                                tachiyomi.domain.library.model.LibrarySort.Type.UnreadCount -> when {
+                                                    manga1.libraryManga.unreadCount == manga2.libraryManga.unreadCount -> 0
+                                                    manga1.libraryManga.unreadCount == 0L -> if (sort.isAscending) 1 else -1
+                                                    manga2.libraryManga.unreadCount == 0L -> if (sort.isAscending) -1 else 1
+                                                    else -> manga1.libraryManga.unreadCount.compareTo(manga2.libraryManga.unreadCount)
+                                                }
+                                                tachiyomi.domain.library.model.LibrarySort.Type.TotalChapters -> manga1.libraryManga.totalChapters.compareTo(manga2.libraryManga.totalChapters)
+                                                tachiyomi.domain.library.model.LibrarySort.Type.LatestChapter -> manga1.libraryManga.latestUpload.compareTo(manga2.libraryManga.latestUpload)
+                                                tachiyomi.domain.library.model.LibrarySort.Type.ChapterFetchDate -> manga1.libraryManga.chapterFetchedAt.compareTo(manga2.libraryManga.chapterFetchedAt)
+                                                tachiyomi.domain.library.model.LibrarySort.Type.DateAdded -> manga1.libraryManga.manga.dateAdded.compareTo(manga2.libraryManga.manga.dateAdded)
+                                                else -> sortAlpha(manga1, manga2)
                                             }
                                         }
+                                        val finalComp = (if (sort.isAscending) comp else comp.reversed()).thenComparator(sortAlpha)
+                                        merged.sortedWith(finalComp)
                                     } else {
-                                        // Bottom Half: Subcategory swipe
-                                        scope.launch {
-                                            val subcategoryList = listOf<Long?>(null) + subcategoriesForSwipe.map { it.id }
-                                            val currentIndex = subcategoryList.indexOf(activeSubcategoryId).coerceAtLeast(0)
-
-                                            if (isLeftSwipe) {
-                                                if (currentIndex < subcategoryList.lastIndex) {
-                                                    onSubcategorySelected(subcategoryList[currentIndex + 1])
-                                                } else if (pagerState.currentPage < pagerState.pageCount - 1) {
-                                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                                    onSubcategorySelected(null)
-                                                }
-                                            } else {
-                                                if (currentIndex > 0) {
-                                                    onSubcategorySelected(subcategoryList[currentIndex - 1])
-                                                } else if (pagerState.currentPage > 0) {
-                                                    val targetPage = pagerState.currentPage - 1
-                                                    val prevParent = tabCategories.getOrNull(targetPage)
-                                                    val prevSubs = prevParent?.let { childrenByParent[it.id] }.orEmpty()
-                                                    pagerState.animateScrollToPage(targetPage)
-                                                    onSubcategorySelected(prevSubs.lastOrNull()?.id)
-                                                }
-                                            }
-                                        }
+                                        merged
                                     }
                                 }
-                            },
-                        )
-                    },
+                            }
+                        } else {
+                            // Subcategory selected but doesn't belong to current parent
+                            getItemsForCategory(pageCategory)
+                        }
+                    } else {
+                        getItemsForCategory(pageCategory)
+                    }
+                }
+            } }
+            // KMK <--
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
             ) {
                 LibraryPager(
                     state = pagerState,

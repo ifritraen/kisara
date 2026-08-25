@@ -1,134 +1,34 @@
 package eu.kanade.tachiyomi.ui.category
 
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.util.fastMap
-import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.presentation.category.CategoryScreen
-import eu.kanade.presentation.category.components.CategoryCreateDialog
-import eu.kanade.presentation.category.components.CategoryDeleteDialog
-import eu.kanade.presentation.category.components.CategoryRenameDialog
+import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.util.system.toast
-import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.collectLatest
-import tachiyomi.domain.category.model.Category
-import tachiyomi.presentation.core.screens.LoadingScreen
+import eu.kanade.tachiyomi.ui.category.anime.animeCategoryTab
+import eu.kanade.tachiyomi.ui.category.manga.mangaCategoryTab
+import eu.kanade.tachiyomi.ui.category.novel.novelCategoryTab
+import kotlinx.collections.immutable.persistentListOf
+import tachiyomi.i18n.MR
 
-class CategoryScreen : Screen() {
+class CategoryScreen(private val initialTab: Int = 0) : Screen() {
 
     @Composable
     override fun Content() {
-        val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
-        val screenModel = rememberScreenModel { CategoryScreenModel() }
+        val tabs = persistentListOf(
+            mangaCategoryTab(),
+            animeCategoryTab(),
+            novelCategoryTab(),
+        )
+        val state = rememberPagerState(initialPage = initialTab) { tabs.size }
 
-        val state by screenModel.state.collectAsState()
-
-        if (state is CategoryScreenState.Loading) {
-            LoadingScreen()
-            return
-        }
-
-        val successState = state as CategoryScreenState.Success
-
-        // KMK --> Add expand/collapse state management
-        val expanded = remember { mutableStateOf(setOf<Long>()) }
-
-        fun toggle(categoryId: Long) {
-            expanded.value =
-                if (expanded.value.contains(categoryId)) {
-                    expanded.value - categoryId
-                } else {
-                    expanded.value + categoryId
-                }
-        }
-        // KMK <--
-
-        CategoryScreen(
-            state = successState,
-            onClickCreate = { screenModel.showDialog(CategoryDialog.Create) },
-            onClickRename = { screenModel.showDialog(CategoryDialog.Rename(it)) },
-            onClickDelete = { screenModel.showDialog(CategoryDialog.Delete(it)) },
-            onChangeOrder = screenModel::changeOrder,
-            onChangeParent = screenModel::changeParent,
-            // KMK -->
-            onClickHide = screenModel::hideCategory,
-            onCommitOrder = { changes -> screenModel.changeOrderBatch(changes) },
-            expanded = expanded.value,
-            onToggleExpand = ::toggle,
-            // KMK <--
+        TabbedScreen(
+            titleRes = MR.strings.categories,
+            tabs = tabs,
+            state = state,
             navigateUp = navigator::pop,
         )
-
-        when (val dialog = successState.dialog) {
-            null -> {}
-            CategoryDialog.Create -> {
-                CategoryCreateDialog(
-                    onDismissRequest = screenModel::dismissDialog,
-                    onCreate = screenModel::createCategory,
-                    categories = successState.categories.fastMap { it.name }.toImmutableList(),
-                    parentOptions = successState.categories
-                        .filter { it.parentId == null }
-                        .filterNot { it.isSystemCategory }
-                        .toImmutableList(),
-                )
-            }
-            is CategoryDialog.Rename -> {
-                CategoryRenameDialog(
-                    onDismissRequest = screenModel::dismissDialog,
-                    onRename = { newName, parentId -> screenModel.renameCategory(dialog.category, newName, parentId) },
-                    categories = successState.categories.fastMap { it.name }.toImmutableList(),
-                    category = dialog.category.name,
-                    parentOptions = successState.categories
-                        .filterNot { candidate ->
-                            // Can't be: itself, a system category, a descendant of this category, or a subcategory
-                            candidate.id == dialog.category.id ||
-                                candidate.isSystemCategory ||
-                                candidate.parentId != null ||
-                                // Exclude subcategories (only show parent categories)
-                                isDescendantOf(candidate, dialog.category, successState.categories)
-                        }
-                        .toImmutableList(),
-                    initialParentId = dialog.category.parentId,
-                    categoryHasChildren = hasCategoryChildren(dialog.category, successState.categories),
-                )
-            }
-            is CategoryDialog.Delete -> {
-                CategoryDeleteDialog(
-                    onDismissRequest = screenModel::dismissDialog,
-                    onDelete = { screenModel.deleteCategory(dialog.category.id) },
-                    category = dialog.category.name,
-                )
-            }
-        }
-
-        LaunchedEffect(Unit) {
-            screenModel.events.collectLatest { event ->
-                if (event is CategoryEvent.LocalizedMessage) {
-                    context.toast(event.stringRes)
-                }
-            }
-        }
     }
-}
-
-private fun hasCategoryChildren(category: Category, allCategories: List<Category>): Boolean {
-    return allCategories.any { it.parentId == category.id }
-}
-
-private fun isDescendantOf(candidate: Category, parent: Category, allCategories: List<Category>): Boolean {
-    var currentParentId = candidate.parentId
-    while (currentParentId != null) {
-        if (currentParentId == parent.id) return true
-        currentParentId = allCategories.firstOrNull { it.id == currentParentId }?.parentId
-    }
-    return false
 }

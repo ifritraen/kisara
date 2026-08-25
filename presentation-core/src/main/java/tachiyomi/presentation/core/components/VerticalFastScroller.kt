@@ -71,6 +71,8 @@ fun VerticalFastScroller(
     topContentPadding: Dp = Dp.Hairline,
     bottomContentPadding: Dp = Dp.Hairline,
     endContentPadding: Dp = Dp.Hairline,
+    onThumbDragStarted: (() -> Unit)? = null,
+    onThumbDragStateChanged: ((Boolean) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     SubcomposeLayout(modifier = modifier) { constraints ->
@@ -88,6 +90,12 @@ fun VerticalFastScroller(
 
             val dragInteractionSource = remember { MutableInteractionSource() }
             val isThumbDragged by dragInteractionSource.collectIsDraggedAsState()
+            LaunchedEffect(isThumbDragged) {
+                onThumbDragStateChanged?.invoke(isThumbDragged)
+                if (isThumbDragged) {
+                    onThumbDragStarted?.invoke()
+                }
+            }
             val scrolled = remember {
                 MutableSharedFlow<Unit>(
                     extraBufferCapacity = 1,

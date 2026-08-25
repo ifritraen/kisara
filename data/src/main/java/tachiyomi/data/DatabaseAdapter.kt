@@ -27,3 +27,35 @@ object UpdateStrategyColumnAdapter : ColumnAdapter<UpdateStrategy, Long> {
 
     override fun encode(value: UpdateStrategy): Long = value.ordinal.toLong()
 }
+
+typealias MangaUpdateStrategyColumnAdapter = UpdateStrategyColumnAdapter
+
+object AnimeUpdateStrategyColumnAdapter : ColumnAdapter<eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy, Long> {
+    override fun decode(databaseValue: Long): eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy =
+        eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy.entries.getOrElse(databaseValue.toInt()) { eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy.ALWAYS_UPDATE }
+
+    override fun encode(value: eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy): Long = value.ordinal.toLong()
+}
+
+object FetchTypeColumnAdapter : ColumnAdapter<eu.kanade.tachiyomi.animesource.model.FetchType, Long> {
+    override fun decode(databaseValue: Long): eu.kanade.tachiyomi.animesource.model.FetchType =
+        eu.kanade.tachiyomi.animesource.model.FetchType.entries.getOrElse(databaseValue.toInt()) { eu.kanade.tachiyomi.animesource.model.FetchType.Episodes }
+
+    override fun encode(value: eu.kanade.tachiyomi.animesource.model.FetchType): Long = value.ordinal.toLong()
+}
+
+object MemoColumnAdapter : ColumnAdapter<kotlinx.serialization.json.JsonObject, ByteArray> {
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    override fun decode(databaseValue: ByteArray): kotlinx.serialization.json.JsonObject {
+        return try {
+            json.decodeFromString(kotlinx.serialization.json.JsonObject.serializer(), databaseValue.decodeToString())
+        } catch (_: Exception) {
+            kotlinx.serialization.json.JsonObject(emptyMap())
+        }
+    }
+
+    override fun encode(value: kotlinx.serialization.json.JsonObject): ByteArray {
+        return json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), value).encodeToByteArray()
+    }
+}

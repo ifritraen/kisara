@@ -110,6 +110,8 @@ private val ContinueReadingButtonListSpacing = 8.dp
 
 internal const val GRID_SELECTED_COVER_ALPHA = 0.76f
 
+private val TITLE_NUMBER_REGEX = Regex("(\\d+)$")
+
 /**
  * Layout of grid list item with title overlaying the cover.
  * Accepts null [title] for a cover-only view.
@@ -147,67 +149,44 @@ fun MangaCompactGridItem(
         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
     }
 
-    val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
-    var cachedExternalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
-    LaunchedEffect(manga?.id) {
-        val id = manga?.id ?: return@LaunchedEffect
-        cachedExternalMetadata = getMangaExternalMetadata.await(id)
-    }
+    val finalBadgeStart: (@Composable RowScope.() -> Unit)? = coverBadgeStart
 
-    val finalBadgeStart: @Composable RowScope.() -> Unit = {
-        val score = cachedExternalMetadata?.score?.takeIf { it > 0.0 }
-        val status = cachedExternalMetadata?.status?.takeIf { it.isNotBlank() }
+    val finalBadgeEnd: (@Composable RowScope.() -> Unit)? = if (coverBadgeEnd != null) {
+        coverBadgeEnd
+    } else {
+        val hasColor = parsed.isColorized
+        val hasUncensored = parsed.isUncensored
+        val lang = parsed.languageCode
 
-        if (score != null && status != null) {
-            androidx.compose.foundation.layout.Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
-            ) {
-                ScoreBadge(score = score)
-                ExternalStatusBadge(status = status)
-            }
-        } else {
-            score?.let { ScoreBadge(score = it) }
-            status?.let { ExternalStatusBadge(status = it) }
-        }
-
-        if (coverBadgeStart != null) {
-            coverBadgeStart()
-        }
-    }
-
-    val finalBadgeEnd: @Composable RowScope.() -> Unit = {
-        if (coverBadgeEnd != null) {
-            coverBadgeEnd()
-        } else {
-            val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
-            val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
-            val lang = parsed.languageCode ?: eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, rawTitle)
-
-            if (lang != null || hasColor) {
-                androidx.compose.foundation.layout.Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
-                ) {
-                    if (lang != null) {
-                        LanguageBadge(isLocal = false, sourceLanguage = lang)
-                    }
-                    if (hasColor) {
-                        ColorizedBadge()
+        if (lang != null || hasColor || hasUncensored) {
+            {
+                if (lang != null || hasColor) {
+                    androidx.compose.foundation.layout.Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+                    ) {
+                        if (lang != null) {
+                            LanguageBadge(isLocal = false, sourceLanguage = lang)
+                        }
+                        if (hasColor) {
+                            ColorizedBadge()
+                        }
                     }
                 }
-            }
 
-            if (hasUncensored) {
-                UncensoredBadge()
+                if (hasUncensored) {
+                    UncensoredBadge()
+                }
             }
+        } else {
+            null
         }
     }
 
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
-    val normalStyleKey by uiPreferences.normalCardStyle().collectAsState()
+    val normalStyleKey = remember { uiPreferences.normalCardStyle().get() }
     val normalStyle = remember(normalStyleKey) { eu.kanade.presentation.components.cards.NormalCardStyle.fromKey(normalStyleKey) }
-    val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+    val coverTitleStyleKey = remember { uiPreferences.kisaraCoverTitleStyle().get() }
 
     if (normalStyle != eu.kanade.presentation.components.cards.NormalCardStyle.DEFAULT) {
         eu.kanade.presentation.components.cards.KisaraNormalCard(
@@ -298,7 +277,7 @@ private fun BoxScope.CoverTextOverlay(
     onClickContinueReading: (() -> Unit)? = null,
 ) {
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
-    val titleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+    val titleStyleKey = remember { uiPreferences.kisaraCoverTitleStyle().get() }
     val params = remember(titleStyleKey) { getCoverTitleParams(titleStyleKey) }
 
     Box(
@@ -345,7 +324,7 @@ private fun BoxScope.CoverTextOverlay(
                     ),
                 )
             }
-            val numberMatch = remember(title) { Regex("(\\d+)$").find(title) }
+            val numberMatch = remember(title) { TITLE_NUMBER_REGEX.find(title) }
             val endingNumber = numberMatch?.groupValues?.get(1)
             val cleanTitleText = remember(title, endingNumber) {
                 if (endingNumber != null && title.endsWith(endingNumber)) {
@@ -441,7 +420,7 @@ fun MangaComfortableGridItem(
     val cleanTitle = parsed.cleanTitle
     val isNsfw = remember(manga, cleanTitle) { eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(manga, cleanTitle) }
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
-    val blurNsfwCovers by uiPreferences.kisaraBlurNsfwCovers().collectAsState()
+    val blurNsfwCovers = remember { uiPreferences.kisaraBlurNsfwCovers().get() }
     val shouldBlur = isNsfw && blurNsfwCovers
     val artistAuthorText = remember(parsed) {
         val parts = mutableListOf<String>()
@@ -450,66 +429,43 @@ fun MangaComfortableGridItem(
         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
     }
 
-    val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
-    var cachedExternalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
-    LaunchedEffect(manga?.id) {
-        val id = manga?.id ?: return@LaunchedEffect
-        cachedExternalMetadata = getMangaExternalMetadata.await(id)
-    }
+    val finalBadgeStart: (@Composable RowScope.() -> Unit)? = coverBadgeStart
 
-    val finalBadgeStart: @Composable RowScope.() -> Unit = {
-        val score = cachedExternalMetadata?.score?.takeIf { it > 0.0 }
-        val status = cachedExternalMetadata?.status?.takeIf { it.isNotBlank() }
+    val finalBadgeEnd: (@Composable RowScope.() -> Unit)? = if (coverBadgeEnd != null) {
+        coverBadgeEnd
+    } else {
+        val hasColor = parsed.isColorized
+        val hasUncensored = parsed.isUncensored
+        val lang = parsed.languageCode
 
-        if (score != null && status != null) {
-            androidx.compose.foundation.layout.Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
-            ) {
-                ScoreBadge(score = score)
-                ExternalStatusBadge(status = status)
-            }
-        } else {
-            score?.let { ScoreBadge(score = it) }
-            status?.let { ExternalStatusBadge(status = it) }
-        }
-
-        if (coverBadgeStart != null) {
-            coverBadgeStart()
-        }
-    }
-
-    val finalBadgeEnd: @Composable RowScope.() -> Unit = {
-        if (coverBadgeEnd != null) {
-            coverBadgeEnd()
-        } else {
-            val hasColor = parsed.isColorized || eu.kanade.tachiyomi.util.MangaTitleParser.isColorized(manga, rawTitle)
-            val hasUncensored = parsed.isUncensored || eu.kanade.tachiyomi.util.MangaTitleParser.isUncensored(manga, rawTitle)
-            val lang = parsed.languageCode ?: eu.kanade.tachiyomi.util.MangaTitleParser.getLanguageCode(manga, rawTitle)
-
-            if (lang != null || hasColor) {
-                androidx.compose.foundation.layout.Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
-                ) {
-                    if (lang != null) {
-                        LanguageBadge(isLocal = false, sourceLanguage = lang)
-                    }
-                    if (hasColor) {
-                        ColorizedBadge()
+        if (lang != null || hasColor || hasUncensored) {
+            {
+                if (lang != null || hasColor) {
+                    androidx.compose.foundation.layout.Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp),
+                    ) {
+                        if (lang != null) {
+                            LanguageBadge(isLocal = false, sourceLanguage = lang)
+                        }
+                        if (hasColor) {
+                            ColorizedBadge()
+                        }
                     }
                 }
-            }
 
-            if (hasUncensored) {
-                UncensoredBadge()
+                if (hasUncensored) {
+                    UncensoredBadge()
+                }
             }
+        } else {
+            null
         }
     }
 
-    val normalStyleKey by uiPreferences.normalCardStyle().collectAsState()
+    val normalStyleKey = remember { uiPreferences.normalCardStyle().get() }
     val normalStyle = remember(normalStyleKey) { eu.kanade.presentation.components.cards.NormalCardStyle.fromKey(normalStyleKey) }
-    val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+    val coverTitleStyleKey = remember { uiPreferences.kisaraCoverTitleStyle().get() }
 
     if (normalStyle != eu.kanade.presentation.components.cards.NormalCardStyle.DEFAULT) {
         eu.kanade.presentation.components.cards.KisaraNormalCard(
@@ -730,10 +686,9 @@ private fun GridItemTitle(
     titleStyleKey: String = "default",
 ) {
     val params = remember(titleStyleKey) { getCoverTitleParams(titleStyleKey) }
-    var displayTitle by remember(title) { mutableStateOf(title) }
     Text(
         modifier = modifier,
-        text = displayTitle,
+        text = title,
         fontSize = params.fontSize,
         lineHeight = params.lineHeight,
         letterSpacing = params.letterSpacing,
@@ -741,23 +696,6 @@ private fun GridItemTitle(
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         style = style,
-        onTextLayout = { textLayoutResult ->
-            if (textLayoutResult.hasVisualOverflow) {
-                val numberMatch = Regex("(\\d+)$").find(title)
-                if (numberMatch != null) {
-                    val numbers = numberMatch.groupValues[1]
-                    val lastLineIndex = (textLayoutResult.lineCount - 1).coerceAtMost(maxLines - 1)
-                    if (lastLineIndex >= 0) {
-                        val lastLineEndIndex = textLayoutResult.getLineEnd(lastLineIndex)
-                        val safeCut = (lastLineEndIndex - numbers.length - 3).coerceAtLeast(0)
-                        val newTitle = title.substring(0, safeCut) + "…" + numbers
-                        if (newTitle != displayTitle) {
-                            displayTitle = newTitle
-                        }
-                    }
-                }
-            }
-        },
     )
 }
 
@@ -773,17 +711,10 @@ private fun GridItemSelectable(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
-
     Box(
         modifier = modifier
-            .graphicsLayer(scaleX = scale, scaleY = scale)
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
-                interactionSource = interactionSource,
-                indication = LocalIndication.current,
                 onClick = onClick,
                 onLongClick = onLongClick,
                 onDoubleClick = onDoubleClick,
@@ -868,10 +799,14 @@ fun MangaListItem(
     }
 
     val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
-    var cachedExternalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    var cachedExternalMetadata by remember(manga?.id) {
+        mutableStateOf(manga?.id?.let { getMangaExternalMetadata.getFromCache(it) })
+    }
     LaunchedEffect(manga?.id) {
         val id = manga?.id ?: return@LaunchedEffect
-        cachedExternalMetadata = getMangaExternalMetadata.await(id)
+        if (cachedExternalMetadata == null) {
+            cachedExternalMetadata = getMangaExternalMetadata.await(id)
+        }
     }
 
     val finalBadge: @Composable RowScope.() -> Unit = {

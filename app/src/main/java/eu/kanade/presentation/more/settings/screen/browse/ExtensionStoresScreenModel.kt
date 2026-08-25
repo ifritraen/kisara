@@ -5,28 +5,30 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.ExtensionManager
-import kotlinx.coroutines.flow.collectLatest
+import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
+import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import mihon.domain.extension.interactor.AddExtensionStore
-import mihon.domain.extension.interactor.GetExtensionStores
-import mihon.domain.extension.interactor.RemoveExtensionStore
 import mihon.domain.extension.interactor.UpdateExtensionStores
 import mihon.domain.extension.model.ExtensionStore
+import mihon.domain.extension.repository.ExtensionStoreRepository
+import mihon.domain.extensionstore.anime.repository.AnimeExtensionStoreRepository
+import mihon.domain.extensionstore.novel.repository.NovelExtensionStoreRepository
 import tachiyomi.core.common.util.lang.launchIO
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class ExtensionStoresScreenModel(
-    private val getExtensionStores: GetExtensionStores = Injekt.get(),
-    private val addExtensionStore: AddExtensionStore = Injekt.get(),
-    private val removeExtensionStore: RemoveExtensionStore = Injekt.get(),
+    private val mangaRepo: ExtensionStoreRepository = Injekt.get(),
+    private val animeRepo: AnimeExtensionStoreRepository = Injekt.get(),
+    private val novelRepo: NovelExtensionStoreRepository = Injekt.get(),
     private val updateExtensionStores: UpdateExtensionStores = Injekt.get(),
     private val extensionManager: ExtensionManager = Injekt.get(),
-    // KMK -->
+    private val animeExtensionManager: AnimeExtensionManager = Injekt.get(),
+    private val novelExtensionManager: NovelExtensionManager = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
-    // KMK <--
 ) : StateScreenModel<ExtensionStoreScreenState>(ExtensionStoreScreenState.Loading) {
 
     private inline fun updateSuccessState(
@@ -42,23 +44,31 @@ class ExtensionStoresScreenModel(
 
     init {
         screenModelScope.launchIO {
-            getExtensionStores.subscribe()
-                .collectLatest { stores ->
-                    mutableState.update {
-                        when (it) {
-                            ExtensionStoreScreenState.Loading -> ExtensionStoreScreenState.Success(
-                                stores = stores,
-                                // KMK -->
-                                disabledRepos = sourcePreferences.disabledRepos().get(),
-                                // KMK <--
-                            )
-                            is ExtensionStoreScreenState.Success -> it.copy(stores = stores)
-                        }
+            combine(
+                mangaRepo.getAllAsFlow(),
+                animeRepo.getAllAsFlow(),
+                novelRepo.getAllAsFlow(),
+            ) { mangaStores, animeStores, novelStores ->
+                val mappedAnime = animeStores.map { it.toUnified() }
+                val mappedNovel = novelStores.map { it.toUnified() }
+                mutableState.update { current ->
+                    when (current) {
+                        ExtensionStoreScreenState.Loading -> ExtensionStoreScreenState.Success(
+                            mangaStores = mangaStores,
+                            animeStores = mappedAnime,
+                            novelStores = mappedNovel,
+                            disabledRepos = sourcePreferences.disabledRepos().get(),
+                        )
+                        is ExtensionStoreScreenState.Success -> current.copy(
+                            mangaStores = mangaStores,
+                            animeStores = mappedAnime,
+                            novelStores = mappedNovel,
+                        )
                     }
                 }
+            }.launchIn(screenModelScope)
         }
 
-        // KMK -->
         sourcePreferences.disabledRepos().changes()
             .onEach { disabledRepos ->
                 mutableState.update {
@@ -69,18 +79,15 @@ class ExtensionStoresScreenModel(
                 }
             }
             .launchIn(screenModelScope)
-        // KMK <--
     }
 
-    /**
-     * Creates and adds a new repo to the database.
-     *
-     * @param indexUrl The baseUrl of the repo to create.
-     */
+    fun selectMediaIndex(index: Int) {
+        updateSuccessState { it.copy(selectedMediaIndex = index) }
+    }
+
     fun createRepo(indexUrl: String) {
-        // KMK -->
+        val activeIndex = (state.value as? ExtensionStoreScreenState.Success)?.selectedMediaIndex ?: 0
         screenModelScope.launchIO {
-            // KMK <--
             updateSuccessState {
                 it.copy(
                     dialog = when (it.dialog) {
@@ -90,9 +97,18 @@ class ExtensionStoresScreenModel(
                     },
                 )
             }
-            addExtensionStore(indexUrl)
+            val result = when (activeIndex) {
+                1 -> animeRepo.insert(indexUrl)
+                2 -> novelRepo.insert(indexUrl)
+                else -> mangaRepo.insert(indexUrl)
+            }
+            result
                 .onSuccess {
-                    extensionManager.findAvailableExtensions()
+                    when (activeIndex) {
+                        1 -> runCatching { animeExtensionManager.findAvailableExtensions() }
+                        2 -> runCatching { novelExtensionManager.refreshAvailablePlugins() }
+                        else -> extensionManager.findAvailableExtensions()
+                    }
                     dismissDialog()
                 }
                 .onFailure { throwable ->
@@ -115,34 +131,47 @@ class ExtensionStoresScreenModel(
         }
     }
 
-    /**
-     * Refreshes information for each repository.
-     */
     fun refreshRepos() {
-        val status = state.value
-
-        if (status is ExtensionStoreScreenState.Success) {
-            screenModelScope.launchIO {
-                updateExtensionStores()
+        val status = state.value as? ExtensionStoreScreenState.Success ?: return
+        screenModelScope.launchIO {
+            when (status.selectedMediaIndex) {
+                1 -> {
+                    animeRepo.refreshAll()
+                    runCatching { animeExtensionManager.findAvailableExtensions() }
+                }
+                2 -> {
+                    novelRepo.refreshAll()
+                    runCatching { novelExtensionManager.refreshAvailablePlugins() }
+                }
+                else -> {
+                    updateExtensionStores()
+                    extensionManager.findAvailableExtensions()
+                }
             }
         }
     }
 
-    /**
-     * Deletes the given repo from the database
-     */
     fun deleteRepo(indexUrl: String) {
-        // KMK -->
-        // Remove repo from disabled list
+        val activeIndex = (state.value as? ExtensionStoreScreenState.Success)?.selectedMediaIndex ?: 0
         enableStore(indexUrl)
-        // KMK <--
         screenModelScope.launchIO {
-            removeExtensionStore(indexUrl)
-            extensionManager.findAvailableExtensions()
+            when (activeIndex) {
+                1 -> {
+                    animeRepo.remove(indexUrl)
+                    runCatching { animeExtensionManager.findAvailableExtensions() }
+                }
+                2 -> {
+                    novelRepo.remove(indexUrl)
+                    runCatching { novelExtensionManager.refreshAvailablePlugins() }
+                }
+                else -> {
+                    mangaRepo.remove(indexUrl)
+                    extensionManager.findAvailableExtensions()
+                }
+            }
         }
     }
 
-    // KMK -->
     fun enableStore(indexUrl: String) {
         val disabledRepos = sourcePreferences.disabledRepos().get()
         if (indexUrl in disabledRepos) {
@@ -164,9 +193,10 @@ class ExtensionStoresScreenModel(
     fun refreshExtensionList() {
         screenModelScope.launchIO {
             extensionManager.findAvailableExtensions()
+            runCatching { animeExtensionManager.findAvailableExtensions() }
+            runCatching { novelExtensionManager.refreshAvailablePlugins() }
         }
     }
-    // KMK <--
 
     fun addFromDeeplink(storeIndexUrl: String) {
         updateSuccessState { state ->
@@ -190,6 +220,18 @@ class ExtensionStoresScreenModel(
             it.copy(dialog = null)
         }
     }
+
+    private fun mihon.domain.extensionstore.model.ExtensionStore.toUnified(): ExtensionStore {
+        return ExtensionStore(
+            indexUrl = indexUrl,
+            name = displayName,
+            badgeLabel = badgeLabel,
+            signingKey = signingKey,
+            contact = ExtensionStore.Contact(contact.website, contact.discord),
+            isLegacy = isLegacy,
+            extensionListUrl = extensionListUrl,
+        )
+    }
 }
 
 sealed class ExtensionStoreDialog {
@@ -210,12 +252,20 @@ sealed class ExtensionStoreScreenState {
 
     @Immutable
     data class Success(
-        val stores: List<ExtensionStore>,
+        val mangaStores: List<ExtensionStore> = emptyList(),
+        val animeStores: List<ExtensionStore> = emptyList(),
+        val novelStores: List<ExtensionStore> = emptyList(),
+        val selectedMediaIndex: Int = 0,
         val dialog: ExtensionStoreDialog? = null,
-        // KMK -->
         val disabledRepos: Set<String> = emptySet(),
-        // KMK <--
     ) : ExtensionStoreScreenState() {
+
+        val stores: List<ExtensionStore>
+            get() = when (selectedMediaIndex) {
+                1 -> animeStores
+                2 -> novelStores
+                else -> mangaStores
+            }
 
         val isEmpty: Boolean
             get() = stores.isEmpty()

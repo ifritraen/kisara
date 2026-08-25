@@ -28,6 +28,10 @@ class Anilist(id: Long) : BaseTracker(id, "AniList"), DeletableTracker {
         const val PLAN_TO_READ = 5L
         const val REREADING = 6L
 
+        const val WATCHING = READING
+        const val PLAN_TO_WATCH = PLAN_TO_READ
+        const val REWATCHING = REREADING
+
         const val POINT_100 = "POINT_100"
         const val POINT_10 = "POINT_10"
         const val POINT_10_DECIMAL = "POINT_10_DECIMAL"

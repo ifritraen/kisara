@@ -103,6 +103,43 @@ data object HistoryTab : Tab {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.NOVEL) {
+            val novelScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.history.novel.NovelHistoryScreenModel() }
+            val novelState by novelScreenModel.state.collectAsState()
+            eu.kanade.presentation.history.novel.NovelHistoryScreen(
+                state = novelState,
+                snackbarHostState = snackbarHostState,
+                onClickCover = { navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(it)) },
+                onClickResume = { navigator.push(eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(it)) },
+                onDialogChange = novelScreenModel::setDialog,
+            )
+            return
+        }
+
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+            val animeScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.history.anime.AnimeHistoryScreenModel() }
+            val animeState by animeScreenModel.state.collectAsState()
+            val scope = rememberCoroutineScope()
+            eu.kanade.presentation.history.anime.AnimeHistoryScreen(
+                state = animeState,
+                snackbarHostState = snackbarHostState,
+                onClickCover = { navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it)) },
+                onClickResume = { animeId, episodeId ->
+                    scope.launch {
+                        val nextEp = animeScreenModel.getNextEpisode(animeId, episodeId)
+                        val targetEpisodeId = nextEp?.id ?: episodeId
+                        val intent = eu.kanade.tachiyomi.ui.player.PlayerActivity.newIntent(context, animeId, targetEpisodeId)
+                        context.startActivity(intent)
+                    }
+                },
+                onDialogChange = animeScreenModel::setDialog,
+            )
+            return
+        }
+
         val screenModel = rememberScreenModel { HistoryScreenModel() }
         val state by screenModel.state.collectAsState()
         // KMK -->
@@ -269,22 +306,7 @@ fun Screen.historyTab(
             val context = LocalContext.current
             val usePanoramaCover by settingsScreenModel.historyPreferences.usePanoramaCover().collectAsState()
 
-            val scope = rememberCoroutineScope()
-            val nestedScrollConnection = remember {
-                object : NestedScrollConnection {
-                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                        val delta = available.y
-                        if (delta < -10f) {
-                            scope.launch { HomeScreen.showBottomNav(false) }
-                        } else if (delta > 10f) {
-                            scope.launch { HomeScreen.showBottomNav(true) }
-                        }
-                        return Offset.Zero
-                    }
-                }
-            }
-
-            Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
+            Box(modifier = Modifier) {
                 HistoryScreen(
                     state = state,
                     snackbarHostState = snackbarHostState,

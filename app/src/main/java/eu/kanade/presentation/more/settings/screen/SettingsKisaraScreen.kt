@@ -205,6 +205,24 @@ object SettingsKisaraScreen : SearchableSettings {
         val bottomBarButtonSizePref = uiPreferences.bottomBarButtonSize()
         val bottomBarButtonSizeVal by bottomBarButtonSizePref.collectAsState()
 
+        val showFloatingMediaModeButtonPref = uiPreferences.showFloatingMediaModeButton()
+        val showFloatingMediaModeButton by showFloatingMediaModeButtonPref.collectAsState()
+
+        val showFloatingActionButtonPref = uiPreferences.showFloatingActionButton()
+        val showFloatingActionButton by showFloatingActionButtonPref.collectAsState()
+
+        val bottomControlsGapPref = uiPreferences.bottomControlsGap()
+        val bottomControlsGap by bottomControlsGapPref.collectAsState()
+
+        val bottomControlsCornerRadiusPref = uiPreferences.bottomControlsCornerRadius()
+        val bottomControlsCornerRadius by bottomControlsCornerRadiusPref.collectAsState()
+
+        val subTabsSeparationGapPref = uiPreferences.subTabsSeparationGap()
+        val subTabsSeparationGap by subTabsSeparationGapPref.collectAsState()
+
+        val syncControlsWithDockRadiusPref = uiPreferences.syncControlsWithDockRadius()
+        val syncControlsWithDockRadius by syncControlsWithDockRadiusPref.collectAsState()
+
         val standardBottomBarHeightPref = uiPreferences.standardBottomBarHeight()
         val standardBottomBarHeight by standardBottomBarHeightPref.collectAsState()
 
@@ -512,6 +530,59 @@ object SettingsKisaraScreen : SearchableSettings {
                     )
 
                     if (floatingBottomBar) {
+                        add(
+                            Preference.PreferenceItem.SwitchPreference(
+                                preference = showFloatingMediaModeButtonPref,
+                                title = "Show Floating Media Switcher",
+                                subtitle = "Display the floating media type toggle button on the bottom left",
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SwitchPreference(
+                                preference = showFloatingActionButtonPref,
+                                title = "Show Floating Action Button",
+                                subtitle = "Display the 3-dot floating action menu button on the bottom right",
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = bottomControlsGap,
+                                valueRange = 0..32,
+                                title = "Bottom Controls Gap",
+                                subtitle = "Spacing gap between Media Mode button, Dock, and Action button in dp",
+                                valueString = "$bottomControlsGap dp",
+                                onValueChanged = { bottomControlsGapPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = subTabsSeparationGap,
+                                valueRange = 0..32,
+                                title = "Sub-Tab / Category Bar Gap",
+                                subtitle = "Vertical spacing gap between Sub-Tab / Category Bar and bottom dock row in dp",
+                                valueString = "$subTabsSeparationGap dp",
+                                onValueChanged = { subTabsSeparationGapPref.set(it) },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SwitchPreference(
+                                preference = syncControlsWithDockRadiusPref,
+                                title = "Sync Button Style with Dock",
+                                subtitle = "Use the same corner radius across all bottom controls and category bar",
+                            ),
+                        )
+                        if (!syncControlsWithDockRadius) {
+                            add(
+                                Preference.PreferenceItem.SliderPreference(
+                                    value = bottomControlsCornerRadius,
+                                    valueRange = 0..48,
+                                    title = "Button Corner Radius",
+                                    subtitle = "Corner radius for Media Mode, 3-Dot button, and Category Bar in dp",
+                                    valueString = "$bottomControlsCornerRadius dp",
+                                    onValueChanged = { bottomControlsCornerRadiusPref.set(it) },
+                                ),
+                            )
+                        }
                         add(
                             Preference.PreferenceItem.SwitchPreference(
                                 preference = bottomBarAutoWidthPref,

@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -72,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.DisplayOverlaySettingsDialog
@@ -178,6 +182,25 @@ fun landingTab(
 
             val normalStyle = NormalCardStyle.fromKey(uiPreferences.normalCardStyle().collectAsState().value)
             val coverTitleStyleKey by uiPreferences.kisaraCoverTitleStyle().collectAsState()
+            val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+
+            if (activeMediaType == MediaType.NOVEL) {
+                val novelLandingScreenModel = remember { eu.kanade.tachiyomi.ui.home.novel.NovelLandingScreenModel() }
+                NovelLandingContent(
+                    paddingValues = paddingValues,
+                    screenModel = novelLandingScreenModel,
+                )
+                return@TabContent
+            }
+
+            if (activeMediaType == MediaType.ANIME) {
+                val animeLandingScreenModel = remember { eu.kanade.tachiyomi.ui.home.anime.AnimeLandingScreenModel() }
+                AnimeLandingContent(
+                    paddingValues = paddingValues,
+                    screenModel = animeLandingScreenModel,
+                )
+                return@TabContent
+            }
 
             PullRefresh(
                 refreshing = state.isFeedRefreshing,
@@ -197,20 +220,46 @@ fun landingTab(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     // 1. Spotlight (Suggestions Carousel)
-                    if (showSuggestions && state.suggestions.isNotEmpty()) {
-                        item {
-                            SpotlightCarousel(
-                                suggestions = state.suggestions,
-                                tagName = state.suggestionsTagName,
-                                onMangaClick = { mangaId -> navigator.push(MangaScreen(mangaId)) },
-                                onMangaLongClick = { manga ->
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    screenModel.toggleFavorite(manga.id, manga.favorite)
-                                },
-                                onDismissSuggestion = { manga ->
-                                    screenModel.dismissSuggestion(manga)
-                                },
-                            )
+                    if (showSuggestions) {
+                        when (activeMediaType) {
+                            MediaType.NOVEL -> {
+                                item {
+                                    NovelSpotlightCarousel(
+                                        novels = emptyList(),
+                                        onNovelClick = { novelId -> navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(novelId)) },
+                                        onNovelLongClick = {},
+                                        onDismissNovel = {},
+                                    )
+                                }
+                            }
+                            MediaType.ANIME -> {
+                                item {
+                                    AnimeSpotlightCarousel(
+                                        animes = emptyList(),
+                                        onAnimeClick = { animeId -> navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(animeId)) },
+                                        onAnimeLongClick = {},
+                                        onDismissAnime = {},
+                                    )
+                                }
+                            }
+                            MediaType.MANGA -> {
+                                if (state.suggestions.isNotEmpty()) {
+                                    item {
+                                        SpotlightCarousel(
+                                            suggestions = state.suggestions,
+                                            tagName = state.suggestionsTagName,
+                                            onMangaClick = { mangaId -> navigator.push(MangaScreen(mangaId)) },
+                                            onMangaLongClick = { manga ->
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                screenModel.toggleFavorite(manga.id, manga.favorite)
+                                            },
+                                            onDismissSuggestion = { manga ->
+                                                screenModel.dismissSuggestion(manga)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -606,7 +655,7 @@ fun SpotlightCarousel(
                 listOfNotNull(parsed.author, parsed.artist).distinct().joinToString(" • ").ifBlank { "Unknown" }
             }
             val tags = remember(manga.genre) {
-                manga.genre.orEmpty().take(3)
+                manga.genre.orEmpty()
             }
             val endingNumber = remember(manga.title) {
                 Regex("(\\d+)$").find(manga.title)?.groupValues?.get(1)
@@ -743,17 +792,21 @@ fun SpotlightCarousel(
                                 }
                             }
 
-                            // 4. Tags List Chips
+                            // 4. Tags List Chips (3 rows horizontally scrollable)
                             if (tags.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(6.dp))
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth(),
+                                LazyHorizontalGrid(
+                                    rows = GridCells.Fixed(3),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(68.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
                                     items(items = tags) { tag ->
                                         Surface(
                                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                                            shape = RoundedCornerShape(6.dp),
+                                            shape = RoundedCornerShape(4.dp),
                                         ) {
                                             Text(
                                                 text = tag,
@@ -761,6 +814,7 @@ fun SpotlightCarousel(
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 fontSize = 9.sp,
+                                                maxLines = 1,
                                             )
                                         }
                                     }

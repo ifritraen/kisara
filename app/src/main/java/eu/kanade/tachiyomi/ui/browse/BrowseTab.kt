@@ -24,6 +24,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,18 +40,31 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.connections.discord.DiscordRPCService
 import eu.kanade.tachiyomi.data.connections.discord.DiscordScreen
+import eu.kanade.tachiyomi.ui.browse.anime.bulk.animeBulkSearchTab
+import eu.kanade.tachiyomi.ui.browse.anime.duplicate.animeDuplicateTab
+import eu.kanade.tachiyomi.ui.browse.anime.extension.AnimeExtensionsScreenModel
+import eu.kanade.tachiyomi.ui.browse.anime.extension.animeExtensionsTab
+import eu.kanade.tachiyomi.ui.browse.anime.migration.sources.migrateAnimeSourceTab
+import eu.kanade.tachiyomi.ui.browse.anime.source.animeSourcesTab
 import eu.kanade.tachiyomi.ui.browse.bulk.bulkSearchTab
 import eu.kanade.tachiyomi.ui.browse.duplicate.duplicateSourceTab
 import eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.extension.extensionsTab
 import eu.kanade.tachiyomi.ui.browse.feed.FeedScreenModel
 import eu.kanade.tachiyomi.ui.browse.migration.sources.migrateSourceTab
+import eu.kanade.tachiyomi.ui.browse.novel.bulk.novelBulkSearchTab
+import eu.kanade.tachiyomi.ui.browse.novel.duplicate.novelDuplicateTab
+import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
+import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionsTab
+import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelSourceTab
+import eu.kanade.tachiyomi.ui.browse.novel.source.novelSourcesTab
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.browse.source.sourcesTab
 import eu.kanade.tachiyomi.ui.home.HomeScreen
@@ -100,7 +115,17 @@ data object BrowseTab : Tab {
         }
 
     override suspend fun onReselect(navigator: Navigator) {
-        navigator.push(GlobalSearchScreen())
+        val uiPreferences = Injekt.get<UiPreferences>()
+        val activeMediaType = uiPreferences.activeMediaType().get()
+        if (activeMediaType == MediaType.ANIME) {
+            val sourceManager = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>()
+            val sourceIds = sourceManager.getCatalogueSources().map { it.id }
+            navigator.push(eu.kanade.tachiyomi.ui.browse.anime.bulk.AnimeBulkSearchScreen(sourceIds, emptyList()))
+        } else if (activeMediaType == MediaType.NOVEL) {
+            navigator.push(eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen())
+        } else {
+            navigator.push(GlobalSearchScreen())
+        }
     }
 
     private val switchToTabChannel = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
@@ -128,80 +153,90 @@ data object BrowseTab : Tab {
     @Composable
     override fun Content() {
         val context = LocalContext.current
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val activeMediaType by uiPreferences.activeMediaType().collectAsStateWithLifecycle()
 
-        // Hoisted for extensions tab's search bar
-        val extensionsScreenModel = rememberScreenModel { ExtensionsScreenModel() }
-        val extensionsState by extensionsScreenModel.state.collectAsState()
-
-        // KMK -->
-        val feedScreenModel = rememberScreenModel { FeedScreenModel() }
-        val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
-        val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
-
-        val tabs = persistentListOf(
-            sourcesTab(),
-            extensionsTab(extensionsScreenModel),
-            migrateSourceTab(),
-            duplicateSourceTab(),
-            bulkSearchTab(),
-        )
+        // Hoisted for active extensions tab's search bar only
+        val (tabs, extensionsSearchQuery, onExtensionsSearchQueryChange) = when (activeMediaType) {
+            MediaType.NOVEL -> {
+                val novelExtensionsScreenModel = rememberScreenModel { NovelExtensionsScreenModel() }
+                val novelExtensionsState by novelExtensionsScreenModel.state.collectAsStateWithLifecycle()
+                Triple(
+                    persistentListOf(
+                        novelSourcesTab(),
+                        novelExtensionsTab(novelExtensionsScreenModel),
+                        migrateNovelSourceTab(),
+                        novelDuplicateTab(),
+                        novelBulkSearchTab(),
+                    ),
+                    novelExtensionsState.searchQuery,
+                    { query: String? -> novelExtensionsScreenModel.search(query) },
+                )
+            }
+            MediaType.ANIME -> {
+                val animeExtensionsScreenModel = rememberScreenModel { AnimeExtensionsScreenModel() }
+                val animeExtensionsState by animeExtensionsScreenModel.state.collectAsStateWithLifecycle()
+                Triple(
+                    persistentListOf(
+                        animeSourcesTab(),
+                        animeExtensionsTab(animeExtensionsScreenModel),
+                        migrateAnimeSourceTab(),
+                        animeDuplicateTab(),
+                        animeBulkSearchTab(),
+                    ),
+                    animeExtensionsState.searchQuery,
+                    { query: String? -> animeExtensionsScreenModel.search(query) },
+                )
+            }
+            MediaType.MANGA -> {
+                val extensionsScreenModel = rememberScreenModel { ExtensionsScreenModel() }
+                val extensionsState by extensionsScreenModel.state.collectAsStateWithLifecycle()
+                Triple(
+                    persistentListOf(
+                        sourcesTab(),
+                        extensionsTab(extensionsScreenModel),
+                        migrateSourceTab(),
+                        duplicateSourceTab(),
+                        bulkSearchTab(),
+                    ),
+                    extensionsState.searchQuery,
+                    { query: String? -> extensionsScreenModel.search(query) },
+                )
+            }
+        }
 
         val state = rememberPagerState { tabs.size }
-        // KMK <--
 
         LaunchedEffect(state.currentPage) {
             currentPageIndex = state.currentPage
         }
 
         val scope = rememberCoroutineScope()
-        val uiPreferences = remember { Injekt.get<UiPreferences>() }
-        val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
-        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsState()
-        val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
-        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
+        val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsStateWithLifecycle()
+        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsStateWithLifecycle()
+        val showTopTabBar by uiPreferences.showTopTabBar().collectAsStateWithLifecycle()
+        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsStateWithLifecycle()
         val hazeState = LocalHazeState.current
 
-        var bottomBarVisible by remember { mutableStateOf(true) }
-        val nestedScrollConnection = remember {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    val delta = available.y
-                    if (delta < -10f) {
-                        if (bottomBarVisible) {
-                            bottomBarVisible = false
-                            scope.launch { HomeScreen.showBottomNav(false) }
-                        }
-                    } else if (delta > 10f) {
-                        if (!bottomBarVisible) {
-                            bottomBarVisible = true
-                            scope.launch { HomeScreen.showBottomNav(true) }
-                        }
-                    }
-                    return Offset.Zero
-                }
-            }
-        }
+        val bottomBarVisible by HomeScreen.showBottomNavFlow.collectAsStateWithLifecycle()
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier)
-                .nestedScroll(nestedScrollConnection),
+                .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
         ) {
             TabbedScreen(
                 titleRes = MR.strings.browse,
                 tabs = tabs,
                 state = state,
-                searchQuery = extensionsState.searchQuery,
-                onChangeSearchQuery = extensionsScreenModel::search,
+                searchQuery = extensionsSearchQuery,
+                onChangeSearchQuery = onExtensionsSearchQueryChange,
                 showAppBar = false,
                 showTabs = if (showTopTabBar) {
                     if (hideTopBarOnScroll) bottomBarVisible else true
                 } else {
                     false
                 },
-                feedScreenModel = feedScreenModel,
-                bulkFavoriteScreenModel = bulkFavoriteScreenModel,
             )
         }
         LaunchedEffect(Unit) {

@@ -22,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,19 +40,28 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
 import eu.kanade.tachiyomi.ui.browse.feed.FeedScreenModel
 import eu.kanade.tachiyomi.ui.browse.feed.feedTab
+import eu.kanade.tachiyomi.ui.browse.anime.feed.animeFeedTab
+import eu.kanade.tachiyomi.ui.browse.novel.feed.novelFeedTab
 import eu.kanade.tachiyomi.ui.history.HistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.HistorySettingsScreenModel
+import eu.kanade.tachiyomi.ui.history.anime.animeHistoryTab
 import eu.kanade.tachiyomi.ui.history.historyTab
+import eu.kanade.tachiyomi.ui.history.novel.novelHistoryTab
 import eu.kanade.tachiyomi.ui.suggestions.SuggestionsScreenModel
+import eu.kanade.tachiyomi.ui.suggestions.anime.animeSuggestionsTab
+import eu.kanade.tachiyomi.ui.suggestions.novel.novelSuggestionsTab
 import eu.kanade.tachiyomi.ui.suggestions.suggestionsTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.UpdatesSettingsScreenModel
+import eu.kanade.tachiyomi.ui.updates.anime.animeUpdatesTab
+import eu.kanade.tachiyomi.ui.updates.novel.novelUpdatesTab
 import eu.kanade.tachiyomi.ui.updates.updatesTab
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.channels.BufferOverflow
@@ -113,27 +124,56 @@ data object HomeTab : Tab {
         val navigator = LocalNavigator.currentOrThrow
         val context = androidx.compose.ui.platform.LocalContext.current
 
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val activeMediaType by uiPreferences.activeMediaType().collectAsStateWithLifecycle()
+
         val landingScreenModel = rememberScreenModel { LandingScreenModel() }
-        val feedScreenModel = rememberScreenModel { FeedScreenModel() }
-        val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
 
-        val suggestionsScreenModel = rememberScreenModel { SuggestionsScreenModel() }
+        val feedScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { FeedScreenModel() } else null
+        val bulkFavoriteScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { BulkFavoriteScreenModel() } else null
+        val suggestionsScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { SuggestionsScreenModel() } else null
+        val updatesScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { UpdatesScreenModel() } else null
+        val updatesSettingsScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { UpdatesSettingsScreenModel() } else null
+        val historyScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { HistoryScreenModel() } else null
+        val historySettingsScreenModel = if (activeMediaType == MediaType.MANGA) rememberScreenModel { HistorySettingsScreenModel() } else null
+        val historyState by (historyScreenModel?.state ?: kotlinx.coroutines.flow.MutableStateFlow(HistoryScreenModel.State())).collectAsStateWithLifecycle()
 
-        val updatesScreenModel = rememberScreenModel { UpdatesScreenModel() }
-        val updatesSettingsScreenModel = rememberScreenModel { UpdatesSettingsScreenModel() }
+        val animeFeedScreenModel = if (activeMediaType == MediaType.ANIME) rememberScreenModel { eu.kanade.tachiyomi.ui.browse.anime.feed.AnimeFeedScreenModel() } else null
+        val animeSuggestionsScreenModel = if (activeMediaType == MediaType.ANIME) rememberScreenModel { eu.kanade.tachiyomi.ui.suggestions.anime.AnimeSuggestionsScreenModel() } else null
+        val animeUpdatesScreenModel = if (activeMediaType == MediaType.ANIME) rememberScreenModel { eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel() } else null
+        val animeHistoryScreenModel = if (activeMediaType == MediaType.ANIME) rememberScreenModel { eu.kanade.tachiyomi.ui.history.anime.AnimeHistoryScreenModel() } else null
 
-        val historyScreenModel = rememberScreenModel { HistoryScreenModel() }
-        val historySettingsScreenModel = rememberScreenModel { HistorySettingsScreenModel() }
-        val historyState by historyScreenModel.state.collectAsState()
+        val novelFeedScreenModel = if (activeMediaType == MediaType.NOVEL) rememberScreenModel { eu.kanade.tachiyomi.ui.browse.novel.feed.NovelFeedScreenModel() } else null
+        val novelSuggestionsScreenModel = if (activeMediaType == MediaType.NOVEL) rememberScreenModel { eu.kanade.tachiyomi.ui.suggestions.novel.NovelSuggestionsScreenModel() } else null
+        val novelUpdatesScreenModel = if (activeMediaType == MediaType.NOVEL) rememberScreenModel { eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel() } else null
+        val novelHistoryScreenModel = if (activeMediaType == MediaType.NOVEL) rememberScreenModel { eu.kanade.tachiyomi.ui.history.novel.NovelHistoryScreenModel() } else null
 
-        val tabs = persistentListOf(
-            landingTab(landingScreenModel),
-            feedTab(feedScreenModel, bulkFavoriteScreenModel),
-            suggestionsTab(suggestionsScreenModel),
-            updatesTab(updatesScreenModel, updatesSettingsScreenModel),
-            historyTab(historyScreenModel, historySettingsScreenModel),
-            eu.kanade.tachiyomi.ui.home.favorite.favoritesTab(),
-        )
+        val tabs = when (activeMediaType) {
+            MediaType.NOVEL -> persistentListOf(
+                landingTab(landingScreenModel),
+                this.novelFeedTab(),
+                if (novelSuggestionsScreenModel != null) this.novelSuggestionsTab(novelSuggestionsScreenModel) else this.novelSuggestionsTab(),
+                if (novelUpdatesScreenModel != null) this.novelUpdatesTab(context, fromMore = false, novelUpdatesScreenModel) else this.novelUpdatesTab(context, fromMore = false),
+                if (novelHistoryScreenModel != null) this.novelHistoryTab(context, fromMore = false, novelHistoryScreenModel) else this.novelHistoryTab(context, fromMore = false),
+                eu.kanade.tachiyomi.ui.home.favorite.favoritesTab(),
+            )
+            MediaType.ANIME -> persistentListOf(
+                landingTab(landingScreenModel),
+                if (animeFeedScreenModel != null) this.animeFeedTab(animeFeedScreenModel) else this.animeFeedTab(),
+                if (animeSuggestionsScreenModel != null) this.animeSuggestionsTab(animeSuggestionsScreenModel) else this.animeSuggestionsTab(),
+                if (animeUpdatesScreenModel != null) this.animeUpdatesTab(context, fromMore = false, animeUpdatesScreenModel) else this.animeUpdatesTab(context, fromMore = false),
+                if (animeHistoryScreenModel != null) this.animeHistoryTab(context, fromMore = false, animeHistoryScreenModel) else this.animeHistoryTab(context, fromMore = false),
+                eu.kanade.tachiyomi.ui.home.favorite.favoritesTab(),
+            )
+            MediaType.MANGA -> persistentListOf(
+                landingTab(landingScreenModel),
+                feedTab(feedScreenModel!!, bulkFavoriteScreenModel!!),
+                suggestionsTab(suggestionsScreenModel!!),
+                updatesTab(updatesScreenModel!!, updatesSettingsScreenModel!!),
+                historyTab(historyScreenModel!!, historySettingsScreenModel!!),
+                eu.kanade.tachiyomi.ui.home.favorite.favoritesTab(),
+            )
+        }
 
         val state = rememberPagerState(initialPage = currentPageIndex) { tabs.size }
 
@@ -149,35 +189,55 @@ data object HomeTab : Tab {
 
         val showingFeedOrderScreen = remember { mutableStateOf(false) }
 
-        LaunchedEffect(Unit) {
+        LaunchedEffect(activeMediaType) {
             launch {
                 addFeedEvent.receiveAsFlow().collectLatest {
-                    feedScreenModel.openAddDialog()
+                    when (activeMediaType) {
+                        MediaType.ANIME -> animeFeedScreenModel?.openAddSourceDialog()
+                        MediaType.NOVEL -> novelFeedScreenModel?.openAddSourceDialog()
+                        MediaType.MANGA -> feedScreenModel?.openAddDialog()
+                    }
                 }
             }
             launch {
                 sortFeedEvent.receiveAsFlow().collectLatest {
-                    showingFeedOrderScreen.value = !showingFeedOrderScreen.value
+                    when (activeMediaType) {
+                        MediaType.ANIME -> animeFeedScreenModel?.toggleReordering()
+                        MediaType.NOVEL -> novelFeedScreenModel?.toggleReordering()
+                        MediaType.MANGA -> showingFeedOrderScreen.value = !showingFeedOrderScreen.value
+                    }
                 }
             }
             launch {
                 bulkSelectEvent.receiveAsFlow().collectLatest {
-                    bulkFavoriteScreenModel.toggleSelectionMode()
+                    bulkFavoriteScreenModel?.toggleSelectionMode()
                 }
             }
             launch {
                 suggestionsRefreshEvent.receiveAsFlow().collectLatest {
-                    suggestionsScreenModel.triggerRefresh(context)
+                    if (activeMediaType == MediaType.ANIME) {
+                        animeSuggestionsScreenModel?.loadSuggestions()
+                    } else if (activeMediaType == MediaType.NOVEL) {
+                        novelSuggestionsScreenModel?.loadSuggestions()
+                    } else {
+                        suggestionsScreenModel?.triggerRefresh(context)
+                    }
                 }
             }
             launch {
                 updatesFilterEvent.receiveAsFlow().collectLatest {
-                    updatesScreenModel.showFilterDialog()
+                    updatesScreenModel?.showFilterDialog()
                 }
             }
             launch {
                 updatesUpdateLibraryEvent.receiveAsFlow().collectLatest {
-                    updatesScreenModel.updateLibrary()
+                    if (activeMediaType == MediaType.ANIME) {
+                        animeUpdatesScreenModel?.updateLibrary(context)
+                    } else if (activeMediaType == MediaType.NOVEL) {
+                        novelUpdatesScreenModel?.updateLibrary()
+                    } else {
+                        updatesScreenModel?.updateLibrary()
+                    }
                 }
             }
             launch {
@@ -186,47 +246,58 @@ data object HomeTab : Tab {
                 }
             }
             launch {
-                historySearchEvent.receiveAsFlow().collectLatest {
-                    historyScreenModel.updateSearchQuery("")
+                historySearchEvent.receiveAsFlow().collectLatest { query ->
+                    when (activeMediaType) {
+                        MediaType.ANIME -> animeHistoryScreenModel?.search(query ?: "")
+                        MediaType.NOVEL -> novelHistoryScreenModel?.search(query ?: "")
+                        MediaType.MANGA -> historyScreenModel?.updateSearchQuery(query ?: "")
+                    }
                 }
             }
             launch {
                 historyFilterEvent.receiveAsFlow().collectLatest {
-                    historyScreenModel.showFilterDialog()
+                    historyScreenModel?.showFilterDialog()
                 }
             }
             launch {
                 historyChecklistEvent.receiveAsFlow().collectLatest {
-                    historyScreenModel.toggleSelectionMode()
+                    if (activeMediaType == MediaType.ANIME) {
+                        animeHistoryScreenModel?.setDialog(eu.kanade.tachiyomi.ui.history.anime.AnimeHistoryScreenModel.Dialog.DeleteAll)
+                    } else if (activeMediaType == MediaType.NOVEL) {
+                        novelHistoryScreenModel?.setDialog(eu.kanade.tachiyomi.ui.history.novel.NovelHistoryScreenModel.Dialog.DeleteAll)
+                    } else {
+                        historyScreenModel?.toggleSelectionMode()
+                    }
                 }
             }
         }
 
         val scope = rememberCoroutineScope()
-        val uiPreferences = remember { Injekt.get<UiPreferences>() }
-        val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
-        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsState()
-        val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
-        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
+        val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsStateWithLifecycle()
+        val hideTopBarOnScroll by uiPreferences.hideTopBarOnScroll().collectAsStateWithLifecycle()
+        val showTopTabBar by uiPreferences.showTopTabBar().collectAsStateWithLifecycle()
+        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsStateWithLifecycle()
         val hazeState = LocalHazeState.current
 
-        var bottomBarVisible by remember { mutableStateOf(true) }
-        val nestedScrollConnection = remember {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    val delta = available.y
-                    if (delta < -10f) {
-                        if (bottomBarVisible) {
-                            bottomBarVisible = false
-                            scope.launch { HomeScreen.showBottomNav(false) }
-                        }
-                    } else if (delta > 10f) {
-                        if (!bottomBarVisible) {
-                            bottomBarVisible = true
-                            scope.launch { HomeScreen.showBottomNav(true) }
-                        }
-                    }
-                    return Offset.Zero
+        val bottomBarVisible by HomeScreen.showBottomNavFlow.collectAsStateWithLifecycle()
+
+        val animeHistorySearchQuery = animeHistoryScreenModel?.state?.collectAsStateWithLifecycle()?.value?.searchQuery
+        val novelHistorySearchQuery = novelHistoryScreenModel?.state?.collectAsStateWithLifecycle()?.value?.searchQuery
+
+        val activeHistorySearchQuery = if (state.currentPage == 4) {
+            when (activeMediaType) {
+                MediaType.ANIME -> animeHistorySearchQuery
+                MediaType.NOVEL -> novelHistorySearchQuery
+                MediaType.MANGA -> historyState.searchQuery
+            }
+        } else null
+
+        val onActiveHistorySearchQueryChange: (String?) -> Unit = { query ->
+            if (state.currentPage == 4) {
+                when (activeMediaType) {
+                    MediaType.ANIME -> animeHistoryScreenModel?.search(query)
+                    MediaType.NOVEL -> novelHistoryScreenModel?.search(query)
+                    MediaType.MANGA -> historyScreenModel?.updateSearchQuery(query)
                 }
             }
         }
@@ -234,19 +305,14 @@ data object HomeTab : Tab {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier)
-                .nestedScroll(nestedScrollConnection),
+                .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
         ) {
             TabbedScreen(
                 titleRes = KMR.strings.label_home,
                 tabs = tabs,
                 state = state,
-                searchQuery = if (state.currentPage == 4) historyState.searchQuery else null,
-                onChangeSearchQuery = { query ->
-                    if (state.currentPage == 4) {
-                        historyScreenModel.updateSearchQuery(query)
-                    }
-                },
+                searchQuery = activeHistorySearchQuery,
+                onChangeSearchQuery = onActiveHistorySearchQueryChange,
                 feedScreenModel = feedScreenModel,
                 bulkFavoriteScreenModel = bulkFavoriteScreenModel,
                 showAppBar = false,
@@ -255,6 +321,21 @@ data object HomeTab : Tab {
                 } else {
                     false
                 },
+            )
+        }
+
+        val updatesState = updatesScreenModel?.state?.collectAsStateWithLifecycle()?.value
+        if (updatesState?.dialog is UpdatesScreenModel.Dialog.FilterSheet && updatesSettingsScreenModel != null && updatesScreenModel != null) {
+            eu.kanade.presentation.updates.UpdatesFilterDialog(
+                onDismissRequest = { updatesScreenModel.setDialog(null) },
+                screenModel = updatesSettingsScreenModel,
+            )
+        }
+
+        if (historyState.dialog is HistoryScreenModel.Dialog.FilterSheet && historySettingsScreenModel != null && historyScreenModel != null) {
+            eu.kanade.presentation.history.components.HistoryFilterDialog(
+                onDismissRequest = { historyScreenModel.setDialog(null) },
+                screenModel = historySettingsScreenModel,
             )
         }
     }

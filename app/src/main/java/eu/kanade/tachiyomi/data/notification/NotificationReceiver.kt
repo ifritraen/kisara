@@ -354,6 +354,22 @@ class NotificationReceiver : BroadcastReceiver() {
             )
         }
 
+        internal fun pauseAnimeDownloadsPendingBroadcast(context: Context): PendingIntent {
+            return pauseDownloadsPendingBroadcast(context)
+        }
+
+        internal fun resumeAnimeDownloadsPendingBroadcast(context: Context): PendingIntent {
+            return resumeDownloadsPendingBroadcast(context)
+        }
+
+        internal fun clearAnimeDownloadsPendingBroadcast(context: Context): PendingIntent {
+            return clearDownloadsPendingBroadcast(context)
+        }
+
+        internal fun openAnimeEntryPendingActivity(context: Context, animeId: Long): PendingIntent {
+            return openEntryPendingActivity(context, animeId)
+        }
+
         /**
          * Returns [PendingIntent] that starts a service which dismissed the notification
          *

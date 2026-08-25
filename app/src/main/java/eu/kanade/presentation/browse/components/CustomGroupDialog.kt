@@ -3,6 +3,8 @@ package eu.kanade.presentation.browse.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -81,31 +83,62 @@ fun CustomGroupManagerDialog(
         return
     }
 
-    AlertDialog(
+    val colorScheme = MaterialTheme.colorScheme
+
+    eu.kanade.presentation.components.KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        title = {
-            Text(text = stringResource(KMR.strings.custom_groups))
+        title = stringResource(KMR.strings.custom_groups),
+        headerActions = {
+            androidx.compose.material3.TextButton(
+                onClick = { isCreatingNew = true },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = stringResource(KMR.strings.action_new_custom_group))
+            }
         },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                if (groups.isEmpty()) {
-                    Text(
-                        text = stringResource(KMR.strings.custom_group_no_groups),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = 16.dp),
-                    )
-                } else {
+        footer = {
+            androidx.compose.material3.Button(
+                modifier = Modifier.fillMaxWidth(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                onClick = onDismissRequest,
+            ) {
+                Text(text = stringResource(tachiyomi.i18n.MR.strings.action_ok))
+            }
+        },
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (groups.isEmpty()) {
+                Text(
+                    text = stringResource(KMR.strings.custom_group_no_groups),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 16.dp),
+                )
+            } else {
+                androidx.compose.material3.Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 300.dp),
+                            .heightIn(max = 320.dp)
+                            .padding(4.dp),
                     ) {
                         items(groups, key = { it.id }) { group ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
                                     .clickable { onSelectGroup(group.id) }
-                                    .padding(vertical = 4.dp),
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 RadioButton(
@@ -122,7 +155,7 @@ fun CustomGroupManagerDialog(
                                     Text(
                                         text = "${group.sourceIds.size} sources",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 IconButton(onClick = { editingGroup = group }) {
@@ -134,6 +167,7 @@ fun CustomGroupManagerDialog(
                                 IconButton(onClick = { onDeleteGroup(group.id) }) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
+                                        tint = colorScheme.error,
                                         contentDescription = null,
                                     )
                                 }
@@ -141,29 +175,9 @@ fun CustomGroupManagerDialog(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TextButton(
-                    onClick = { isCreatingNew = true },
-                    modifier = Modifier.align(Alignment.End),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = stringResource(KMR.strings.action_new_custom_group))
-                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(tachiyomi.i18n.MR.strings.action_ok))
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -175,6 +189,7 @@ fun CustomGroupEditDialog(
     var name by remember { mutableStateOf(group.name) }
     var selectedSourceIds by remember { mutableStateOf(group.sourceIds) }
     var searchQuery by remember { mutableStateOf("") }
+    val colorScheme = MaterialTheme.colorScheme
 
     val extensionManager = remember { Injekt.get<ExtensionManager>() }
     val installedExtensions = remember {
@@ -192,48 +207,82 @@ fun CustomGroupEditDialog(
         }
     }
 
-    AlertDialog(
+    val title = if (group.name.isEmpty()) {
+        stringResource(KMR.strings.action_new_custom_group)
+    } else {
+        stringResource(KMR.strings.action_edit_custom_group)
+    }
+
+    eu.kanade.presentation.components.KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        title = {
-            Text(
-                text = if (group.name.isEmpty()) {
-                    stringResource(KMR.strings.action_new_custom_group)
-                } else {
-                    stringResource(KMR.strings.action_edit_custom_group)
-                },
-            )
-        },
-        text = {
-            Column(
+        title = title,
+        footer = {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(text = stringResource(KMR.strings.custom_group_name)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                androidx.compose.material3.OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    onClick = onDismissRequest,
+                ) {
+                    Text(text = stringResource(tachiyomi.i18n.MR.strings.action_cancel))
+                }
+                androidx.compose.material3.Button(
+                    modifier = Modifier.weight(1f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            onSave(group.copy(name = name.trim(), sourceIds = selectedSourceIds))
+                        }
+                    },
+                ) {
+                    Text(text = stringResource(tachiyomi.i18n.MR.strings.action_save))
+                }
+            }
+        },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(text = stringResource(KMR.strings.custom_group_name)) },
+                singleLine = true,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(text = stringResource(KMR.strings.action_search_for_source)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(text = stringResource(KMR.strings.action_search_for_source)) },
+                singleLine = true,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-                Text(
-                    text = stringResource(KMR.strings.custom_group_select_sources),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            Text(
+                text = stringResource(KMR.strings.custom_group_select_sources),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = colorScheme.primary,
+            )
 
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 280.dp),
+                        .heightIn(max = 240.dp)
+                        .padding(4.dp),
                 ) {
                     items(filteredExtensions, key = { it.pkgName }) { extension ->
                         ExtensionSourceItem(
@@ -258,25 +307,8 @@ fun CustomGroupEditDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        onSave(group.copy(name = name.trim(), sourceIds = selectedSourceIds))
-                    }
-                },
-                enabled = name.isNotBlank(),
-            ) {
-                Text(text = stringResource(tachiyomi.i18n.MR.strings.action_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(tachiyomi.i18n.MR.strings.action_cancel))
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable

@@ -10,14 +10,14 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
-import exh.source.isEhBasedManga
+import exh.source.eHentaiSourceIds
 import tachiyomi.data.chapter.ChapterSanitizer
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.ShouldUpdateDbChapter
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.model.NoChaptersException
-import tachiyomi.domain.chapter.model.toChapterUpdate
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.chapter.service.ChapterRecognition
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -211,7 +211,7 @@ class SyncChaptersWithSource(
         }
 
         // --> EXH (carry over reading progress)
-        if (manga.isEhBasedManga()) {
+        if (manga.source in eHentaiSourceIds) {
             val hasNewChapters = updatedToAdd.any { it.url !in changedOrDuplicateReadUrls }
             if (hasNewChapters) {
                 val max = dbChapters.maxOfOrNull { it.lastPageRead }
@@ -238,7 +238,23 @@ class SyncChaptersWithSource(
         }
 
         if (updatedChapters.isNotEmpty()) {
-            val chapterUpdates = updatedChapters.map { it.toChapterUpdate() }
+            val chapterUpdates = updatedChapters.map {
+                ChapterUpdate(
+                    id = it.id,
+                    mangaId = it.mangaId,
+                    read = it.read,
+                    bookmark = it.bookmark,
+                    lastPageRead = it.lastPageRead,
+                    dateFetch = it.dateFetch,
+                    sourceOrder = it.sourceOrder,
+                    url = it.url,
+                    name = it.name,
+                    dateUpload = it.dateUpload,
+                    chapterNumber = it.chapterNumber,
+                    scanlator = it.scanlator,
+                    version = it.version,
+                )
+            }
             updateChapter.awaitAll(chapterUpdates)
         }
         updateManga.awaitUpdateFetchInterval(manga, now, fetchWindow)

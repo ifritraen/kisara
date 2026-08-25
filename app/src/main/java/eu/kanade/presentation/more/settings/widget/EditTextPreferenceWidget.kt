@@ -32,13 +32,16 @@ fun EditTextPreferenceWidget(
     icon: ImageVector?,
     value: String,
     widget: @Composable (() -> Unit)? = null,
+    singleLine: Boolean = true,
+    canBeBlank: Boolean = false,
+    formatSubtitle: Boolean = true,
     onConfirm: suspend (String) -> Boolean,
 ) {
     var isDialogShown by remember { mutableStateOf(false) }
 
     TextPreferenceWidget(
         title = title,
-        subtitle = subtitle?.format(value),
+        subtitle = if (formatSubtitle) subtitle?.format(value) else subtitle,
         icon = icon,
         widget = widget,
         onPreferenceClick = { isDialogShown = true },
@@ -58,7 +61,7 @@ fun EditTextPreferenceWidget(
                     value = textFieldValue,
                     onValueChange = { textFieldValue = it },
                     trailingIcon = {
-                        if (textFieldValue.text.isBlank()) {
+                        if (!canBeBlank && textFieldValue.text.isBlank()) {
                             Icon(imageVector = Icons.Filled.Error, contentDescription = null)
                         } else {
                             IconButton(onClick = { textFieldValue = TextFieldValue("") }) {
@@ -66,8 +69,8 @@ fun EditTextPreferenceWidget(
                             }
                         }
                     },
-                    isError = textFieldValue.text.isBlank(),
-                    singleLine = true,
+                    isError = !canBeBlank && textFieldValue.text.isBlank(),
+                    singleLine = singleLine,
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -76,7 +79,7 @@ fun EditTextPreferenceWidget(
             ),
             confirmButton = {
                 TextButton(
-                    enabled = textFieldValue.text != value && textFieldValue.text.isNotBlank(),
+                    enabled = textFieldValue.text != value && (canBeBlank || textFieldValue.text.isNotBlank()),
                     onClick = {
                         scope.launch {
                             if (onConfirm(textFieldValue.text)) {

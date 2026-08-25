@@ -24,7 +24,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.source.Source
 import exh.metadata.metadata.RaisedSearchMetadata
-import exh.source.isEhBasedSource
+import exh.source.eHentaiSourceIds
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.StateFlow
@@ -140,7 +140,7 @@ fun BrowseSourceContent(
     }
 
     // SY -->
-    if (source?.isEhBasedSource() == true && ehentaiBrowseDisplayMode) {
+    if (source != null && source.id in eHentaiSourceIds && ehentaiBrowseDisplayMode) {
         BrowseSourceEHentaiList(
             mangaList = mangaList,
             contentPadding = contentPadding,

@@ -22,6 +22,7 @@ object Notifications {
      */
     const val CHANNEL_COMMON = "common_channel"
     const val ID_DOWNLOAD_IMAGE = 2
+    const val ID_NOVEL_TTS_PLAYBACK = -901
 
     /**
      * Notification channel and ids used by the library updater.
@@ -42,18 +43,26 @@ object Notifications {
     private const val GROUP_DOWNLOADER = "group_downloader"
     const val CHANNEL_DOWNLOADER_PROGRESS = "downloader_progress_channel"
     const val ID_DOWNLOAD_CHAPTER_PROGRESS = -201
+    const val ID_DOWNLOAD_EPISODE_PROGRESS = -204
+    const val ID_DOWNLOAD_NOVEL_PROGRESS = -205
     // KMK -->
     const val ID_DOWNLOAD_CHAPTER_PAUSED = -203
     // KMK <--
     const val CHANNEL_DOWNLOADER_ERROR = "downloader_error_channel"
     const val ID_DOWNLOAD_CHAPTER_ERROR = -202
+    const val ID_DOWNLOAD_EPISODE_ERROR = -206
+    const val ID_DOWNLOAD_NOVEL_ERROR = -207
 
     /**
      * Notification channel and ids used by the library updater.
      */
     const val CHANNEL_NEW_CHAPTERS = "new_chapters_channel"
     const val ID_NEW_CHAPTERS = -301
+    const val ID_NEW_EPISODES = -302
+    const val ID_NEW_NOVEL_CHAPTERS = -303
+    const val ID_NOVEL_LIBRARY_ERROR = -304
     const val GROUP_NEW_CHAPTERS = "eu.kanade.tachiyomi.NEW_CHAPTERS"
+    const val GROUP_NEW_NOVEL_CHAPTERS = "eu.kanade.tachiyomi.NEW_NOVEL_CHAPTERS"
 
     /**
      * Notification channel and ids used by the backup/restore/sync system.
@@ -80,6 +89,18 @@ object Notifications {
      */
     const val CHANNEL_VPN = "vpn_channel"
     const val ID_VPN = -801
+
+    /**
+     * Notification channel and ID used for novel translation
+     */
+    const val CHANNEL_TRANSLATION_PROGRESS = "translation_progress_channel"
+    const val ID_TRANSLATION_PROGRESS = -950
+
+    /**
+     * Notification channel and ID used for torrent server
+     */
+    const val CHANNEL_TORRENT_SERVER = "torrent_server_channel"
+    const val ID_TORRENT_SERVER = -960
 
     // AM (DISCORD) -->
     /**
@@ -197,6 +218,14 @@ object Notifications {
                 },
                 buildNotificationChannel(CHANNEL_VPN, IMPORTANCE_LOW) {
                     setName("VPN Connection")
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_TRANSLATION_PROGRESS, IMPORTANCE_LOW) {
+                    setName("Translation Progress")
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_TORRENT_SERVER, IMPORTANCE_LOW) {
+                    setName("Torrent Server")
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_APP_UPDATE, IMPORTANCE_HIGH) {

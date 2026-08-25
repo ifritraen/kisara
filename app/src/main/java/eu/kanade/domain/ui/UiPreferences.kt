@@ -2,10 +2,10 @@ package eu.kanade.domain.ui
 
 import androidx.compose.material3.FabPosition
 import com.materialkolor.PaletteStyle
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
-import dev.icerock.moko.resources.StringResource
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.i18n.MR
@@ -45,6 +45,8 @@ class UiPreferences(
     fun themeCoverBasedStyle() = preferenceStore.getEnum("pref_theme_cover_based_style_key", PaletteStyle.Vibrant)
 
     fun preloadLibraryColor() = preferenceStore.getBoolean("pref_preload_library_color_key", true)
+
+    fun activeMediaType() = preferenceStore.getEnum("pref_active_media_type_key", eu.kanade.domain.ui.model.MediaType.MANGA)
     // KMK <--
 
     fun relativeTime() = preferenceStore.getBoolean("relative_time_v2", true)
@@ -107,12 +109,13 @@ class UiPreferences(
     fun continueReadingCardStyle() = preferenceStore.getString("kisara_continue_reading_card_style", "default")
     fun recentUpdatesCardStyle() = preferenceStore.getString("kisara_recent_updates_card_style", "default")
     fun kisaraFrostedGlass() = preferenceStore.getBoolean("kisara_frosted_glass", true)
-    fun showCategoryTabs() = preferenceStore.getBoolean("kisara_show_category_tabs", false)
+    fun showCelestialNavbar() = preferenceStore.getBoolean("kisara_show_celestial_navbar", false)
+    fun showCategoryTabs() = preferenceStore.getBoolean("kisara_show_category_tabs", true)
     fun hideTopBarOnScroll() = preferenceStore.getBoolean("kisara_hide_top_bar_on_scroll", true)
     fun duplicateMaxScanCount() = preferenceStore.getInt("kisara_duplicate_max_scan_count", 0)
     fun chapterSheetMinHeightDp() = preferenceStore.getInt("kisara_chapter_sheet_min_height", 144)
     fun chapterSheetMaxHeightPct() = preferenceStore.getInt("kisara_chapter_sheet_max_height", 60)
-    fun categoryBarCarouselStyle() = preferenceStore.getBoolean("kisara_category_bar_carousel_style", false)
+    fun categoryBarCarouselStyle() = preferenceStore.getBoolean("kisara_category_bar_carousel_style", true)
     fun duplicateHistory() = preferenceStore.getStringSet("kisara_duplicate_history", emptySet())
     fun alwaysShowSubTabs() = preferenceStore.getBoolean("kisara_always_show_sub_tabs", true)
     fun alwaysShowSubTabsHome() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_home", true)
@@ -120,27 +123,33 @@ class UiPreferences(
     fun alwaysShowSubTabsBrowse() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_browse", true)
     fun alwaysShowSubTabsTrack() = preferenceStore.getBoolean("kisara_always_show_sub_tabs_track", true)
     fun showTrackSubBarAtTop() = preferenceStore.getBoolean("kisara_show_track_sub_bar_at_top", false)
-    fun subTabsBottomMargin() = preferenceStore.getInt("kisara_sub_tabs_bottom_margin", 0)
+    fun subTabsBottomMargin() = preferenceStore.getInt("kisara_sub_tabs_bottom_margin", 4)
     fun bottomBarBottomMargin() = preferenceStore.getInt("kisara_bottom_bar_bottom_margin", 12)
     fun showTopTabBar() = preferenceStore.getBoolean("kisara_show_top_tab_bar", false)
     fun kisaraGlassColorType() = preferenceStore.getInt("kisara_glass_color_type", 0)
     fun kisaraGlassColorMix() = preferenceStore.getInt("kisara_glass_color_mix", 0)
     fun kisaraGlassCustomColor() = preferenceStore.getInt("kisara_glass_custom_color", 0xFFFFFFFF.toInt())
-    fun kisaraShowItemCountInTabs() = preferenceStore.getBoolean("kisara_show_item_count_in_tabs", false)
+    fun kisaraShowItemCountInTabs() = preferenceStore.getBoolean("kisara_show_item_count_in_tabs", true)
     fun categoryBarSelectedFontColorType() = preferenceStore.getInt("kisara_category_bar_selected_font_color_type", 0)
     fun categoryBarSelectedFontCustomColor() = preferenceStore.getInt("kisara_category_bar_selected_font_custom_color", 0xFFFFFFFF.toInt())
-    fun bottomBarHeight() = preferenceStore.getInt("kisara_bottom_bar_height", 48)
-    fun subBarHeight() = preferenceStore.getInt("kisara_sub_bar_height", 32)
+    fun bottomBarHeight() = preferenceStore.getInt("kisara_bottom_bar_height", 44)
+    fun subBarHeight() = preferenceStore.getInt("kisara_sub_bar_height", 30)
     fun kisaraShowSubcategoriesInMainBar() = preferenceStore.getBoolean("kisara_show_subcategories_in_main_bar", false)
     fun bottomBarWidth() = preferenceStore.getInt("kisara_bottom_bar_width_dp", 360)
-    fun bottomBarGap() = preferenceStore.getInt("kisara_bottom_bar_gap_dp", 12)
-    fun bottomBarIconSize() = preferenceStore.getInt("kisara_bottom_bar_icon_size", 24)
-    fun bottomBarKeepRatio() = preferenceStore.getBoolean("kisara_bottom_bar_keep_ratio", true)
+    fun bottomBarGap() = preferenceStore.getInt("kisara_bottom_bar_gap_dp", 2)
+    fun bottomBarIconSize() = preferenceStore.getInt("kisara_bottom_bar_icon_size", 23)
+    fun bottomBarKeepRatio() = preferenceStore.getBoolean("kisara_bottom_bar_keep_ratio", false)
     fun bottomBarHorizontalPadding() = preferenceStore.getInt("kisara_bottom_bar_horizontal_padding", 8)
     fun bottomBarAutoWidth() = preferenceStore.getBoolean("kisara_bottom_bar_auto_width", true)
     fun bottomBarVerticalPadding() = preferenceStore.getInt("kisara_bottom_bar_vertical_padding", 2)
-    fun bottomBarCornerRadius() = preferenceStore.getInt("kisara_bottom_bar_corner_radius", 24)
+    fun bottomBarCornerRadius() = preferenceStore.getInt("kisara_bottom_bar_corner_radius", 16)
     fun bottomBarButtonSize() = preferenceStore.getInt("kisara_bottom_bar_button_size_dp", 32)
+    fun showFloatingMediaModeButton() = preferenceStore.getBoolean("kisara_show_floating_media_mode_button", true)
+    fun showFloatingActionButton() = preferenceStore.getBoolean("kisara_show_floating_action_button", true)
+    fun bottomControlsGap() = preferenceStore.getInt("kisara_bottom_controls_gap", 8)
+    fun bottomControlsCornerRadius() = preferenceStore.getInt("kisara_bottom_controls_corner_radius", 16)
+    fun subTabsSeparationGap() = preferenceStore.getInt("kisara_sub_tabs_separation_gap", 8)
+    fun syncControlsWithDockRadius() = preferenceStore.getBoolean("kisara_sync_controls_with_dock_radius", true)
     fun openMangaInNewTask() = preferenceStore.getBoolean("kisara_open_manga_in_new_task", true)
 
     // Standard Bottom Bar Customizations
@@ -198,6 +207,8 @@ class UiPreferences(
     fun disableGlassInCategoryBar() = preferenceStore.getBoolean("kisara_disable_glass_in_category_bar", false)
 
     fun disableTabTransitions() = preferenceStore.getBoolean("kisara_disable_tab_transitions", false)
+    fun showNovelSection() = preferenceStore.getBoolean("pref_show_novel_section_key", true)
+    fun showAnimeSection() = preferenceStore.getBoolean("pref_show_anime_section_key", true)
     // KMK <--
 
     fun showNavUpdates() = preferenceStore.getBoolean("pref_show_updates_button", true)
@@ -218,6 +229,23 @@ class UiPreferences(
         BROWSE(MR.strings.browse),
         MORE(MR.strings.label_more),
     }
+
+    fun alwaysShowFullChapterListNovel() = preferenceStore.getBoolean("pref_always_show_full_chapter_list_novel", false)
+    fun entryAutoJumpToNextNovel() = preferenceStore.getBoolean("pref_entry_auto_jump_to_next_novel", true)
+    fun entryAutoJumpToNextAnime() = preferenceStore.getBoolean("pref_entry_auto_jump_to_next_anime", true)
+    fun entrySuggestionsExpandInline() = preferenceStore.getBoolean("pref_entry_suggestions_expand_inline", true)
+    fun entrySuggestionsInOverflow() = preferenceStore.getBoolean("pref_entry_suggestions_in_overflow", false)
+    fun metadataSource() = preferenceStore.getEnum("pref_metadata_source", MetadataSource.NONE)
+    fun showOriginalTitle() = preferenceStore.getBoolean("pref_show_original_title", false)
+    fun auroraEntryTranslationEnabled() = preferenceStore.getBoolean("pref_aurora_entry_translation_enabled", true)
+    fun auroraEntryTranslationSourceLanguages() = preferenceStore.getStringSet("pref_aurora_entry_translation_source_languages", setOf("ja", "ko", "zh"))
+    fun episodeListDensity() = preferenceStore.getEnum("pref_episode_list_density", eu.kanade.domain.ui.model.EpisodeListDensity.Compact)
+    fun showSeasonTabs() = preferenceStore.getBoolean("pref_show_season_tabs", true)
+    fun alwaysShowFullEpisodeList() = preferenceStore.getBoolean("pref_always_show_full_episode_list", false)
+    fun metadataAuthHintShown() = preferenceStore.getBoolean("pref_metadata_auth_hint_shown", false)
+    fun animatedAuroraBackground() = preferenceStore.getBoolean("pref_animated_aurora_background", true)
+    fun specialBackgroundStyle() = preferenceStore.getString("pref_special_background_style", "default")
+    enum class MetadataSource { NONE, ANILIST, MAL, KOTATSU }
 
     // SY <--
 

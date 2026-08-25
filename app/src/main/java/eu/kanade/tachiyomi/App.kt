@@ -46,11 +46,17 @@ import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
 import eu.kanade.tachiyomi.core.security.PrivacyPreferences
 import eu.kanade.tachiyomi.crash.CrashActivity
 import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
+import eu.kanade.tachiyomi.data.coil.AnimeCoverFetcher
+import eu.kanade.tachiyomi.data.coil.AnimeCoverKeyer
+import eu.kanade.tachiyomi.data.coil.AnimeKeyer
 import eu.kanade.tachiyomi.data.coil.BufferedSourceFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaCoverMetadata
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
+import eu.kanade.tachiyomi.data.coil.NovelCoverFetcher
+import eu.kanade.tachiyomi.data.coil.NovelCoverKeyer
+import eu.kanade.tachiyomi.data.coil.NovelKeyer
 import eu.kanade.tachiyomi.data.coil.PagePreviewFetcher
 import eu.kanade.tachiyomi.data.coil.PagePreviewKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
@@ -217,17 +223,10 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         setAppCompatDelegateThemeMode(Injekt.get<UiPreferences>().themeMode().get())
 
-        // KMK -->
+        // KMK --> ponytail: warm up DB and load cover metadata in background without foreground priority hijacking
         scope.launchIO {
-            val tid = android.os.Process.myTid()
-            val oldPriority = android.os.Process.getThreadPriority(tid)
-            try {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
-                Injekt.get<DatabaseHandler>() // Warm up SQLite database connection
-                MangaCoverMetadata.load()
-            } finally {
-                android.os.Process.setThreadPriority(tid, oldPriority)
-            }
+            Injekt.get<DatabaseHandler>() // Warm up SQLite database connection
+            MangaCoverMetadata.load()
         }
         // KMK <--
 
@@ -251,6 +250,10 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             if (!WorkManager.isInitialized()) {
                 WorkManager.initialize(this@App, Configuration.Builder().build())
             }
+
+            // KMK --> ponytail: defer sync and extension initialization by 10s to keep startup fast & idle
+            kotlinx.coroutines.delay(10000L)
+
             val syncPreferences: SyncPreferences = Injekt.get()
             val syncTriggerOpt = syncPreferences.getSyncTriggerOptions()
             if (syncPreferences.isSyncEnabled() && syncTriggerOpt.syncOnAppStart) {
@@ -260,6 +263,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             eu.kanade.tachiyomi.extension.util.ExtensionLoader.cleanTemporaryExtensions(this@App)
             eu.kanade.tachiyomi.extension.JarExtensionManager.cleanTemporaryJars(this@App)
             eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(this@App)
+            // KMK <--
         }
 
         initializeMigrator()
@@ -301,9 +305,17 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(BufferedSourceFetcher.Factory())
                 add(MangaCoverFetcher.MangaCoverFactory(callFactoryLazy))
                 add(MangaCoverFetcher.MangaFactory(callFactoryLazy))
+                add(AnimeCoverFetcher.AnimeCoverFactory(callFactoryLazy))
+                add(AnimeCoverFetcher.AnimeFactory(callFactoryLazy))
+                add(NovelCoverFetcher.NovelCoverFactory(callFactoryLazy))
+                add(NovelCoverFetcher.NovelFactory(callFactoryLazy))
                 // Keyer
                 add(MangaCoverKeyer())
                 add(MangaKeyer())
+                add(AnimeCoverKeyer())
+                add(AnimeKeyer())
+                add(NovelCoverKeyer())
+                add(NovelKeyer())
                 // SY -->
                 add(PagePreviewKeyer())
                 add(PagePreviewFetcher.Factory(callFactoryLazy))
@@ -313,7 +325,9 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             diskCache(
                 DiskCache.Builder()
                     .directory(context.cacheDir.resolve("image_cache"))
-                    .maxSizePercent(0.02)
+                    // KMK --> ponytail: 128MB fixed prevents cache thrashing on near-full devices
+                    .maxSizeBytes(128L * 1024 * 1024)
+                    // KMK <--
                     .build(),
             )
 
@@ -333,11 +347,21 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             if (networkPreferences.verboseLogging().get()) logger(DebugLogger())
 
             // Coil spawns a new thread for every image load by default
-            fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(8))
-            decoderCoroutineContext(Dispatchers.IO.limitedParallelism(3))
+            val cores = Runtime.getRuntime().availableProcessors()
+            fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(minOf(12, cores * 2).coerceAtLeast(8)))
+            decoderCoroutineContext(Dispatchers.IO.limitedParallelism(minOf(6, cores).coerceAtLeast(4)))
         }
             .build()
     }
+
+    // KMK --> ponytail: clear image caches on memory pressure to reduce RAM footprint
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_MODERATE) {
+            SingletonImageLoader.get(this).memoryCache?.clear()
+        }
+    }
+    // KMK <--
 
     override fun onStart(owner: LifecycleOwner) {
         SecureActivityDelegate.onApplicationStart()

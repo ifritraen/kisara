@@ -16,6 +16,11 @@ fun WorkManager.isRunning(tag: String): Boolean {
     return list.any { it.state == WorkInfo.State.RUNNING }
 }
 
+fun WorkManager.isRunningOrEnqueued(name: String): Boolean {
+    val list = this.getWorkInfosForUniqueWork(name).get()
+    return list.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+}
+
 /**
  * Makes this worker run in the context of a foreground service.
  *
@@ -29,7 +34,7 @@ suspend fun CoroutineWorker.setForegroundSafely() {
     try {
         setForeground(getForegroundInfo())
         delay(500)
-    } catch (e: IllegalStateException) {
+    } catch (e: Exception) {
         logcat(LogPriority.ERROR, e) { "Not allowed to set foreground job" }
     }
 }

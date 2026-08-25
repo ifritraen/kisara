@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import logcat.LogPriority
 import okhttp3.Cache
+import okhttp3.ConnectionPool
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -46,11 +47,12 @@ import kotlin.random.Random
             .connectTimeout(connectTimeout, TimeUnit.SECONDS)
             .readTimeout(readTimeout, TimeUnit.SECONDS)
             .callTimeout(callTimeout, TimeUnit.SECONDS)
+            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
             // KMK <--
             .cache(
                 Cache(
                     directory = File(context.cacheDir, "network_cache"),
-                    maxSize = 5L * 1024 * 1024, // 5 MiB
+                    maxSize = 50L * 1024 * 1024, // 50 MiB
                 ),
             )
             .addInterceptor(UncaughtExceptionInterceptor())

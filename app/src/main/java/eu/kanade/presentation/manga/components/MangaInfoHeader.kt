@@ -92,6 +92,12 @@ import com.mikepenz.markdown.model.markdownAnnotatorConfig
 import com.mikepenz.markdown.utils.getUnescapedTextInNode
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.DropdownMenu
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
+import eu.kanade.presentation.components.PillActionButton
+import eu.kanade.tachiyomi.data.coil.staticBlur
+import eu.kanade.presentation.entries.components.ItemCover
+import androidx.compose.foundation.shape.RoundedCornerShape
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -145,45 +151,6 @@ fun MangaInfoBox(
     val topAlignCover by Injekt.get<UiPreferences>().topAlignCover().collectAsState()
     // KMK <--
     Box(modifier = modifier) {
-        // Backdrop
-        val backdropGradientColors = listOf(
-            Color.Transparent,
-            MaterialTheme.colorScheme.background,
-        )
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(manga)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            // KMK -->
-            onSuccess = { result ->
-                val image = result.result.image
-                coverRatio.floatValue = image.height.toFloat() / image.width
-            },
-            // KMK <--
-            modifier = Modifier
-                .matchParentSize()
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = backdropGradientColors,
-                            // KMK -->
-                            startY = size.height / 2,
-                            // KMK <--
-                        ),
-                    )
-                }
-                // KMK -->
-                .background(MaterialTheme.colorScheme.surfaceTint.copy(alpha = 0.4f))
-                .blur(7.dp)
-                // .blur(4.dp)
-                // KMK <--
-                .alpha(0.2f),
-        )
-
         // Manga & source info
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
             if (!isTabletUi) {
@@ -279,7 +246,18 @@ fun MangaActionRow(
         }
     }
 
-    Row(modifier = modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp)) {
+    GlassSurface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(24.dp),
+        style = GlassDefaults.prominentStyle(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+        ) {
         MangaActionButton(
             title = if (favorite) {
                 stringResource(MR.strings.in_library)
@@ -349,7 +327,6 @@ fun MangaActionRow(
             )
         }
         // SY <--
-        // KMK -->
         if (duplicateCount > 0) {
             MangaActionButton(
                 title = stringResource(MR.strings.possible_duplicates_title),
@@ -359,6 +336,7 @@ fun MangaActionRow(
             )
         }
         // KMK <--
+        }
     }
 }
 
@@ -398,10 +376,17 @@ fun ExpandableMangaDescription(
         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
     // KMK <--
-    Column(modifier = modifier) {
-        val (expanded, onExpanded) = rememberSaveable {
-            mutableStateOf(defaultExpandState)
-        }
+    GlassSurface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(24.dp),
+        style = GlassDefaults.prominentStyle(),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            val (expanded, onExpanded) = rememberSaveable {
+                mutableStateOf(defaultExpandState)
+            }
         val desc =
             description.takeIf { !it.isNullOrBlank() } ?: stringResource(MR.strings.description_placeholder)
 
@@ -565,6 +550,7 @@ fun ExpandableMangaDescription(
             }
         }
     }
+}
 }
 
 @Composable
@@ -1184,25 +1170,12 @@ private fun RowScope.MangaActionButton(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
-    TextButton(
+    PillActionButton(
+        title = title,
+        icon = icon,
+        color = color,
         onClick = onClick,
-        modifier = Modifier.weight(1f),
         onLongClick = onLongClick,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = title,
-                color = color,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
+        active = color != MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA),
+    )
 }

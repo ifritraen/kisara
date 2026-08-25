@@ -129,4 +129,3 @@ data class MUReviewRecord(
     val body: String? = null,
     val score: Double? = null,
 )
-

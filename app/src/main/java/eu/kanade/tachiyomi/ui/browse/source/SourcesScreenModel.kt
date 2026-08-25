@@ -328,7 +328,7 @@ class SourcesScreenModel(
         // KMK -->
         val searchQuery: String? = null,
         val nsfwOnly: Boolean = false,
-        val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"),
+        val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         val selectedTag: String? = null,
         val sourceTagMappings: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         val selectedSources: kotlinx.collections.immutable.ImmutableSet<Long> = kotlinx.collections.immutable.persistentSetOf(),

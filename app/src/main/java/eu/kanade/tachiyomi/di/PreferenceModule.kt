@@ -69,6 +69,9 @@ class PreferenceModule(val app: Application) : InjektModule {
             ReaderPreferences(get())
         }
         addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(get())
+        }
+        addSingletonFactory {
             TrackPreferences(get())
         }
         addSingletonFactory {
@@ -95,6 +98,9 @@ class PreferenceModule(val app: Application) : InjektModule {
 
         addSingletonFactory {
             SyncPreferences(get())
+        }
+        addSingletonFactory {
+            aniyomi.core.common.torrent.TorrentPreferences(get())
         }
     }
 }

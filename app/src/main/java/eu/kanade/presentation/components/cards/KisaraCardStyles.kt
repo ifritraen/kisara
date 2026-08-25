@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -84,6 +85,7 @@ enum class HomeSectionCardStyle(val key: String, val displayName: String) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun KisaraHomeSectionCard(
     style: HomeSectionCardStyle,
@@ -97,6 +99,7 @@ fun KisaraHomeSectionCard(
     languageCode: String? = null,
     coverTitleStyle: String = "default",
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     onResume: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -107,7 +110,7 @@ fun KisaraHomeSectionCard(
                     .width(260.dp)
                     .height(100.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
@@ -161,7 +164,7 @@ fun KisaraHomeSectionCard(
                     .width(280.dp)
                     .height(150.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             ) {
                 MangaCover.Book(
                     data = coverData,
@@ -232,7 +235,7 @@ fun KisaraHomeSectionCard(
                 modifier = modifier
                     .width(280.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
             ) {
@@ -304,7 +307,7 @@ fun KisaraHomeSectionCard(
                     .width(300.dp)
                     .height(200.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -468,6 +471,7 @@ private fun getCoverTitleParams(styleKey: String): CoverTitleParams {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun KisaraNormalCard(
     style: NormalCardStyle,
@@ -552,7 +556,7 @@ fun KisaraNormalCard(
                 modifier = modifier
                     .aspectRatio(2f / 3f)
                     .clip(RoundedCornerShape(14.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -601,7 +605,7 @@ fun KisaraNormalCard(
                         ),
                         RoundedCornerShape(14.dp),
                     )
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -640,7 +644,7 @@ fun KisaraNormalCard(
                 modifier = modifier
                     .aspectRatio(2f / 3f)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             ) {
                 MangaCover.Book(data = coverData, modifier = Modifier.fillMaxSize())
                 Box(
@@ -680,7 +684,7 @@ fun KisaraNormalCard(
                 modifier = modifier
                     .aspectRatio(2f / 3f)
                     .clip(RoundedCornerShape(14.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -712,7 +716,7 @@ fun KisaraNormalCard(
             OutlinedCard(
                 modifier = modifier
                     .aspectRatio(2f / 3f)
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -755,7 +759,7 @@ fun KisaraNormalCard(
                         ),
                         RoundedCornerShape(16.dp),
                     )
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             ) {
                 MangaCover.Book(data = coverData, modifier = Modifier.fillMaxSize())
                 Box(
@@ -804,10 +808,41 @@ fun KisaraNormalCard(
                 modifier = modifier
                     .aspectRatio(2f / 3f)
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onClick),
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             ) {
                 MangaCover.Book(data = coverData, modifier = Modifier.fillMaxSize())
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.15f),
+                                    Color.Black.copy(alpha = 0.55f),
+                                    Color.Black.copy(alpha = 0.88f),
+                                ),
+                            ),
+                        ),
+                )
                 badgesOverlay()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
+                ) {
+                    titleRow(Color.White, 2)
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            fontSize = subtitleFontSize,
+                            color = Color.White.copy(alpha = 0.75f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }

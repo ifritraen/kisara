@@ -1,8 +1,10 @@
 -dontobfuscate
 
--keep class eu.kanade.** { *; }
--keep class tachiyomi.** { *; }
--keep class mihon.** { *; }
+# KMK --> ponytail: allowoptimization lets R8 inline/devirtualize/remove dead code
+-keep,allowoptimization class eu.kanade.** { *; }
+-keep,allowoptimization class tachiyomi.** { *; }
+-keep,allowoptimization class mihon.** { *; }
+# KMK <--
 
 # Keep extension-facing API contracts & coroutines intact
 -keep class eu.kanade.tachiyomi.source.** { *; }

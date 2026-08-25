@@ -296,3 +296,53 @@ getIdByUrlAndSource:
 SELECT _id
 FROM mangas
 WHERE url = :url AND source = :source;
+
+-- Get all genres from library manga
+getLibraryGenres:
+SELECT genre
+FROM mangas
+WHERE favorite = 1 AND genre IS NOT NULL;
+
+-- Get all sources from library manga
+getLibrarySources:
+SELECT source
+FROM mangas
+WHERE favorite = 1;
+
+getLibraryCount:
+SELECT COUNT(*)
+FROM mangas
+WHERE favorite = 1;
+
+getLibraryCountByStatus:
+SELECT COUNT(*)
+FROM mangas
+WHERE favorite = 1
+AND status = :status;
+
+hasLibraryTitleLike:
+SELECT EXISTS(
+    SELECT 1
+    FROM mangas
+    WHERE favorite = 1
+    AND LOWER(title) LIKE '%' || LOWER(:searchTerm) || '%'
+    LIMIT 1
+);
+
+hasCompletedLibraryMangaWithMinReadChapters:
+SELECT EXISTS(
+    SELECT 1
+    FROM mangas M
+    INNER JOIN chapters C ON C.manga_id = M._id
+    WHERE M.favorite = 1
+    AND M.status = 2
+    AND C.read = 1
+    GROUP BY M._id
+    HAVING COUNT(*) >= :chapterCount
+    LIMIT 1
+);
+
+getCompletedMangaCount:
+SELECT COUNT(*) FROM mangas
+WHERE favorite = 1
+AND status = 2;

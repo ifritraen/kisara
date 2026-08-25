@@ -15,7 +15,7 @@ import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.SetMangaCategories
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
-import tachiyomi.domain.chapter.model.toChapterUpdate
+import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.history.interactor.GetHistory
 import tachiyomi.domain.history.interactor.UpsertHistory
 import tachiyomi.domain.history.model.HistoryUpdate
@@ -124,7 +124,23 @@ class MigrateMangaUseCase(
                     updatedChapter
                 }
 
-                val chapterUpdates = updatedMangaChapters.map { it.toChapterUpdate() }
+                val chapterUpdates = updatedMangaChapters.map {
+                    ChapterUpdate(
+                        id = it.id,
+                        mangaId = it.mangaId,
+                        read = it.read,
+                        bookmark = it.bookmark,
+                        lastPageRead = it.lastPageRead,
+                        dateFetch = it.dateFetch,
+                        sourceOrder = it.sourceOrder,
+                        url = it.url,
+                        name = it.name,
+                        dateUpload = it.dateUpload,
+                        chapterNumber = it.chapterNumber,
+                        scanlator = it.scanlator,
+                        version = it.version,
+                    )
+                }
                 updateChapter.awaitAll(chapterUpdates)
                 // SY -->
                 upsertHistory.awaitAll(historyUpdates)

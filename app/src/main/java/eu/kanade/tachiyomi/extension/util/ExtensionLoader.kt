@@ -482,6 +482,17 @@ internal object ExtensionLoader {
             },
             // KMK <--
         )
+
+        val apkFile = File(appInfo.sourceDir ?: "")
+        if (apkFile.isFile) {
+            LocalApkExtensionSupport.extractAndCacheApkIcon(
+                context = context,
+                apkFile = apkFile,
+                packageName = pkgName,
+                sourceIds = sources.map { it.id },
+            )
+        }
+
         return LoadResult.Success(extension)
     }
 

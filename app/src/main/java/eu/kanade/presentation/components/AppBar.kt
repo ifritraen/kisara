@@ -511,6 +511,7 @@ sealed interface AppBar {
 
     data class OverflowAction(
         val title: String,
+        val enabled: Boolean = true,
         val onClick: () -> Unit,
     ) : AppBarAction
 }

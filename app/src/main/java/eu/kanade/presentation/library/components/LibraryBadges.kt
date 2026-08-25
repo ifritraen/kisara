@@ -46,7 +46,7 @@ import tachiyomi.source.local.isLocal
 import java.io.File
 
 @Composable
-internal fun DownloadsBadge(count: Long) {
+fun DownloadsBadge(count: Long) {
     if (count > 0) {
         Badge(
             text = "$count",
@@ -57,10 +57,15 @@ internal fun DownloadsBadge(count: Long) {
 }
 
 @Composable
-internal fun UnreadBadge(count: Long) {
+fun UnreadBadge(count: Long) {
     if (count > 0) {
         Badge(text = "$count")
     }
+}
+
+@Composable
+fun UnviewedBadge(count: Long) {
+    UnreadBadge(count = count)
 }
 
 @Composable

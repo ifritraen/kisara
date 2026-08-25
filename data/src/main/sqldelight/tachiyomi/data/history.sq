@@ -78,3 +78,20 @@ WHERE chapter_id = :chapterId;
 getReadDuration:
 SELECT coalesce(sum(time_read), 0)
 FROM history;
+
+getChapterInfo:
+SELECT
+    C.manga_id,
+    C.chapter_number
+FROM chapters C
+WHERE C._id = :chapterId;
+
+getTotalChaptersRead:
+SELECT COUNT(*)
+FROM history;
+
+getChaptersReadByMangaId:
+SELECT COUNT(*)
+FROM history H
+INNER JOIN chapters C ON H.chapter_id = C._id
+WHERE C.manga_id = :mangaId;

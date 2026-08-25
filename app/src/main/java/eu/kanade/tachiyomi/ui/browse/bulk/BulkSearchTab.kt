@@ -75,30 +75,30 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Screen.bulkSearchTab(): TabContent {
-    val context = LocalContext.current
-    val navigator = LocalNavigator.currentOrThrow
-    val screenModel = rememberScreenModel { SourcesScreenModel(smartSearchConfig = null) }
-    val state by screenModel.state.collectAsState()
-
-    // Selection state
-    val selectedSourceIds = remember { mutableStateListOf<Long>() }
-
-    // Dialog trigger states
-    var queryInputDialogSources by remember { mutableStateOf<List<Source>?>(null) }
-    var saveTemplateDialogSources by remember { mutableStateOf<List<Source>?>(null) }
-    var templateToDelete by remember { mutableStateOf<String?>(null) }
-    var renameTemplateDialogTarget by remember { mutableStateOf<BulkSearchTemplate?>(null) }
-    var renameTemplateText by remember { mutableStateOf("") }
-
-    // Templates state
-    var templates by remember { mutableStateOf(emptyList<BulkSearchTemplate>()) }
-    LaunchedEffect(Unit) {
-        templates = BulkSearchTemplates.getTemplates(context)
-    }
-
     return TabContent(
         titleRes = KMR.strings.bulk_search,
         content = { contentPadding, snackbarHostState ->
+            val context = LocalContext.current
+            val navigator = LocalNavigator.currentOrThrow
+            val screenModel = rememberScreenModel { SourcesScreenModel(smartSearchConfig = null) }
+            val state by screenModel.state.collectAsState()
+
+            // Selection state
+            val selectedSourceIds = remember { mutableStateListOf<Long>() }
+
+            // Dialog trigger states
+            var queryInputDialogSources by remember { mutableStateOf<List<Source>?>(null) }
+            var saveTemplateDialogSources by remember { mutableStateOf<List<Source>?>(null) }
+            var templateToDelete by remember { mutableStateOf<String?>(null) }
+            var renameTemplateDialogTarget by remember { mutableStateOf<BulkSearchTemplate?>(null) }
+            var renameTemplateText by remember { mutableStateOf("") }
+
+            // Templates state
+            var templates by remember { mutableStateOf(emptyList<BulkSearchTemplate>()) }
+            LaunchedEffect(Unit) {
+                templates = BulkSearchTemplates.getTemplates(context)
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()

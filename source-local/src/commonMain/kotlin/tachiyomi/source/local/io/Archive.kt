@@ -11,3 +11,13 @@ object Archive {
         return file.extension?.lowercase() in SUPPORTED_ARCHIVE_TYPES
     }
 }
+
+typealias ArchiveManga = Archive
+
+object ArchiveAnime {
+    private val SUPPORTED_ARCHIVE_TYPES = listOf("avi", "flv", "mkv", "mov", "mp4", "webm", "wmv", "torrent")
+
+    fun isSupported(file: UniFile): Boolean = with(file) {
+        return file.extension in SUPPORTED_ARCHIVE_TYPES
+    }
+}

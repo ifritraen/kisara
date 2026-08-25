@@ -249,6 +249,9 @@ fun extensionsTab(
                         onSaveTags = { selectedTags, newTag ->
                             extensionsScreenModel.saveExtensionTags(extension.pkgName, selectedTags, newTag)
                         },
+                        onUninstall = if (extension is Extension.Installed) {
+                            { extensionsScreenModel.uninstallExtension(extension) }
+                        } else null,
                     )
                 }
                 is ExtensionsScreenModel.Dialog.BulkExtensionTags -> {

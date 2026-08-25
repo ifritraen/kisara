@@ -3,11 +3,23 @@ package eu.kanade.tachiyomi.ui.home
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,6 +28,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +51,11 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import eu.kanade.domain.ui.model.MediaType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Check
@@ -171,9 +189,11 @@ object HomeScreen : Screen() {
 
     private val librarySearchEvent = Channel<String>()
     private val openTabEvent = Channel<Tab>()
-    private val showBottomNavEvent = Channel<Boolean>()
+    val showBottomNavFlow = kotlinx.coroutines.flow.MutableStateFlow(true)
 
-    private const val TAB_FADE_DURATION = 90
+    private const val TAB_ENTER_DURATION = 260
+    private const val TAB_EXIT_DURATION = 260
+    private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
     private const val TAB_NAVIGATOR_KEY = "HomeTabs"
 
     private val TABS = listOf(
@@ -183,6 +203,15 @@ object HomeScreen : Screen() {
         BrowseTab,
         MoreTab,
     )
+
+    private fun tabDirection(
+        initialTab: cafe.adriel.voyager.navigator.tab.Tab,
+        targetTab: cafe.adriel.voyager.navigator.tab.Tab,
+    ): Int {
+        val initialIndex = TABS.indexOfFirst { it.key == initialTab.key || it::class == initialTab::class }.takeIf { it >= 0 } ?: 0
+        val targetIndex = TABS.indexOfFirst { it.key == targetTab.key || it::class == targetTab::class }.takeIf { it >= 0 } ?: 0
+        return if (targetIndex >= initialIndex) 1 else -1
+    }
 
     @Composable
     override fun Content() {
@@ -208,18 +237,46 @@ object HomeScreen : Screen() {
         val standardBottomBarHeight by uiPreferences.standardBottomBarHeight().collectAsState()
         val standardBottomBarBottomMargin by uiPreferences.standardBottomBarBottomMargin().collectAsState()
 
+        val showFloatingMediaModeButton by uiPreferences.showFloatingMediaModeButton().collectAsState()
+        val showFloatingActionButton by uiPreferences.showFloatingActionButton().collectAsState()
+        val bottomControlsGap by uiPreferences.bottomControlsGap().collectAsState()
+        val bottomControlsCornerRadius by uiPreferences.bottomControlsCornerRadius().collectAsState()
+        val syncControlsWithDockRadius by uiPreferences.syncControlsWithDockRadius().collectAsState()
+        val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+        val alwaysShowSubTabsLibrary by uiPreferences.alwaysShowSubTabsLibrary().collectAsState()
+
         val disableTabTransitions by uiPreferences.disableTabTransitions().collectAsState()
         val bypassBlurOnTransitions by uiPreferences.bypassBlurOnTransitions().collectAsState()
 
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
         var showVerticalActionPopup by remember { mutableStateOf(false) }
+        var showMediaModePopup by remember { mutableStateOf(false) }
         var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
         val subTabButtonBounds = remember { mutableStateMapOf<String, ButtonActionBounds>() }
         var hoveredButtonKey by remember { mutableStateOf<String?>(null) }
         var popupSelectedCategoryId by remember { mutableStateOf<Long?>(null) }
         var categoryToEdit by remember { mutableStateOf<Category?>(null) }
-        val categoriesState by remember { Injekt.get<GetCategories>().subscribe() }.collectAsState(initial = emptyList())
+        val categoriesState by produceState<List<Category>>(emptyList(), activeMediaType) {
+            when (activeMediaType) {
+                MediaType.ANIME -> {
+                    val getAnimeCategories = Injekt.get<tachiyomi.domain.category.anime.interactor.GetAnimeCategories>()
+                    getAnimeCategories.subscribe().collect { animeCats ->
+                        value = animeCats.map { Category(id = it.id, name = it.name, order = it.order, flags = it.flags, hidden = it.hidden, parentId = it.parentId) }
+                    }
+                }
+                MediaType.NOVEL -> {
+                    val getNovelCategories = Injekt.get<tachiyomi.domain.category.novel.interactor.GetNovelCategories>()
+                    getNovelCategories.subscribe().collect { novelCats ->
+                        value = novelCats.map { Category(id = it.id, name = it.name, order = it.order, flags = it.flags, hidden = it.hidden, parentId = it.parentId) }
+                    }
+                }
+                else -> {
+                    val getCategories = Injekt.get<GetCategories>()
+                    getCategories.subscribe().collect { value = it }
+                }
+            }
+        }
 
         val startScreen = remember { uiPreferences.startScreen().get() }
         val initialTab = remember {
@@ -301,9 +358,7 @@ object HomeScreen : Screen() {
                             if (!isTabletUi() && !floatingBottomBar) {
                                 val bottomBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.bottomBarHeight().collectAsState().value
                                 val bottomBarWidth = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.bottomBarWidth().collectAsState().value
-                                val bottomNavVisible by produceState(initialValue = true) {
-                                    showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
-                                }
+                                val bottomNavVisible by showBottomNavFlow.collectAsState()
                                 AnimatedVisibility(
                                     visible = bottomNavVisible,
                                     enter = expandVertically(),
@@ -379,18 +434,31 @@ object HomeScreen : Screen() {
                                         AnimatedContent(
                                             targetState = tabNavigator.current,
                                             transitionSpec = {
-                                                val duration = if (disableTabTransitions) 0 else TAB_FADE_DURATION
-                                                materialFadeThroughIn(
-                                                    initialScale = 1f,
-                                                    durationMillis = duration,
-                                                ) togetherWith
-                                                    materialFadeThroughOut(durationMillis = duration)
+                                                if (disableTabTransitions) {
+                                                    EnterTransition.None togetherWith ExitTransition.None
+                                                } else {
+                                                    val direction = tabDirection(initialState, targetState)
+                                                    val enter = slideInHorizontally(
+                                                        animationSpec = tween(TAB_ENTER_DURATION, easing = AURORA_EASING),
+                                                        initialOffsetX = { width -> direction * (width / 4) },
+                                                    ) + fadeIn(
+                                                        animationSpec = tween(TAB_ENTER_DURATION, easing = AURORA_EASING),
+                                                    )
+                                                    val exit = slideOutHorizontally(
+                                                        animationSpec = tween(TAB_EXIT_DURATION, easing = AURORA_EASING),
+                                                        targetOffsetX = { width -> -direction * (width / 5) },
+                                                    ) + fadeOut(
+                                                        animationSpec = tween(TAB_EXIT_DURATION, easing = AURORA_EASING),
+                                                    )
+                                                    (enter togetherWith exit).apply {
+                                                        targetContentZIndex = 1f
+                                                    }
+                                                }
                                             },
                                             label = "tabContent",
-                                            contentKey = { it.key },
-                                        ) {
-                                            tabNavigator.saveableState(key = "currentTab", it) {
-                                                it.Content()
+                                        ) { currentTab ->
+                                            tabNavigator.saveableState(key = "currentTab", currentTab) {
+                                                currentTab.Content()
                                             }
                                         }
                                     }
@@ -405,9 +473,7 @@ object HomeScreen : Screen() {
 
                                 // Floating bottom bar overlay
                                 if (!isTabletUi() && floatingBottomBar) {
-                                    val bottomNavVisible by produceState(initialValue = true) {
-                                        showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
-                                    }
+                                    val bottomNavVisible by showBottomNavFlow.collectAsState()
 
                                     // 1. Determine actions for the current tab
                                     val currentTab = tabNavigator.current
@@ -420,9 +486,14 @@ object HomeScreen : Screen() {
 
                                     // 2. Determine which sub-tab popup is active
                                     val alwaysShowSubTabsTrack by uiPreferences.alwaysShowSubTabsTrack().collectAsState()
+                                    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+                                    val categoryBarPinnedPref = remember { libraryPreferences.categoryBarPinned() }
+                                    val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
+
                                     val activePopup = when {
                                         activeSubTabPopup != null -> activeSubTabPopup
                                         currentTab is HomeTab && alwaysShowSubTabsHome -> currentTab
+                                        currentTab is LibraryTab && (alwaysShowSubTabsLibrary || isCategoryBarPinned) -> currentTab
                                         currentTab is BrowseTab && alwaysShowSubTabsBrowse -> currentTab
                                         currentTab is eu.kanade.tachiyomi.ui.track.TrackTab && alwaysShowSubTabsTrack && !showTrackSubBarAtTop -> currentTab
                                         else -> null
@@ -437,10 +508,6 @@ object HomeScreen : Screen() {
                                             .padding(bottom = ((if (floatingBottomBar) (bottomBarHeight + bottomBarBottomMargin) else (standardBottomBarHeight + standardBottomBarBottomMargin)) + subTabsBottomMargin).coerceAtLeast(0).dp)
                                             .align(Alignment.BottomCenter),
                                     ) {
-                                        val getCategories = remember { uy.kohesive.injekt.Injekt.get<tachiyomi.domain.category.interactor.GetCategories>() }
-                                        val categoriesState by produceState<List<tachiyomi.domain.category.model.Category>>(emptyList()) {
-                                            getCategories.subscribe().collect { value = it }
-                                        }
                                         val parentCategories = remember(categoriesState) {
                                             categoriesState.filter { it.parentId == null }.sortedBy { it.order }
                                         }
@@ -451,8 +518,14 @@ object HomeScreen : Screen() {
                                         }
                                         val subcategories = popupSelectedCategoryId?.let { childrenByParent[it] }.orEmpty()
 
+                                        val effectiveCornerRadius = if (syncControlsWithDockRadius) {
+                                            uiPreferences.bottomBarCornerRadius().collectAsState().value.dp
+                                        } else {
+                                            bottomControlsCornerRadius.dp
+                                        }
+
                                         GlassSurface(
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(effectiveCornerRadius),
                                             style = GlassDefaults.regularStyle(),
                                         ) {
                                             Box(
@@ -460,23 +533,46 @@ object HomeScreen : Screen() {
                                             ) {
                                                 if (activePopup is LibraryTab) {
                                                     val editCategory = LocalEditCategory.current
+                                                    val kisaraShowSubcategoriesInMainBar by uiPreferences.kisaraShowSubcategoriesInMainBar().collectAsState()
+                                                    val tabCategories = if (parentCategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
+                                                        parentCategories
+                                                    } else {
+                                                        categoriesState
+                                                    }
+
                                                     Column(
                                                         verticalArrangement = Arrangement.spacedBy(4.dp),
                                                     ) {
-                                                        if (subcategories.isNotEmpty()) {
+                                                        // Subcategories Row (if present) - Rendered ABOVE Parent Categories
+                                                        if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
                                                             Row(
-                                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                                 verticalAlignment = Alignment.CenterVertically,
                                                             ) {
+                                                                // "All" button
+                                                                SubTabButton(
+                                                                    text = "All",
+                                                                    selected = popupSelectedCategoryId == null,
+                                                                    onLongClick = {
+                                                                        parentCategories.firstOrNull()?.let { editCategory(it) }
+                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
+                                                                    },
+                                                                ) {
+                                                                    popupSelectedCategoryId = null
+                                                                    tabNavigator.current = LibraryTab
+                                                                    if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
+                                                                }
+
                                                                 subcategories.forEach { sub ->
                                                                     val key = "Library_sub_${sub.id}"
                                                                     SubTabButton(
                                                                         text = sub.visualName,
-                                                                        selected = false,
+                                                                        selected = popupSelectedCategoryId == sub.id,
                                                                         hovered = hoveredButtonKey == key,
                                                                         onLongClick = {
                                                                             editCategory(sub)
-                                                                            activeSubTabPopup = null
+                                                                            if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                         },
                                                                         modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                             subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
@@ -485,34 +581,37 @@ object HomeScreen : Screen() {
                                                                                 if (actualIndex != -1) {
                                                                                     LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                                 }
-                                                                                activeSubTabPopup = null
+                                                                                if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                             }
                                                                         },
                                                                     ) {
+                                                                        popupSelectedCategoryId = sub.id
                                                                         tabNavigator.current = LibraryTab
                                                                         val actualIndex = categoriesState.indexOfFirst { it.id == sub.id }
                                                                         if (actualIndex != -1) {
                                                                             LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                         }
-                                                                        activeSubTabPopup = null
+                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                     }
                                                                 }
                                                             }
                                                         }
 
+                                                        // Parent Categories Row with Pin icon
                                                         Row(
+                                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
                                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                             verticalAlignment = Alignment.CenterVertically,
                                                         ) {
-                                                            parentCategories.forEach { category ->
+                                                            tabCategories.forEach { category ->
                                                                 val key = "Library_${category.id}"
                                                                 SubTabButton(
                                                                     text = category.visualName,
-                                                                    selected = false,
+                                                                    selected = popupSelectedCategoryId == category.id,
                                                                     hovered = hoveredButtonKey == key,
                                                                     onLongClick = {
                                                                         editCategory(category)
-                                                                        activeSubTabPopup = null
+                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                     },
                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                         subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
@@ -521,7 +620,7 @@ object HomeScreen : Screen() {
                                                                             if (actualIndex != -1) {
                                                                                 LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                             }
-                                                                            activeSubTabPopup = null
+                                                                            if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                         }
                                                                     },
                                                                 ) {
@@ -531,13 +630,11 @@ object HomeScreen : Screen() {
                                                                     if (actualIndex != -1) {
                                                                         LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                     }
+                                                                    if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                 }
                                                             }
 
-                                                            val categoryBarPinnedPref = remember { Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>().categoryBarPinned() }
-                                                            val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
-                                                            val scope = rememberCoroutineScope()
-                                                            androidx.compose.material3.IconButton(
+                                                            IconButton(
                                                                 onClick = {
                                                                     scope.launch {
                                                                         categoryBarPinnedPref.set(!isCategoryBarPinned)
@@ -545,7 +642,7 @@ object HomeScreen : Screen() {
                                                                 },
                                                                 modifier = Modifier.size(32.dp),
                                                             ) {
-                                                                androidx.compose.material3.Icon(
+                                                                Icon(
                                                                     imageVector = if (isCategoryBarPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                                                                     contentDescription = "Pin category bar",
                                                                     modifier = Modifier.size(16.dp),
@@ -788,7 +885,7 @@ object HomeScreen : Screen() {
                                         }
                                     }
 
-                                    // 4. Render the actual bottom bar (with in-place actions)
+                                    // 4. Render the actual bottom bar row (with 3 siblings: Media Mode, Main Dock, 3-Dot Action)
                                     AnimatedVisibility(
                                         visible = bottomNavVisible,
                                         enter = expandVertically(),
@@ -818,205 +915,345 @@ object HomeScreen : Screen() {
                                             bottomBarIconSizePref.dp
                                         }
 
-                                        GlassSurface(
-                                            shape = RoundedCornerShape(bottomBarCornerRadius.dp),
-                                            style = GlassDefaults.prominentStyle(),
-                                            modifier = Modifier
-                                                .height(bottomBarHeight.dp)
-                                                .then(
-                                                    if (bottomBarAutoWidth) {
-                                                        Modifier.wrapContentWidth()
-                                                    } else {
-                                                        Modifier.width(bottomBarWidth.dp)
-                                                    },
-                                                ),
+                                        val effectiveCornerRadius = if (syncControlsWithDockRadius) bottomBarCornerRadius.dp else bottomControlsCornerRadius.dp
+
+                                        Row(
+                                            verticalAlignment = Alignment.Bottom,
+                                            horizontalArrangement = Arrangement.spacedBy(bottomControlsGap.dp),
                                         ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxHeight()
-                                                    .padding(horizontal = bottomBarHorizontalPadding.dp, vertical = bottomBarVerticalPadding.dp)
-                                                    .wrapContentWidth(align = Alignment.CenterHorizontally, unbounded = true)
-                                                    .align(Alignment.Center),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(bottomBarGap.dp),
-                                            ) {
-                                                // Left part: The 4 Navigation Tabs
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(bottomBarGap.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                ) {
-                                                    TABS.fastFilter { it.isEnabled() }.fastForEach { tab ->
-                                                        val selected = tabNavigator.current::class == tab::class
-                                                        val tint = if (selected) {
-                                                            MaterialTheme.colorScheme.primary
-                                                        } else {
-                                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                            // Far Left: Floating Media Mode Button & Vertical Popup
+                                            if (showFloatingMediaModeButton) {
+                                                Box(contentAlignment = Alignment.BottomStart) {
+                                                    // Vertical Media Mode Stack
+                                                    androidx.compose.animation.AnimatedVisibility(
+                                                        visible = showMediaModePopup,
+                                                        enter = expandVertically(expandFrom = Alignment.Bottom) + androidx.compose.animation.fadeIn(),
+                                                        exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + androidx.compose.animation.fadeOut(),
+                                                        modifier = Modifier.padding(bottom = (bottomBarHeight + 8).dp),
+                                                    ) {
+                                                        GlassSurface(
+                                                            shape = RoundedCornerShape(effectiveCornerRadius),
+                                                            style = GlassDefaults.regularStyle(),
+                                                            modifier = Modifier.wrapContentWidth(),
+                                                        ) {
+                                                            Column(
+                                                                modifier = Modifier.padding(6.dp),
+                                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                            ) {
+                                                                val haptic = LocalHapticFeedback.current
+                                                                MediaType.values().forEach { mode ->
+                                                                    val isSelected = activeMediaType == mode
+                                                                    val bgModifier = if (isSelected) {
+                                                                        Modifier.background(
+                                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                                            shape = RoundedCornerShape(12.dp),
+                                                                        )
+                                                                    } else {
+                                                                        Modifier
+                                                                    }
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .size(40.dp)
+                                                                            .clip(RoundedCornerShape(12.dp))
+                                                                            .then(bgModifier)
+                                                                            .clickable {
+                                                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                                                scope.launch {
+                                                                                    uiPreferences.activeMediaType().set(mode)
+                                                                                    showMediaModePopup = false
+                                                                                }
+                                                                            },
+                                                                        contentAlignment = Alignment.Center,
+                                                                    ) {
+                                                                        Text(
+                                                                            text = mode.shortName,
+                                                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                                                fontWeight = FontWeight.Black,
+                                                                                fontSize = 18.sp,
+                                                                            ),
+                                                                            color = if (isSelected) {
+                                                                                MaterialTheme.colorScheme.primary
+                                                                            } else {
+                                                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
                                                         }
-                                                        var itemGlobalOffset by remember { mutableStateOf(Offset.Zero) }
+                                                    }
+
+                                                    // Floating Media Mode Button (drag / tap)
+                                                    val haptic = LocalHapticFeedback.current
+                                                    var dragAccumulatorX by remember { mutableFloatStateOf(0f) }
+                                                    var dragAccumulatorY by remember { mutableFloatStateOf(0f) }
+                                                    val dragThreshold = 35f
+
+                                                    GlassSurface(
+                                                        shape = RoundedCornerShape(effectiveCornerRadius),
+                                                        style = GlassDefaults.prominentStyle(),
+                                                        modifier = Modifier.size(bottomBarHeight.dp),
+                                                    ) {
                                                         Box(
                                                             modifier = Modifier
-                                                                .size(bottomBarButtonSize)
-                                                                .clip(CircleShape)
-                                                                .onGloballyPositioned { coordinates ->
-                                                                    itemGlobalOffset = coordinates.positionInRoot()
+                                                                .fillMaxSize()
+                                                                .clip(RoundedCornerShape(effectiveCornerRadius))
+                                                                .pointerInput(activeMediaType) {
+                                                                    detectDragGestures(
+                                                                        onDragStart = {
+                                                                            dragAccumulatorX = 0f
+                                                                            dragAccumulatorY = 0f
+                                                                        },
+                                                                        onDrag = { change, dragAmount ->
+                                                                            change.consume()
+                                                                            dragAccumulatorX += dragAmount.x
+                                                                            dragAccumulatorY += dragAmount.y
+
+                                                                            if (dragAccumulatorX > dragThreshold || dragAccumulatorY > dragThreshold) {
+                                                                                dragAccumulatorX = 0f
+                                                                                dragAccumulatorY = 0f
+                                                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                                                scope.launch {
+                                                                                    uiPreferences.activeMediaType().set(activeMediaType.previous())
+                                                                                }
+                                                                            } else if (dragAccumulatorX < -dragThreshold || dragAccumulatorY < -dragThreshold) {
+                                                                                dragAccumulatorX = 0f
+                                                                                dragAccumulatorY = 0f
+                                                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                                                scope.launch {
+                                                                                    uiPreferences.activeMediaType().set(activeMediaType.next())
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                    )
                                                                 }
-                                                                .subTabBarGestureDetector(
-                                                                    tab = tab,
-                                                                    selected = selected,
-                                                                    itemGlobalOffset = itemGlobalOffset,
-                                                                    subTabButtonBounds = subTabButtonBounds,
-                                                                    scope = scope,
-                                                                    onHover = { key ->
-                                                                        hoveredButtonKey = key
-                                                                        if (key != null && key.startsWith("Library_") && !key.startsWith("Library_sub_")) {
-                                                                            val catId = key.removePrefix("Library_").toLongOrNull()
-                                                                            if (catId != null) {
-                                                                                popupSelectedCategoryId = catId
-                                                                            }
-                                                                        }
-                                                                    },
-                                                                    onHold = { hold ->
-                                                                        activeSubTabPopup = if (hold) tab else null
-                                                                    },
-                                                                    onTap = {
-                                                                        if (!selected) {
-                                                                            tabNavigator.current = tab
-                                                                        } else {
-                                                                            scope.launch { tab.onReselect(navigator) }
-                                                                        }
-                                                                        if (tab is HomeTab && !alwaysShowSubTabsHome) {
-                                                                            activeSubTabPopup = null
-                                                                        } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
-                                                                            activeSubTabPopup = null
-                                                                        } else if (tab !is HomeTab && tab !is BrowseTab) {
-                                                                            activeSubTabPopup = null
-                                                                        }
-                                                                    },
-                                                                    onLongPress = {
-                                                                        if (selected) {
-                                                                            if (tab is HomeTab && !alwaysShowSubTabsHome) {
-                                                                                activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
-                                                                            } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
-                                                                                activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
-                                                                            }
-                                                                        }
-                                                                        if (tab is LibraryTab) {
-                                                                            LibraryTab.toggleCategoryBarEvent.trySend(Unit)
-                                                                        } else if (tab is MoreTab) {
-                                                                            showActionPopup = !showActionPopup
-                                                                        }
-                                                                    },
-                                                                ),
+                                                                .clickable {
+                                                                    showMediaModePopup = !showMediaModePopup
+                                                                    if (showMediaModePopup) {
+                                                                        showVerticalActionPopup = false
+                                                                    }
+                                                                },
                                                             contentAlignment = Alignment.Center,
                                                         ) {
-                                                            CompositionLocalProvider(LocalContentColor provides tint) {
-                                                                NavigationIconItem(tab)
+                                                            Text(
+                                                                text = activeMediaType.shortName,
+                                                                style = MaterialTheme.typography.titleMedium.copy(
+                                                                    fontWeight = FontWeight.Black,
+                                                                    fontSize = (bottomBarHeight * 0.4f).coerceAtLeast(16f).sp,
+                                                                ),
+                                                                color = if (showMediaModePopup) {
+                                                                    MaterialTheme.colorScheme.primary
+                                                                } else {
+                                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                                },
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Center: Main Dock GlassSurface
+                                            GlassSurface(
+                                                shape = RoundedCornerShape(bottomBarCornerRadius.dp),
+                                                style = GlassDefaults.prominentStyle(),
+                                                modifier = Modifier
+                                                    .height(bottomBarHeight.dp)
+                                                    .then(
+                                                        if (bottomBarAutoWidth) {
+                                                            Modifier.wrapContentWidth()
+                                                        } else {
+                                                            Modifier.width(bottomBarWidth.dp)
+                                                        },
+                                                    ),
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxHeight()
+                                                        .padding(horizontal = bottomBarHorizontalPadding.dp, vertical = bottomBarVerticalPadding.dp)
+                                                        .wrapContentWidth(align = Alignment.CenterHorizontally, unbounded = true)
+                                                        .align(Alignment.Center),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(bottomBarGap.dp),
+                                                ) {
+                                                    // Left part: The Navigation Tabs
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(bottomBarGap.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        TABS.fastFilter { it.isEnabled() }.fastForEach { tab ->
+                                                            val selected = tabNavigator.current::class == tab::class
+                                                            val tint = if (selected) {
+                                                                MaterialTheme.colorScheme.primary
+                                                            } else {
+                                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                                            }
+                                                            var itemGlobalOffset by remember { mutableStateOf(Offset.Zero) }
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(bottomBarButtonSize)
+                                                                    .clip(CircleShape)
+                                                                    .onGloballyPositioned { coordinates ->
+                                                                        itemGlobalOffset = coordinates.positionInRoot()
+                                                                    }
+                                                                    .subTabBarGestureDetector(
+                                                                        tab = tab,
+                                                                        selected = selected,
+                                                                        itemGlobalOffset = itemGlobalOffset,
+                                                                        subTabButtonBounds = subTabButtonBounds,
+                                                                        scope = scope,
+                                                                        onHover = { key ->
+                                                                            hoveredButtonKey = key
+                                                                            if (key != null && key.startsWith("Library_") && !key.startsWith("Library_sub_")) {
+                                                                                val catId = key.removePrefix("Library_").toLongOrNull()
+                                                                                if (catId != null) {
+                                                                                    popupSelectedCategoryId = catId
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        onHold = { hold ->
+                                                                            activeSubTabPopup = if (hold) tab else null
+                                                                        },
+                                                                        onTap = {
+                                                                            if (!selected) {
+                                                                                tabNavigator.current = tab
+                                                                            } else {
+                                                                                scope.launch { tab.onReselect(navigator) }
+                                                                            }
+                                                                            if (tab is HomeTab && !alwaysShowSubTabsHome) {
+                                                                                activeSubTabPopup = null
+                                                                            } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
+                                                                                activeSubTabPopup = null
+                                                                            } else if (tab is LibraryTab && !alwaysShowSubTabsLibrary && !isCategoryBarPinned) {
+                                                                                activeSubTabPopup = null
+                                                                            } else if (tab !is HomeTab && tab !is BrowseTab && tab !is LibraryTab) {
+                                                                                activeSubTabPopup = null
+                                                                            }
+                                                                        },
+                                                                        onLongPress = {
+                                                                            if (selected) {
+                                                                                if (tab is HomeTab && !alwaysShowSubTabsHome) {
+                                                                                    activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                                                                                } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
+                                                                                    activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                                                                                } else if (tab is LibraryTab && !alwaysShowSubTabsLibrary) {
+                                                                                    activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
+                                                                                }
+                                                                            }
+                                                                            if (tab is LibraryTab) {
+                                                                                LibraryTab.toggleCategoryBarEvent.trySend(Unit)
+                                                                            } else if (tab is MoreTab) {
+                                                                                showActionPopup = !showActionPopup
+                                                                            }
+                                                                        },
+                                                                    ),
+                                                                contentAlignment = Alignment.Center,
+                                                            ) {
+                                                                CompositionLocalProvider(LocalContentColor provides tint) {
+                                                                    NavigationIconItem(tab)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // In-place action buttons if floating 3-dot is disabled
+                                                    if (!showFloatingActionButton) {
+                                                        AnimatedVisibility(
+                                                            visible = hasActions && showActionPopup,
+                                                            enter = expandHorizontally(),
+                                                            exit = shrinkHorizontally(),
+                                                        ) {
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            ) {
+                                                                VerticalDivider(
+                                                                    modifier = Modifier
+                                                                        .height(24.dp)
+                                                                        .padding(horizontal = 4.dp),
+                                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                                                )
+
+                                                                TabActionGroup(
+                                                                    currentTab = currentTab,
+                                                                    isVertical = false,
+                                                                    bottomBarButtonSize = bottomBarButtonSize,
+                                                                    bottomBarIconSize = bottomBarIconSize,
+                                                                    onActionExecuted = { showActionPopup = false },
+                                                                )
                                                             }
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                // Divider & Right part: Contextual Action Buttons in-place
-                                                AnimatedVisibility(
-                                                    visible = hasActions && showActionPopup,
-                                                    enter = expandHorizontally(),
-                                                    exit = shrinkHorizontally(),
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                    ) {
-                                                        VerticalDivider(
-                                                            modifier = Modifier
-                                                                .height(24.dp)
-                                                                .padding(horizontal = 4.dp),
-                                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                                        )
+                                            // Far Right: 3-Dot Action Button & Vertical Popup (Fixed Slot)
+                                            if (showFloatingActionButton) {
+                                                if (hasActions) {
+                                                    Box(contentAlignment = Alignment.BottomEnd) {
+                                                        // Vertical Actions Popup
+                                                        androidx.compose.animation.AnimatedVisibility(
+                                                            visible = showVerticalActionPopup,
+                                                            enter = expandVertically(expandFrom = Alignment.Bottom) + androidx.compose.animation.fadeIn(),
+                                                            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + androidx.compose.animation.fadeOut(),
+                                                            modifier = Modifier.padding(bottom = (bottomBarHeight + 8).dp),
+                                                        ) {
+                                                            GlassSurface(
+                                                                shape = RoundedCornerShape(effectiveCornerRadius),
+                                                                style = GlassDefaults.regularStyle(),
+                                                                modifier = Modifier.wrapContentWidth(),
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier.padding(6.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                                ) {
+                                                                    TabActionGroup(
+                                                                        currentTab = currentTab,
+                                                                        isVertical = true,
+                                                                        bottomBarButtonSize = 40.dp,
+                                                                        bottomBarIconSize = 20.dp,
+                                                                        onActionExecuted = { showVerticalActionPopup = false },
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
 
-                                                        TabActionGroup(
-                                                            currentTab = currentTab,
-                                                            isVertical = false,
-                                                            bottomBarButtonSize = bottomBarButtonSize,
-                                                            bottomBarIconSize = bottomBarIconSize,
-                                                            onActionExecuted = { showActionPopup = false },
-                                                        )
+                                                        // Floating 3-Dot Button
+                                                        GlassSurface(
+                                                            shape = RoundedCornerShape(effectiveCornerRadius),
+                                                            style = GlassDefaults.prominentStyle(),
+                                                            modifier = Modifier.size(bottomBarHeight.dp),
+                                                        ) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .fillMaxSize()
+                                                                    .clip(RoundedCornerShape(effectiveCornerRadius))
+                                                                    .clickable {
+                                                                        showVerticalActionPopup = !showVerticalActionPopup
+                                                                        if (showVerticalActionPopup) {
+                                                                            showMediaModePopup = false
+                                                                        }
+                                                                    },
+                                                                contentAlignment = Alignment.Center,
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Outlined.MoreVert,
+                                                                    contentDescription = "Toggle Actions Column",
+                                                                    tint = if (showVerticalActionPopup) {
+                                                                        MaterialTheme.colorScheme.primary
+                                                                    } else {
+                                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    },
+                                                                    modifier = Modifier.size((bottomBarHeight * 0.4f).coerceAtLeast(18f).dp),
+                                                                )
+                                                            }
+                                                        }
                                                     }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // 5. Far right floating three-dot vertical button & Vertical Action Column
-                                    if (hasActions) {
-                                        // Vertical Actions Column (stacked upward above the three-dot button)
-                                        AnimatedVisibility(
-                                            visible = bottomNavVisible && showVerticalActionPopup,
-                                            enter = expandVertically(expandFrom = Alignment.Bottom) + androidx.compose.animation.fadeIn(),
-                                            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + androidx.compose.animation.fadeOut(),
-                                            modifier = Modifier
-                                                .padding(
-                                                    end = 16.dp,
-                                                    bottom = (bottomBarHeight + bottomBarBottomMargin + 12).coerceAtLeast(0).dp,
-                                                )
-                                                .align(Alignment.BottomEnd),
-                                        ) {
-                                            GlassSurface(
-                                                shape = RoundedCornerShape(16.dp),
-                                                style = GlassDefaults.regularStyle(),
-                                                modifier = Modifier.wrapContentWidth(),
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier.padding(6.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                                ) {
-                                                    TabActionGroup(
-                                                        currentTab = currentTab,
-                                                        isVertical = true,
-                                                        bottomBarButtonSize = 40.dp,
-                                                        bottomBarIconSize = 20.dp,
-                                                        onActionExecuted = { showVerticalActionPopup = false },
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        // Floating Three-Dot Vertical Button (far right corner, aligned on same line with bottom bar)
-                                        AnimatedVisibility(
-                                            visible = bottomNavVisible,
-                                            enter = expandVertically(),
-                                            exit = shrinkVertically(),
-                                            modifier = Modifier
-                                                .padding(
-                                                    end = 16.dp,
-                                                    bottom = bottomBarBottomMargin.coerceAtLeast(0).dp,
-                                                )
-                                                .align(Alignment.BottomEnd),
-                                        ) {
-                                            GlassSurface(
-                                                shape = CircleShape,
-                                                style = GlassDefaults.prominentStyle(),
-                                                modifier = Modifier.size(bottomBarHeight.dp),
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxSize()
-                                                        .clip(CircleShape)
-                                                        .clickable {
-                                                            showVerticalActionPopup = !showVerticalActionPopup
-                                                        },
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.MoreVert,
-                                                        contentDescription = "Toggle Actions Column",
-                                                        tint = if (showVerticalActionPopup) {
-                                                            MaterialTheme.colorScheme.primary
-                                                        } else {
-                                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                                        },
-                                                        modifier = Modifier.size((bottomBarHeight * 0.4f).coerceAtLeast(18f).dp),
-                                                    )
+                                                } else {
+                                                    // KMK --> ponytail: fixed placeholder slot when no actions exist for current tab
+                                                    Spacer(modifier = Modifier.size(bottomBarHeight.dp))
+                                                    // KMK <--
                                                 }
                                             }
                                         }
@@ -1265,7 +1502,7 @@ object HomeScreen : Screen() {
     }
 
     suspend fun showBottomNav(show: Boolean) {
-        showBottomNavEvent.send(show)
+        showBottomNavFlow.value = show
     }
 
     sealed interface Tab {
@@ -1283,16 +1520,29 @@ object HomeScreen : Screen() {
 }
 
 @Composable
-private fun SubTabButton(
+internal fun SubTabButton(
     text: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
     hovered: Boolean = false,
+    carouselStyle: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val subBarHeight = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.subBarHeight().collectAsState().value
     val fontSize = (subBarHeight * 0.35f).coerceIn(6f, 14f).sp
+
+    val scale by animateFloatAsState(
+        targetValue = if (selected && carouselStyle) 1.08f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "subTabScale",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (selected || !carouselStyle) 1.0f else 0.72f,
+        animationSpec = tween(150),
+        label = "subTabAlpha",
+    )
+
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = if (selected) {
@@ -1305,6 +1555,11 @@ private fun SubTabButton(
         contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .height(subBarHeight.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,

@@ -1,0 +1,2 @@
+ALTER TABLE novel_categories ADD COLUMN parent_id INTEGER REFERENCES novel_categories (_id);
+ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories (_id);

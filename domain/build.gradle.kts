@@ -20,8 +20,8 @@ kotlin {
 }
 
 dependencies {
-    implementation(projects.sourceApi)
-    implementation(projects.core.common)
+    api(projects.sourceApi)
+    api(projects.core.common)
 
     implementation(platform(kotlinx.coroutines.bom))
     implementation(kotlinx.bundles.coroutines)
@@ -32,6 +32,9 @@ dependencies {
     api(libs.sqldelight.android.paging)
 
     compileOnly(compose.runtime.annotation)
+    // KMK --> compose-stable-marker: domain models get @Immutable/@Stable without compose runtime dep
+    compileOnly("com.github.skydoves:compose-stable-marker:1.0.5")
+    // KMK <--
 
     testImplementation(libs.bundles.test)
     testImplementation(kotlinx.coroutines.test)

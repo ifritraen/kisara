@@ -12,6 +12,7 @@ kotlin {
             dependencies {
                 implementation(projects.sourceApi)
                 api(projects.i18n)
+                api(projects.i18nKmk)
                 // SY -->
                 api(projects.i18nSy)
                 // SY <--
@@ -29,6 +30,7 @@ kotlin {
                 implementation(projects.domain)
 
                 implementation(kotlinx.bundles.serialization)
+                implementation(aniyomilibs.ffmpeg.kit)
             }
         }
     }

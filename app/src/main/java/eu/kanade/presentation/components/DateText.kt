@@ -43,3 +43,10 @@ fun relativeDateText(
     )
         ?: stringResource(MR.strings.not_applicable)
 }
+
+@Composable
+fun relativeDateTimeText(
+    dateEpochMillis: Long,
+): String {
+    return relativeDateText(dateEpochMillis)
+}

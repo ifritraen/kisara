@@ -1,8 +1,8 @@
 package mihon.feature.migration.list.search
 
+import mihon.domain.manga.model.toDomainManga
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.model.SManga
-import mihon.domain.manga.model.toDomainManga
 import tachiyomi.domain.manga.model.Manga
 
 class SmartSourceSearchEngine(extraSearchParams: String?) : BaseSmartSearchEngine<SManga>(extraSearchParams) {

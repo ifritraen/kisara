@@ -65,6 +65,10 @@ import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
+import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -322,7 +326,7 @@ class LibraryScreenModel(
                     mutableState.update { state ->
                         state.copy(
                             isLoading = false,
-                            groupedFavorites = it,
+                            groupedFavorites = it.mapValues { (_, ids) -> ids.toPersistentList() }.toPersistentMap(),
                         )
                     }
                 }
@@ -1888,7 +1892,9 @@ class LibraryScreenModel(
         val dialog: Dialog? = null,
         val libraryData: LibraryData = LibraryData(),
         val activeCategoryIndex: Int = 0,
-        private val groupedFavorites: Map<Category, List</* LibraryItem */ Long>> = emptyMap(),
+        // KMK --> ponytail: PersistentMap enables O(1) reference equality in Compose
+        private val groupedFavorites: PersistentMap<Category, PersistentList<Long>> = persistentMapOf(),
+        // KMK <--
         // SY -->
         val showSyncExh: Boolean = false,
         val isSyncEnabled: Boolean = false,

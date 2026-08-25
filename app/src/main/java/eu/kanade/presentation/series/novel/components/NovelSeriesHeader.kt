@@ -1,0 +1,109 @@
+package eu.kanade.presentation.series.novel.components
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.library.novel.components.SeriesStackedCoverCard
+import eu.kanade.presentation.theme.AuroraTheme
+import tachiyomi.domain.entries.novel.model.asNovelCover
+import tachiyomi.domain.series.novel.model.LibraryNovelSeries
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.util.plus
+
+@Composable
+fun NovelSeriesHeader(
+    series: LibraryNovelSeries,
+    customCoverData: Any? = null,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(140.dp)
+                .aspectRatio(2f / 3f),
+            contentAlignment = Alignment.Center,
+        ) {
+            SeriesStackedCoverCard(
+                covers = series.coverNovels.map { it.asNovelCover() },
+                customCoverData = customCoverData,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = series.title,
+            color = colors.textPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Book,
+                    contentDescription = null,
+                    tint = colors.textPrimary.copy(alpha = 0.85f),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${series.entries.size} titles",
+                    color = colors.textPrimary.copy(alpha = 0.85f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
+                    contentDescription = null,
+                    tint = colors.textPrimary.copy(alpha = 0.85f),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${series.totalChapters} chapters",
+                    color = colors.textPrimary.copy(alpha = 0.85f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+}

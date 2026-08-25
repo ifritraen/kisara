@@ -28,14 +28,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import androidx.compose.runtime.getValue
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.tachiyomi.data.favorite.FavoriteManager
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+@Composable
 fun favoritesTab(): TabContent {
     return TabContent(
         titleRes = tachiyomi.i18n.kmk.KMR.strings.action_favorites,
@@ -50,10 +55,22 @@ fun favoritesTab(): TabContent {
 fun FavoritesTabContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
     val favoriteManager = remember { Injekt.get<FavoriteManager>() }
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+    val animeSourceManager = remember { Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>() }
 
     val authorsList = remember { mutableStateListOf(*favoriteManager.getAuthors().toTypedArray()) }
     val artistsList = remember { mutableStateListOf(*favoriteManager.getArtists().toTypedArray()) }
     val tagsList = remember { mutableStateListOf(*favoriteManager.getTags().toTypedArray()) }
+
+    val onSearchName: (String) -> Unit = { query ->
+        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+            val sourceIds = animeSourceManager.getCatalogueSources().map { it.id }
+            navigator.push(eu.kanade.tachiyomi.ui.browse.anime.bulk.AnimeBulkSearchScreen(sourceIds, listOf(query)))
+        } else {
+            navigator.push(GlobalSearchScreen(searchQuery = query))
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -102,9 +119,7 @@ fun FavoritesTabContent(modifier: Modifier = Modifier) {
                     combined.forEach { name ->
                         InputChip(
                             selected = false,
-                            onClick = {
-                                navigator.push(GlobalSearchScreen(searchQuery = name))
-                            },
+                            onClick = { onSearchName(name) },
                             label = { Text(name) },
                             trailingIcon = {
                                 Icon(
@@ -171,9 +186,7 @@ fun FavoritesTabContent(modifier: Modifier = Modifier) {
                     tagsList.forEach { tag ->
                         InputChip(
                             selected = false,
-                            onClick = {
-                                navigator.push(GlobalSearchScreen(searchQuery = tag))
-                            },
+                            onClick = { onSearchName(tag) },
                             label = { Text(tag) },
                             trailingIcon = {
                                 Icon(

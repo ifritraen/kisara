@@ -109,27 +109,7 @@ fun MoreScreen(
     val delegateSourcePreferences = remember { Injekt.get<DelegateSourcePreferences>() }
     // SY <--
 
-    val scope = rememberCoroutineScope()
-    var bottomBarVisible by remember { mutableStateOf(true) }
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                if (delta < -10f) {
-                    if (bottomBarVisible) {
-                        bottomBarVisible = false
-                        scope.launch { HomeScreen.showBottomNav(false) }
-                    }
-                } else if (delta > 10f) {
-                    if (!bottomBarVisible) {
-                        bottomBarVisible = true
-                        scope.launch { HomeScreen.showBottomNav(true) }
-                    }
-                }
-                return Offset.Zero
-            }
-        }
-    }
+    val bottomBarVisible by HomeScreen.showBottomNavFlow.collectAsState()
 
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
@@ -137,7 +117,6 @@ fun MoreScreen(
 
     Scaffold(
         modifier = Modifier
-            .nestedScroll(nestedScrollConnection)
             .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
     ) { contentPadding ->
         val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()

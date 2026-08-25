@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import cafe.adriel.voyager.core.model.rememberScreenModel
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
@@ -53,17 +54,18 @@ fun TabbedScreen(
     onChangeSearchQuery: (String?) -> Unit = {},
     showAppBar: Boolean = true,
     showTabs: Boolean = true,
+    navigateUp: (() -> Unit)? = null,
     // KMK -->
-    feedScreenModel: FeedScreenModel,
-    bulkFavoriteScreenModel: BulkFavoriteScreenModel,
+    feedScreenModel: FeedScreenModel? = null,
+    bulkFavoriteScreenModel: BulkFavoriteScreenModel? = null,
     // KMK <--
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // KMK -->
-    val feedState by feedScreenModel.state.collectAsState()
-    val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
+    val feedState = feedScreenModel?.state?.collectAsState()?.value
+    val bulkFavoriteState = bulkFavoriteScreenModel?.state?.collectAsState()?.value
     // KMK <--
 
     Scaffold(
@@ -72,21 +74,21 @@ fun TabbedScreen(
                 val tab = tabs[state.currentPage]
                 val searchEnabled = tab.searchEnabled
                 // KMK -->
-                if (bulkFavoriteState.selectionMode) {
+                if (bulkFavoriteState?.selectionMode == true && bulkFavoriteScreenModel != null) {
                     BulkSelectionToolbar(
                         selectedCount = bulkFavoriteState.selection.size,
                         isRunning = bulkFavoriteState.isRunning,
                         onClickClearSelection = bulkFavoriteScreenModel::toggleSelectionMode,
                         onChangeCategoryClick = bulkFavoriteScreenModel::addFavorite,
                         onSelectAll = {
-                            feedState.items?.let { result ->
+                            feedState?.items?.let { result ->
                                 result.mapNotNull { it.results }
                                     .flatten()
                                     .forEach { bulkFavoriteScreenModel.select(it) }
                             }
                         },
                         onReverseSelection = {
-                            feedState.items?.let { result ->
+                            feedState?.items?.let { result ->
                                 result.mapNotNull { it.results }
                                     .flatten()
                                     .let { bulkFavoriteScreenModel.reverseSelection(it) }
@@ -97,6 +99,7 @@ fun TabbedScreen(
                     // KMK <--
                     SearchToolbar(
                         titleContent = { AppBarTitle(stringResource(titleRes)) },
+                        navigateUp = navigateUp,
                         searchEnabled = searchEnabled,
                         searchQuery = if (searchEnabled) searchQuery else null,
                         onChangeSearchQuery = onChangeSearchQuery,

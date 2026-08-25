@@ -444,7 +444,6 @@ fun SourceOptionsDialog(
                 // SY <--
                 // KMK -->
                 if (onClickSettings != null &&
-                    source.installedExtension !== null &&
                     source.id !in listOf(LocalSource.ID, EH_SOURCE_ID, EXH_SOURCE_ID)
                 ) {
                     Text(
@@ -456,7 +455,7 @@ fun SourceOptionsDialog(
                     )
                 }
 
-                if (onClickUninstall != null && source.installedExtension != null) {
+                if (onClickUninstall != null) {
                     Text(
                         text = stringResource(MR.strings.ext_uninstall),
                         color = MaterialTheme.colorScheme.error,

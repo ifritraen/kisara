@@ -53,15 +53,27 @@ object MangaTitleParser {
         )
     }
 
+    private val AUTHOR_DESC_REGEX = Regex("""(?i)(?:author|circle)\s*:\s*([^,\n;]+)""")
+    private val ARTIST_DESC_REGEX = Regex("""(?i)(?:artist)\s*:\s*([^,\n;]+)""")
+    private val LEADING_PAREN_REGEX = Regex("""^\(([^()]+)\)\s*(.*)$""")
+    private val LEADING_BRACKET_REGEX = Regex("""^[\[({]([^\[\]()]+)\s*(?:\(([^()]+)\))?[\])}]""")
+    private val SIMPLE_BRACKET_REGEX = Regex("""[\[({]([^\])}]+)[\])}]""")
+    private val PAREN_STRIP_REGEX = Regex("""\([^()]*\)""")
+    private val BRACKET_STRIP_REGEX = Regex("""\[[^\[\]]*\]""")
+    private val BRACE_STRIP_REGEX = Regex("""\{[^{}]*\}""")
+    private val MULTI_SPACE_REGEX = Regex("""\s+""")
+    private val TRAILING_SYMBOLS_REGEX = Regex("""\s+[-|/~]\s*$""")
+    private val GENDER_SYMBOLS_REGEX = Regex("""[♀♂♀️♂️]""")
+
     private fun extractAuthorFromDescription(description: String?): String? {
         if (description.isNullOrBlank()) return null
-        val match = Regex("""(?i)(?:author|circle)\s*:\s*([^,\n;]+)""").find(description)
+        val match = AUTHOR_DESC_REGEX.find(description)
         return match?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
     }
 
     private fun extractArtistFromDescription(description: String?): String? {
         if (description.isNullOrBlank()) return null
-        val match = Regex("""(?i)(?:artist)\s*:\s*([^,\n;]+)""").find(description)
+        val match = ARTIST_DESC_REGEX.find(description)
         return match?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
     }
 
@@ -77,8 +89,7 @@ object MangaTitleParser {
         var isColorized = false
 
         // 1. Check for leading volume/sequel in parentheses e.g. (pq)
-        val leadingParenRegex = Regex("""^\(([^()]+)\)\s*(.*)$""")
-        val leadingParenMatch = leadingParenRegex.find(title)
+        val leadingParenMatch = LEADING_PAREN_REGEX.find(title)
         if (leadingParenMatch != null) {
             val rest = leadingParenMatch.groupValues[2].trim()
             if (rest.startsWith("[") || rest.startsWith("(") || rest.isNotEmpty()) {
@@ -87,8 +98,7 @@ object MangaTitleParser {
         }
 
         // 2. Parse leading author/artist bracket: [abc (de)] or [abc] or (abc (de)) or (abc)
-        val leadingBracketRegex = Regex("""^[\[({]([^\[\]()]+)\s*(?:\(([^()]+)\))?[\])}]""")
-        val match = leadingBracketRegex.find(title)
+        val match = LEADING_BRACKET_REGEX.find(title)
         if (match != null) {
             val part1 = match.groupValues[1].trim()
             val part2 = match.groupValues.getOrNull(2)?.trim()
@@ -102,8 +112,7 @@ object MangaTitleParser {
         }
 
         // 3. Collect flags from remaining bracketed metadata
-        val simpleBracketRegex = Regex("""[\[({]([^\])}]+)[\])}]""")
-        val matches = simpleBracketRegex.findAll(title).toList()
+        val matches = SIMPLE_BRACKET_REGEX.findAll(title).toList()
         for (m in matches) {
             val inside = m.groupValues[1].trim().lowercase()
             if (LANGUAGE_TO_CODE.containsKey(inside)) {
@@ -119,16 +128,16 @@ object MangaTitleParser {
         while (title.contains("(") || title.contains("[") || title.contains("{")) {
             val old = title
             title = title
-                .replace(Regex("""\([^()]*\)"""), "")
-                .replace(Regex("""\[[^\[\]]*\]"""), "")
-                .replace(Regex("""\{[^{}]*\}"""), "")
-                .replace(Regex("""\s+"""), " ")
+                .replace(PAREN_STRIP_REGEX, "")
+                .replace(BRACKET_STRIP_REGEX, "")
+                .replace(BRACE_STRIP_REGEX, "")
+                .replace(MULTI_SPACE_REGEX, " ")
                 .trim()
             if (title == old) break
         }
 
         // Cleanup trailing non-alphanumeric chars
-        title = title.replace(Regex("""\s+[-|/~]\s*$"""), "").trim()
+        title = title.replace(TRAILING_SYMBOLS_REGEX, "").trim()
 
         if (title.isEmpty()) {
             title = rawTitle
@@ -154,7 +163,7 @@ object MangaTitleParser {
                 val parts = trimmed.split(",", ";").map { it.trim() }
                 for (part in parts) {
                     if (part.contains(":")) {
-                        val cleaned = part.replace(Regex("""[♀♂♀️♂️]"""), "").trim()
+                        val cleaned = part.replace(GENDER_SYMBOLS_REGEX, "").trim()
                         if (cleaned.isNotEmpty()) {
                             results.add(cleaned)
                         }

@@ -222,37 +222,29 @@ class BackupRestorer(
         backupCategories: List<BackupCategory>,
     ) = launch(dispatcher) {
         val sortedMangas = mangaRestorer.sortByNew(backupMangas)
-        sortedMangas.map {
-            async(dispatcher) {
-                ensureActive()
-
+        sortedMangas.chunked(100).forEach { chunk ->
+            ensureActive()
+            chunk.forEach { manga ->
                 try {
-                    mangaRestorer.restore(it, backupCategories)
+                    mangaRestorer.restore(manga, backupCategories)
                 } catch (e: Exception) {
-                    val sourceName = sourceMapping[it.source] ?: it.source.toString()
-                    errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
-                } finally {
-                    val currentProgress = restoreProgress.incrementAndGet()
-                    if (currentProgress == restoreAmount || currentProgress % mangaProgressBatch == 0) {
-                        // KMK -->
-                        with(notifier) {
-                            showRestoreProgress(it.title, currentProgress, restoreAmount, isSync)
-                                .show(Notifications.ID_RESTORE_PROGRESS)
-                        }
-                        // KMK <--
-                    }
+                    val sourceName = sourceMapping[manga.source] ?: manga.source.toString()
+                    errors.add(Date() to "${manga.title} [$sourceName]: ${e.message}")
                 }
             }
-        }.awaitAll()
+            val currentProgress = restoreProgress.addAndGet(chunk.size)
+            with(notifier) {
+                showRestoreProgress(chunk.last().title, currentProgress, restoreAmount, isSync)
+                    .show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        }
 
         val finalProgress = restoreProgress.get()
         if (finalProgress < restoreAmount) {
-            // KMK -->
             with(notifier) {
                 showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
                     .show(Notifications.ID_RESTORE_PROGRESS)
             }
-            // KMK <--
         }
     }
 

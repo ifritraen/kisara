@@ -5,6 +5,7 @@ import coil3.Extras
 import coil3.getExtra
 import coil3.request.ImageRequest
 import coil3.request.Options
+import coil3.request.transformations
 import coil3.size.Dimension
 import coil3.size.Scale
 import coil3.size.Size
@@ -43,6 +44,27 @@ val Options.customDecoder: Boolean
     get() = getExtra(customDecoderKey)
 
 private val customDecoderKey = Extras.Key(default = false)
+
+fun ImageRequest.Builder.staticBlur(radiusPx: Int, intensityFactor: Float = 1f) = apply {
+    if (radiusPx > 0) {
+        transformations(StaticBlurTransformation(radiusPx))
+    }
+}
+
+fun ImageRequest.Builder.staticBlur(radius: Float, intensityFactor: Float = 1f) = apply {
+    if (radius > 0f) {
+        transformations(StaticBlurTransformation(radius.toInt().coerceAtLeast(1)))
+    }
+}
+
+fun ImageRequest.Builder.useBackground(enable: Boolean) = apply {
+    extras[useBackgroundKey] = enable
+}
+
+val Options.useBackground: Boolean
+    get() = getExtra(useBackgroundKey)
+
+private val useBackgroundKey = Extras.Key(default = false)
 
 // KMK -->
 /**

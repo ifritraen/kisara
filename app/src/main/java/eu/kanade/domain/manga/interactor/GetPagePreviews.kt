@@ -6,9 +6,15 @@ import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.tachiyomi.data.cache.PagePreviewCache
 import eu.kanade.tachiyomi.source.PagePreviewSource
 import eu.kanade.tachiyomi.source.Source
-import exh.source.getMainSource
+import exh.source.EnhancedHttpSource
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.manga.model.Manga
+
+private inline fun <reified T : Source> Source.getMainSource(): T? = if (this is EnhancedHttpSource) {
+    this.source() as? T
+} else {
+    this as? T
+}
 
 class GetPagePreviews(
     private val pagePreviewCache: PagePreviewCache,

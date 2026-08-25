@@ -1,0 +1,18 @@
+package tachiyomi.domain.category.novel.interactor
+
+import tachiyomi.domain.category.novel.model.NovelCategoryUpdate
+import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
+
+class RenameNovelCategory(
+    private val repository: NovelCategoryRepository,
+) {
+    suspend fun await(categoryId: Long, name: String, parentId: Long? = null) {
+        repository.updatePartialCategory(
+            NovelCategoryUpdate(
+                id = categoryId,
+                name = name,
+                parentId = parentId,
+            ),
+        )
+    }
+}

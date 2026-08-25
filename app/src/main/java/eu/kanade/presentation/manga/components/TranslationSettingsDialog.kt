@@ -1,16 +1,23 @@
 package eu.kanade.presentation.manga.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import eu.kanade.presentation.components.AlertDialog
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.KisaraBottomSheet
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
@@ -47,14 +54,32 @@ fun TranslationSettingsDialog(
     val fromLangs = TextRecognizerLanguage.entries
     val toLangs = TextTranslatorLanguage.entries
     val engines = TextTranslators.entries
+    val colorScheme = MaterialTheme.colorScheme
 
-    AlertDialog(
+    KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        title = { Text(text = stringResource(KMR.strings.pref_category_translations)) },
-        text = {
+        title = stringResource(KMR.strings.pref_category_translations),
+        footer = {
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                onClick = onDismissRequest,
+            ) {
+                Text(text = stringResource(MR.strings.action_ok))
+            }
+        },
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+            border = BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 380.dp)
+                    .padding(vertical = 4.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
                 SwitchPreferenceWidget(
@@ -143,11 +168,6 @@ fun TranslationSettingsDialog(
                     },
                 )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_ok))
-            }
-        },
-    )
+        }
+    }
 }

@@ -53,6 +53,18 @@ fun Context.copyToClipboard(label: String, content: String) {
     }
 }
 
+fun Context.copyToClipboardSilently(label: String, content: String): Boolean {
+    if (content.isBlank()) return false
+    return try {
+        val clipboard = getSystemService<ClipboardManager>() ?: return false
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, content))
+        true
+    } catch (e: Throwable) {
+        logcat(LogPriority.ERROR, e)
+        false
+    }
+}
+
 val Context.powerManager: PowerManager
     get() = getSystemService()!!
 

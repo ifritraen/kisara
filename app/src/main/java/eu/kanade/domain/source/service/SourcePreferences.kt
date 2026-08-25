@@ -17,6 +17,12 @@ class SourcePreferences(
     private val preferenceStore: PreferenceStore,
 ) {
 
+    enum class IncognitoPolicy {
+        OFF,
+        NSFW_ONLY,
+        ALL,
+    }
+
     fun sourceDisplayMode() = preferenceStore.getObjectFromString(
         "pref_display_mode_catalogue",
         LibraryDisplayMode.default,
@@ -48,6 +54,8 @@ class SourcePreferences(
     )
 
     fun showNsfwSource() = preferenceStore.getBoolean("show_nsfw_source", true)
+
+    fun incognitoPolicy() = preferenceStore.getEnum("incognito_policy", IncognitoPolicy.OFF)
 
     fun blockedTags() = preferenceStore.getStringSet("system_blocked_tags", emptySet())
 
@@ -178,9 +186,49 @@ class SourcePreferences(
     // KMK -->
     fun relatedMangas() = preferenceStore.getBoolean("related_mangas", true)
 
-    fun customSourceTags() = preferenceStore.getStringSet("custom_source_tags", setOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"))
+    fun customSourceTags() = preferenceStore.getStringSet("custom_source_tags", emptySet())
 
     fun sourceTagMappings() = preferenceStore.getStringSet("custom_source_tag_mappings", emptySet())
+
+    fun customAnimeSourceTags() = preferenceStore.getStringSet("custom_anime_source_tags", emptySet())
+
+    fun animeSourceTagMappings() = preferenceStore.getStringSet("custom_anime_source_tag_mappings", emptySet())
+
+    fun customNovelSourceTags() = preferenceStore.getStringSet("custom_novel_source_tags", emptySet())
+
+    fun novelSourceTagMappings() = preferenceStore.getStringSet("custom_novel_source_tag_mappings", emptySet())
+
+    // Anime Source Preferences
+    fun animeExtensionUpdatesCount() = preferenceStore.getInt("animeext_updates_count", 0)
+    fun animeInstalledExtensionRepos() = preferenceStore.getStringSet("anime_installed_extension_repos", emptySet())
+    fun disabledAnimeSources() = preferenceStore.getStringSet("hidden_anime_catalogues", emptySet())
+    fun pinnedAnimeSources() = preferenceStore.getStringSet("pinned_anime_catalogues", emptySet())
+    fun lastUsedAnimeSource() = preferenceStore.getLong(Preference.appStateKey("last_anime_catalogue_source"), -1)
+    fun incognitoAnimeExtensions() = preferenceStore.getStringSet("incognito_anime_extensions", emptySet())
+    fun animeExtensionRepositories() = preferenceStore.getStringSet("anime_extension_repositories", emptySet())
+    fun animeExtensionRepos() = preferenceStore.getStringSet("anime_extension_repos", emptySet())
+    fun animeExtensionStore() = preferenceStore.getBoolean("anime_extension_store", true)
+    fun showAnimeExtensions() = preferenceStore.getBoolean("show_anime_extensions", true)
+    fun hideInAnimeLibraryItems() = preferenceStore.getBoolean("browse_hide_in_anime_library_items", false)
+
+    // Novel Source Preferences
+    fun disabledNovelSources() = preferenceStore.getStringSet("hidden_novel_catalogues", emptySet())
+    fun pinnedNovelSources() = preferenceStore.getStringSet("pinned_novel_catalogues", emptySet())
+    fun lastUsedNovelSource() = preferenceStore.getLong(Preference.appStateKey("last_novel_catalogue_source"), -1)
+    fun incognitoNovelExtensions() = preferenceStore.getStringSet("incognito_novel_extensions", emptySet())
+    fun novelFeedSources() = preferenceStore.getStringSet(Preference.appStateKey("novel_feed_sources"), emptySet())
+    fun hideInNovelLibraryItems() = preferenceStore.getBoolean("browse_hide_in_novel_library_items", false)
+    fun novelExtensionUpdatesCount() = preferenceStore.getInt("novelext_updates_count", 0)
+    fun novelInstalledExtensionRepos() = preferenceStore.getStringSet("novel_installed_extension_repos", emptySet())
+    fun novelExtensionRepositories() = preferenceStore.getStringSet("novel_extension_repositories", emptySet())
+    fun novelExtensionRepos() = preferenceStore.getStringSet("novel_extension_repos", emptySet())
+    fun novelExtensionStore() = preferenceStore.getBoolean("novel_extension_store", true)
+    fun showNovelExtensions() = preferenceStore.getBoolean("show_novel_extensions", true)
+    fun importEpubAddToLibrary() = preferenceStore.getBoolean("pref_epub_import_add_to_library", true)
+    fun autoCompileLocalEpubBook() = preferenceStore.getBoolean("pref_auto_compile_local_epub_book", false)
+    fun suggestionsUseMangaUpdatesNovel() = preferenceStore.getBoolean("suggestions_use_mangaupdates_novel", true)
+    fun suggestionsUseNovelUpdates() = preferenceStore.getBoolean("suggestions_use_novelupdates", true)
+    fun entrySuggestionsEnabled() = preferenceStore.getBoolean("pref_entry_suggestions_enabled", true)
 
     companion object {
         const val PINNED_SOURCES_PREF_KEY = "pinned_catalogues"

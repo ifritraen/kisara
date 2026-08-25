@@ -256,7 +256,31 @@ private fun android.content.pm.PackageManager.getPackageArchiveInfoCompat(archiv
 private fun getCachedIconFile(context: android.content.Context, pkgName: String): File {
     val dir = File(context.cacheDir, "extension_icons")
     if (!dir.exists()) dir.mkdirs()
-    return File(dir, "$pkgName.png")
+    val clean = when {
+        pkgName.contains("-") -> {
+            val suffix = pkgName.substringAfterLast("-")
+            if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                val base = pkgName.substringBeforeLast("-")
+                if (base.endsWith("_")) base.dropLast(1) else base
+            } else {
+                pkgName
+            }
+        }
+        pkgName.contains("_") -> {
+            val suffix = pkgName.substringAfterLast("_")
+            if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                pkgName.substringBeforeLast("_")
+            } else {
+                pkgName
+            }
+        }
+        else -> pkgName
+    }
+    val direct = File(dir, "$pkgName.png")
+    if (direct.isFile) return direct
+    val cleanFile = File(dir, "$clean.png")
+    if (cleanFile.isFile) return cleanFile
+    return direct
 }
 
 @Composable
@@ -284,66 +308,117 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
         if (value is Result.Success) return@produceState
         withIOContext {
             value = try {
-                val packageInfo = ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)
-                    ?: run {
-                        // Sideloaded / Private app might not be registered in the standard manager state yet, parse APK directly
-                        val sideloadedFile = java.io.File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
-                        if (sideloadedFile.isFile) {
-                            ExtensionLoader.getPackageArchiveInfoWithCache(context, sideloadedFile, android.content.pm.PackageManager.GET_META_DATA)
+                val cleanPkgName = when {
+                    pkgName.contains("-") -> {
+                        val suffix = pkgName.substringAfterLast("-")
+                        if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                            val base = pkgName.substringBeforeLast("-")
+                            if (base.endsWith("_")) base.dropLast(1) else base
                         } else {
-                            val privateExtensionFile = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext")
-                            if (privateExtensionFile.isFile) {
-                                ExtensionLoader.getPackageArchiveInfoWithCache(context, privateExtensionFile, android.content.pm.PackageManager.GET_META_DATA)
-                            } else {
-                                context.packageManager.getPackageInfoCompat(pkgName, android.content.pm.PackageManager.GET_META_DATA)
-                            }
+                            pkgName
                         }
                     }
-                    ?: throw Exception("Failed to get application info for $pkgName")
-                val appInfo = packageInfo.applicationInfo ?: throw Exception("Failed to get application info applicationInfo null")
+                    pkgName.contains("_") -> {
+                        val suffix = pkgName.substringAfterLast("_")
+                        if (suffix.toLongOrNull() != null || suffix.all { it.isDigit() }) {
+                            pkgName.substringBeforeLast("_")
+                        } else {
+                            pkgName
+                        }
+                    }
+                    else -> pkgName
+                }
 
-                // KMK --> Override paths for sideloaded/private APKs to allow internal icon resolution
-                val sideloadedFile = java.io.File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
-                val isSideloadOrPrivate = if (sideloadedFile.isFile) {
-                    appInfo.sourceDir = sideloadedFile.absolutePath
-                    appInfo.publicSourceDir = sideloadedFile.absolutePath
-                    true
+                // 1. If Extension.Installed already has an icon Drawable, use it directly
+                var bitmap: android.graphics.Bitmap? = if (this@getIcon is Extension.Installed) {
+                    val extIcon = icon
+                    if (extIcon != null) {
+                        try {
+                            if (extIcon is android.graphics.drawable.BitmapDrawable && extIcon.bitmap != null) {
+                                extIcon.bitmap
+                            } else {
+                                val b = android.graphics.Bitmap.createBitmap(
+                                    extIcon.intrinsicWidth.coerceAtLeast(1),
+                                    extIcon.intrinsicHeight.coerceAtLeast(1),
+                                    android.graphics.Bitmap.Config.ARGB_8888,
+                                )
+                                val canvas = android.graphics.Canvas(b)
+                                extIcon.setBounds(0, 0, canvas.width, canvas.height)
+                                extIcon.draw(canvas)
+                                b
+                            }
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else null
                 } else {
-                    val privateExtensionFile = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext")
-                    if (privateExtensionFile.isFile) {
-                        appInfo.sourceDir = privateExtensionFile.absolutePath
-                        appInfo.publicSourceDir = privateExtensionFile.absolutePath
-                        true
-                    } else {
-                        false
-                    }
+                    null
                 }
-                // KMK <--
 
-                val drawable = try {
-                    if (isSideloadOrPrivate) {
-                        appInfo.loadIcon(context.packageManager)
-                    } else {
-                        val appResources = context.packageManager.getResourcesForApplication(appInfo)
-                        appResources.getDrawableForDensity(appInfo.icon, density, null)!!
+                // 2. Look for APK file across all possible sideloaded and private paths
+                if (bitmap == null) {
+                    val candidateFiles = listOfNotNull(
+                        File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk"),
+                        File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$cleanPkgName.apk"),
+                        File(context.getExternalFilesDir(null) ?: context.filesDir, "sideloaded_extensions/$pkgName.apk"),
+                        File(context.getExternalFilesDir(null) ?: context.filesDir, "sideloaded_extensions/$cleanPkgName.apk"),
+                        File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$pkgName.ext"),
+                        File(context.getExternalFilesDir(null) ?: context.filesDir, "exts/$cleanPkgName.ext"),
+                        File(context.filesDir, "sideloaded_apk_cache/$pkgName.apk"),
+                        ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)?.applicationInfo?.sourceDir?.let { File(it) },
+                    )
+
+                    val existingApk = candidateFiles.firstOrNull { it.isFile && it.exists() }
+                        ?: eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getLocalApkFiles(context).firstOrNull { file ->
+                            file.nameWithoutExtension == pkgName || file.nameWithoutExtension == cleanPkgName ||
+                                file.nameWithoutExtension.startsWith("${pkgName}_") || file.nameWithoutExtension.startsWith("${cleanPkgName}_")
+                        }
+
+                    if (existingApk != null) {
+                        bitmap = eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.extractIconFromApk(context, existingApk)
+                        if (bitmap != null) {
+                            eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.extractAndCacheApkIcon(
+                                context = context,
+                                apkFile = existingApk,
+                                packageName = pkgName,
+                            )
+                        }
                     }
-                } catch (e: Exception) {
+                }
+
+                // 3. Fallback: Query system package manager for shared extensions
+                if (bitmap == null) {
+                    val packageInfo = ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)
+                        ?: context.packageManager.getPackageInfoCompat(pkgName, android.content.pm.PackageManager.GET_META_DATA)
+                    val appInfo = packageInfo?.applicationInfo
+                    if (appInfo != null) {
+                        val drawable = try {
+                            val appResources = context.packageManager.getResourcesForApplication(appInfo)
+                            appResources.getDrawableForDensity(appInfo.icon, density, null)!!
+                        } catch (_: Exception) {
+                            appInfo.loadIcon(context.packageManager)
+                        }
+                        bitmap = drawable.toBitmap()
+                    }
+                }
+
+                if (bitmap != null) {
                     try {
-                        appInfo.loadIcon(context.packageManager)
-                    } catch (e2: Exception) {
-                        android.util.Log.e("BrowseIcons", "Failed to extract/setup icon for $name", e2)
-                        throw e2
+                        val out = java.io.FileOutputStream(cachedFile)
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                        out.close()
+                    } catch (_: Exception) {}
+                    Result.Success(bitmap.asImageBitmap())
+                } else if (cachedFile.isFile) {
+                    val diskBmp = android.graphics.BitmapFactory.decodeFile(cachedFile.absolutePath)
+                    if (diskBmp != null) {
+                        Result.Success(diskBmp.asImageBitmap())
+                    } else {
+                        Result.Error
                     }
+                } else {
+                    Result.Error
                 }
-                val bitmap = drawable.toBitmap()
-                try {
-                    val out = java.io.FileOutputStream(cachedFile)
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                    out.close()
-                } catch (e: Exception) {
-                    // Ignore caching errors
-                }
-                Result.Success(bitmap.asImageBitmap())
             } catch (e: Exception) {
                 android.util.Log.e("BrowseIcons", "Icon loading failed for $name", e)
                 if (value is Result.Success) value else Result.Error

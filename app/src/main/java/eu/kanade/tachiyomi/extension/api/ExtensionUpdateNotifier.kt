@@ -19,9 +19,10 @@ class ExtensionUpdateNotifier(
     private val context: Context,
     private val securityPreferences: SecurityPreferences = Injekt.get(),
 ) {
-    fun promptUpdates(names: List<String>) {
+    fun promptUpdates(names: List<String>, anime: Boolean = false) {
+        val notifId = if (anime) Notifications.ID_UPDATES_TO_EXTS + 1 else Notifications.ID_UPDATES_TO_EXTS
         context.notify(
-            Notifications.ID_UPDATES_TO_EXTS,
+            notifId,
             Notifications.CHANNEL_EXTENSIONS_UPDATE,
         ) {
             setContentTitle(
@@ -44,7 +45,8 @@ class ExtensionUpdateNotifier(
         }
     }
 
-    fun dismiss() {
-        context.cancelNotification(Notifications.ID_UPDATES_TO_EXTS)
+    fun dismiss(anime: Boolean = false) {
+        val notifId = if (anime) Notifications.ID_UPDATES_TO_EXTS + 1 else Notifications.ID_UPDATES_TO_EXTS
+        context.cancelNotification(notifId)
     }
 }

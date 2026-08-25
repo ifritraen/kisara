@@ -6,6 +6,14 @@ import eu.kanade.tachiyomi.source.online.all.MangaDex
 import eu.kanade.tachiyomi.source.online.all.NHentai
 import eu.kanade.tachiyomi.source.online.all.Pururin
 import eu.kanade.tachiyomi.source.online.english.EightMuses
+import exh.source.EH_SOURCE_ID
+import exh.source.EXH_SOURCE_ID
+import exh.source.LIBRARY_UPDATE_EXCLUDED_SOURCES
+import exh.source.PURURIN_SOURCE_ID
+import exh.source.lanraragiSourceIds
+import exh.source.mangaDexSourceIds
+import exh.source.metadataDelegatedSourceIds
+import exh.source.nHentaiSourceIds
 
 /**
  * Source helpers

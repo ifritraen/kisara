@@ -54,6 +54,7 @@ android {
             proguardFiles("proguard-android-optimize.txt", "proguard-rules.pro")
 
             buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = true)}\"")
+            signingConfig = debug.signingConfig
         }
 
         val commonMatchingFallbacks = listOf(release.name)
@@ -90,6 +91,9 @@ android {
         create("alpha") {
             initWith(release)
 
+            isDebuggable = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             applicationIdSuffix = ".alpha"
             resValue("string", "app_name", "Kisara Alpha")
             signingConfig = debug.signingConfig
@@ -131,10 +135,26 @@ android {
             keepDebugSymbols += listOf(
                 "libandroidx.graphics.path",
                 "libarchive-jni",
+                "libavcodec",
+                "libavdevice",
+                "libavfilter",
+                "libavformat",
+                "libavutil",
                 "libconscrypt_jni",
+                "libc++_shared",
+                "libffmpegkit_abidetect",
+                "libffmpegkit",
                 "libimagedecoder",
+                "liblibrary",
+                "libmpv",
+                "libplayer",
+                "libpostproc",
                 "libquickjs",
                 "libsqlite3x",
+                "libswresample",
+                "libswscale",
+                "libtorrserver",
+                "libxml2",
             )
                 .map { "**/$it.so" }
         }
@@ -295,6 +315,9 @@ dependencies {
     // HTML parser
     implementation(libs.jsoup)
 
+    // JavaScript engine
+    implementation(libs.bundles.js.engine)
+
     // Disk
     implementation(libs.disklrucache)
     implementation(libs.unifile)
@@ -379,6 +402,21 @@ dependencies {
 
     // ZXing Android Embedded
     implementation(sylibs.zxing.android.embedded)
+
+    // mpv-android
+    implementation(aniyomilibs.aniyomi.mpv)
+    // FFmpeg-kit
+    implementation(aniyomilibs.ffmpeg.kit)
+    implementation(aniyomilibs.arthenica.smartexceptions)
+    // TorrServer
+    implementation(aniyomilibs.torrserver)
+    // seeker seek bar
+    implementation(aniyomilibs.seeker)
+    // true type parser
+    implementation(aniyomilibs.truetypeparser)
+    // constraint layout compose & media
+    implementation(aniyomilibs.compose.constraintlayout)
+    implementation(aniyomilibs.mediasession)
 }
 
 androidComponents {

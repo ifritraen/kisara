@@ -716,7 +716,7 @@ class ExtensionsScreenModel(
         val searchQuery: String? = null,
         // KMK -->
         val nsfwOnly: Boolean = false,
-        val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf("Manhwa", "Manhua", "Comic", "Illustration", "18+"),
+        val allTags: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         val selectedTag: String? = null,
         val extensionTagMappings: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),
         val selectedExtensions: kotlinx.collections.immutable.ImmutableSet<String> = kotlinx.collections.immutable.persistentSetOf(),

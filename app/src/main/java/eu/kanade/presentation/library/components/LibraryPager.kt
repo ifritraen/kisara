@@ -10,7 +10,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +47,10 @@ fun LibraryPager(
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     userScrollEnabled: Boolean = false,
 ) {
+    // KMK --> ponytail: retain scroll positions across tab switches
+    val scrollPositions = remember { mutableMapOf<Pair<Long, LibraryDisplayMode>, Pair<Int, Int>>() }
+    // KMK <--
+
     HorizontalPager(
         modifier = Modifier.fillMaxSize(),
         state = state,
@@ -80,8 +87,26 @@ fun LibraryPager(
         val onClickManga: (LibraryManga) -> Unit = { onClickManga(category, it) }
         val onLongClickManga: (LibraryManga) -> Unit = { onLongClickManga(category, it) }
 
+        // KMK --> ponytail: restore and save scroll offset per category and display mode
+        val categoryId = category.id
+        val positionKey = categoryId to displayMode
+        val restoredPosition = remember(positionKey) {
+            scrollPositions[positionKey] ?: (0 to 0)
+        }
+        // KMK <--
+
         when (displayMode) {
             LibraryDisplayMode.List -> {
+                // KMK -->
+                val listState = remember(positionKey) {
+                    LazyListState(restoredPosition.first, restoredPosition.second)
+                }
+                DisposableEffect(positionKey, listState) {
+                    onDispose {
+                        scrollPositions[positionKey] = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                    }
+                }
+                // KMK <--
                 LibraryList(
                     items = items,
                     contentPadding = contentPadding,
@@ -91,9 +116,22 @@ fun LibraryPager(
                     onClickContinueReading = onClickContinueReading,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
+                    // KMK -->
+                    listState = listState,
+                    // KMK <--
                 )
             }
             LibraryDisplayMode.CompactGrid, LibraryDisplayMode.CoverOnlyGrid -> {
+                // KMK -->
+                val gridState = remember(positionKey) {
+                    LazyGridState(restoredPosition.first, restoredPosition.second)
+                }
+                DisposableEffect(positionKey, gridState) {
+                    onDispose {
+                        scrollPositions[positionKey] = gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
+                    }
+                }
+                // KMK <--
                 LibraryCompactGrid(
                     items = items,
                     showTitle = displayMode is LibraryDisplayMode.CompactGrid,
@@ -105,9 +143,22 @@ fun LibraryPager(
                     onClickContinueReading = onClickContinueReading,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
+                    // KMK -->
+                    gridState = gridState,
+                    // KMK <--
                 )
             }
             LibraryDisplayMode.ComfortableGrid -> {
+                // KMK -->
+                val gridState = remember(positionKey) {
+                    LazyGridState(restoredPosition.first, restoredPosition.second)
+                }
+                DisposableEffect(positionKey, gridState) {
+                    onDispose {
+                        scrollPositions[positionKey] = gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
+                    }
+                }
+                // KMK <--
                 LibraryComfortableGrid(
                     items = items,
                     columns = columns,
@@ -118,10 +169,21 @@ fun LibraryPager(
                     onClickContinueReading = onClickContinueReading,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
+                    // KMK -->
+                    gridState = gridState,
+                    // KMK <--
                 )
             }
             // KMK -->
             LibraryDisplayMode.ComfortableGridPanorama -> {
+                val gridState = remember(positionKey) {
+                    LazyGridState(restoredPosition.first, restoredPosition.second)
+                }
+                DisposableEffect(positionKey, gridState) {
+                    onDispose {
+                        scrollPositions[positionKey] = gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
+                    }
+                }
                 LibraryComfortableGrid(
                     items = items,
                     columns = columns,
@@ -133,6 +195,7 @@ fun LibraryPager(
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
                     usePanoramaCover = true,
+                    gridState = gridState,
                 )
             }
             // KMK <--

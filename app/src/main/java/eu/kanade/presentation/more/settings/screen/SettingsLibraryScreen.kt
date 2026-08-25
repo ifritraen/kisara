@@ -1,19 +1,27 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
@@ -279,28 +287,55 @@ object SettingsLibraryScreen : SearchableSettings {
         val hierarchy = remember(categories) {
             buildCategoryHierarchy(categories)
         }
+        val colorScheme = MaterialTheme.colorScheme
 
-        AlertDialog(
+        eu.kanade.presentation.components.KisaraBottomSheet(
             onDismissRequest = onDismiss,
-            title = { Text(stringResource(MR.strings.default_category)) },
-            confirmButton = {
-                TextButton(onClick = { onConfirm(selected) }) {
-                    Text(stringResource(MR.strings.action_ok))
+            title = stringResource(MR.strings.default_category),
+            footer = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    androidx.compose.material3.OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        onClick = onDismiss,
+                    ) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                    androidx.compose.material3.Button(
+                        modifier = Modifier.weight(1f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        onClick = {
+                            onConfirm(selected)
+                            onDismiss()
+                        },
+                    ) {
+                        Text(stringResource(MR.strings.action_ok))
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(MR.strings.action_cancel))
-                }
-            },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(vertical = 4.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     // Always ask row (-1)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { selected = -1 }
-                            .padding(vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(
@@ -320,7 +355,7 @@ object SettingsLibraryScreen : SearchableSettings {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { selected = 0 }
-                            .padding(vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(
@@ -335,7 +370,7 @@ object SettingsLibraryScreen : SearchableSettings {
                         )
                     }
 
-                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
                     hierarchy.forEach { entry ->
                         val cat = entry.category
@@ -349,7 +384,7 @@ object SettingsLibraryScreen : SearchableSettings {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { selected = cat.id.toInt() }
-                                .padding(start = (entry.depth * 24).dp),
+                                .padding(start = (entry.depth * 20 + 12).dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(
@@ -386,8 +421,8 @@ object SettingsLibraryScreen : SearchableSettings {
                         }
                     }
                 }
-            },
-        )
+            }
+        }
     }
 
     @Composable
@@ -405,23 +440,48 @@ object SettingsLibraryScreen : SearchableSettings {
         val hierarchy = remember(categories) {
             buildCategoryHierarchy(categories)
         }
+        val colorScheme = MaterialTheme.colorScheme
 
-        AlertDialog(
+        eu.kanade.presentation.components.KisaraBottomSheet(
             onDismissRequest = onDismiss,
-            title = { Text(stringResource(MR.strings.categories)) },
-            confirmButton = {
-                TextButton(onClick = { onConfirm(includedSet, excludedSet) }) {
-                    Text(stringResource(MR.strings.action_ok))
+            title = stringResource(MR.strings.categories),
+            footer = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    androidx.compose.material3.OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        onClick = onDismiss,
+                    ) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                    androidx.compose.material3.Button(
+                        modifier = Modifier.weight(1f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        onClick = {
+                            onConfirm(includedSet, excludedSet)
+                            onDismiss()
+                        },
+                    ) {
+                        Text(stringResource(MR.strings.action_ok))
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(MR.strings.action_cancel))
-                }
-            },
-            text = {
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+            ) {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .padding(vertical = 4.dp)
+                        .verticalScroll(rememberScrollState()),
                 ) {
                     hierarchy.forEach { entry ->
                         val category = entry.category
@@ -450,7 +510,7 @@ object SettingsLibraryScreen : SearchableSettings {
                                         }
                                     }
                                 }
-                                .padding(start = (entry.depth * 24).dp, top = 8.dp, bottom = 8.dp),
+                                .padding(start = (entry.depth * 20 + 12).dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Checkbox state
@@ -506,8 +566,8 @@ object SettingsLibraryScreen : SearchableSettings {
                         }
                     }
                 }
-            },
-        )
+            }
+        }
     }
 
     @Composable

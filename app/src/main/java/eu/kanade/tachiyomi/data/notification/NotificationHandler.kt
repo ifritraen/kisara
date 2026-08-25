@@ -68,4 +68,8 @@ object NotificationHandler {
         val notificationIntent = Intent(Intent.ACTION_VIEW, url.toUri())
         return PendingIntent.getActivity(context, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
     }
+
+    internal fun openAnimeDownloadManagerPendingActivity(context: Context): PendingIntent {
+        return openDownloadManagerPendingActivity(context)
+    }
 }

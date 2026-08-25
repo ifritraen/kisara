@@ -11,7 +11,10 @@ val updaterEnabled: Boolean
     inline get() = BuildConfig.UPDATER_ENABLED
 
 val isDebugBuildType: Boolean
-    inline get() = BuildConfig.BUILD_TYPE == "debug"
+    inline get() = BuildConfig.BUILD_TYPE == "debug" || BuildConfig.BUILD_TYPE == "alpha"
+
+val isAlphaBuildType: Boolean
+    inline get() = BuildConfig.BUILD_TYPE == "alpha"
 
 val isPreviewBuildType: Boolean
     inline get() = BuildConfig.BUILD_TYPE == "preview"

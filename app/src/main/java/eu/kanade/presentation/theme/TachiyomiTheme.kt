@@ -158,3 +158,25 @@ private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.MOCHA to MochaColorScheme,
     AppTheme.SAPPHIRE to SapphireColorScheme,
 )
+
+private const val RIPPLE_DRAGGED_ALPHA = .1f
+private const val RIPPLE_FOCUSED_ALPHA = .1f
+private const val RIPPLE_HOVERED_ALPHA = .1f
+private const val RIPPLE_PRESSED_ALPHA = .1f
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+val playerRippleConfiguration
+    @Composable get() = androidx.compose.material3.RippleConfiguration(
+        color = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black,
+        rippleAlpha = androidx.compose.material.ripple.RippleAlpha(
+            draggedAlpha = RIPPLE_DRAGGED_ALPHA,
+            focusedAlpha = RIPPLE_FOCUSED_ALPHA,
+            hoveredAlpha = RIPPLE_HOVERED_ALPHA,
+            pressedAlpha = RIPPLE_PRESSED_ALPHA,
+        ),
+    )
+
+val LocalIsAuroraTheme = androidx.compose.runtime.staticCompositionLocalOf { false }
+val LocalIsEInkMode = androidx.compose.runtime.staticCompositionLocalOf { false }
+val LocalIsDefaultAppUiFont = androidx.compose.runtime.staticCompositionLocalOf { true }
+

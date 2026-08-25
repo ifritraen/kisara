@@ -3,9 +3,10 @@ package exh.ui.metadata
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.MetadataSource
 import exh.metadata.metadata.RaisedSearchMetadata
-import exh.source.getMainSource
+import exh.source.EnhancedHttpSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import tachiyomi.core.common.util.lang.launchIO
@@ -15,6 +16,12 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+private inline fun <reified T : Source> Source.getMainSource(): T? = if (this is EnhancedHttpSource) {
+    this.source() as? T
+} else {
+    this as? T
+}
 
 class MetadataViewScreenModel(
     val mangaId: Long,

@@ -507,9 +507,14 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
         private const val API_URL = "https://graphql.anilist.co/"
         private const val BASE_URL = "https://anilist.co/api/v2/"
         private const val BASE_MANGA_URL = "https://anilist.co/manga/"
+        private const val BASE_ANIME_URL = "https://anilist.co/anime/"
 
         fun mangaUrl(mediaId: Long): String {
             return BASE_MANGA_URL + mediaId
+        }
+
+        fun animeUrl(mediaId: Long): String {
+            return BASE_ANIME_URL + mediaId
         }
 
         fun authUrl(): Uri = "${BASE_URL}oauth/authorize".toUri().buildUpon()

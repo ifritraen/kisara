@@ -11,10 +11,16 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -29,6 +35,7 @@ import mihon.domain.extension.model.KOMIKKU_SIGNATURE
 import mihon.domain.extension.model.REPO_HELP
 import mihon.domain.extension.model.REPO_SIGNATURE
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
@@ -47,26 +54,46 @@ fun ExtensionStoresScreen(
     // KMK -->
     onClickEnable: (ExtensionStore) -> Unit,
     onClickDisable: (ExtensionStore) -> Unit,
+    onSelectMediaTab: (Int) -> Unit = {},
     // KMK <--
     onClickRefresh: () -> Unit,
     navigateUp: () -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
+    val mediaTabs = persistentListOf(
+        stringResource(KMR.strings.label_media_type_manga),
+        stringResource(KMR.strings.label_media_type_anime),
+        stringResource(KMR.strings.label_media_type_novel),
+    )
+
     Scaffold(
         topBar = { scrollBehavior ->
-            AppBar(
-                navigateUp = navigateUp,
-                title = stringResource(MR.strings.extensionStores),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    IconButton(onClick = onClickRefresh) {
-                        Icon(
-                            imageVector = Icons.Outlined.Refresh,
-                            contentDescription = stringResource(resource = MR.strings.action_webview_refresh),
+            androidx.compose.foundation.layout.Column {
+                AppBar(
+                    navigateUp = navigateUp,
+                    title = stringResource(MR.strings.extensionStores),
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        IconButton(onClick = onClickRefresh) {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = stringResource(resource = MR.strings.action_webview_refresh),
+                            )
+                        }
+                    },
+                )
+                androidx.compose.material3.PrimaryTabRow(
+                    selectedTabIndex = state.selectedMediaIndex,
+                ) {
+                    mediaTabs.forEachIndexed { index, title ->
+                        androidx.compose.material3.Tab(
+                            selected = state.selectedMediaIndex == index,
+                            onClick = { onSelectMediaTab(index) },
+                            text = { Text(text = title) },
                         )
                     }
-                },
-            )
+                }
+            }
         },
         floatingActionButton = {
             CategoryFloatingActionButton(
@@ -119,7 +146,7 @@ fun ExtensionStoresScreen(
 @Composable
 private fun ExtensionStoresScreenPreview() {
     val state = ExtensionStoreScreenState.Success(
-        stores = persistentListOf(
+        mangaStores = persistentListOf(
             ExtensionStore("https://komikku", "Komikku", "", KOMIKKU_SIGNATURE, ExtensionStore.Contact("", ""), false, null),
             ExtensionStore("https://repo", "Repo", "", REPO_SIGNATURE, ExtensionStore.Contact("", ""), false, null),
             ExtensionStore("https://other", "Other", "", "key2", ExtensionStore.Contact("", ""), true, null),
@@ -147,7 +174,7 @@ private fun ExtensionStoresScreenPreview() {
 @PreviewLightDark
 @Composable
 private fun ExtensionStoresScreenEmptyPreview() {
-    val state = ExtensionStoreScreenState.Success(stores = persistentListOf())
+    val state = ExtensionStoreScreenState.Success(mangaStores = persistentListOf<ExtensionStore>())
     TachiyomiPreviewTheme {
         Surface {
             ExtensionStoresScreen(

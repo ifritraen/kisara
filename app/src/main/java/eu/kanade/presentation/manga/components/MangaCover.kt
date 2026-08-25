@@ -75,51 +75,23 @@ enum class MangaCover(val ratio: Float) {
         var state by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
         val succeed = state is AsyncImagePainter.State.Success
 
-        val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "shimmer")
-        val translateAnim by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1000f,
-            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                animation = androidx.compose.animation.core.tween(
-                    durationMillis = 1200,
-                    easing = androidx.compose.animation.core.LinearEasing,
-                ),
-                repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
-            ),
-            label = "shimmerTranslate",
-        )
-
-        val shimmerBrush = remember(translateAnim) {
-            androidx.compose.ui.graphics.Brush.linearGradient(
-                colors = listOf(
-                    Color(0x1F888888),
-                    Color(0x3DFFFFFF),
-                    Color(0x1F888888),
-                ),
-                start = androidx.compose.ui.geometry.Offset(translateAnim - 300f, translateAnim - 300f),
-                end = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim),
-            )
-        }
-
         val baseModifier = modifier
             .aspectRatio(ratio)
             .clip(shape)
             .alpha(if (succeed) alpha else 1f)
 
-        val modifierColored = if (!succeed && state !is AsyncImagePainter.State.Error) {
-            baseModifier.background(shimmerBrush)
-        } else {
-            baseModifier.background(bgColor ?: CoverPlaceholderColor)
-        }.then(
-            if (onClick != null) {
-                Modifier.clickable(
-                    role = Role.Button,
-                    onClick = onClick,
-                )
-            } else {
-                Modifier
-            },
-        )
+        val modifierColored = baseModifier
+            .background(bgColor ?: CoverPlaceholderColor)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
 
         Box(modifier = modifierColored) {
             coil3.compose.AsyncImage(

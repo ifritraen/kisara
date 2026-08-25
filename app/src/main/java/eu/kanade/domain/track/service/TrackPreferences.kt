@@ -69,5 +69,33 @@ class TrackPreferences(
         val selectedId = primaryTracker().get()
         return loggedInTrackers.find { it.id == selectedId } ?: loggedInTrackers.first()
     }
+
+    fun getPrimaryAnimeTracker(trackerManager: eu.kanade.tachiyomi.data.track.TrackerManager): Tracker? {
+        val loggedInTrackers = trackerManager.loggedInTrackers()
+        if (loggedInTrackers.isEmpty()) return null
+
+        // 1. Primary for Anime: AniList
+        loggedInTrackers.find { it.id == eu.kanade.tachiyomi.data.track.TrackerManager.ANILIST }?.let { return it }
+
+        // 2. Fallback for Anime: MyAnimeList
+        loggedInTrackers.find { it.id == 1L }?.let { return it }
+
+        val selectedId = primaryTracker().get()
+        return loggedInTrackers.find { it.id == selectedId } ?: loggedInTrackers.first()
+    }
+
+    fun getPrimaryNovelTracker(trackerManager: eu.kanade.tachiyomi.data.track.TrackerManager): Tracker? {
+        val loggedInTrackers = trackerManager.loggedInTrackers()
+        if (loggedInTrackers.isEmpty()) return null
+
+        // 1. Primary for Novel: MangaUpdates (7L)
+        loggedInTrackers.find { it.id == 7L }?.let { return it }
+
+        // 2. Fallback for Novel: AniList (2L)
+        loggedInTrackers.find { it.id == eu.kanade.tachiyomi.data.track.TrackerManager.ANILIST }?.let { return it }
+
+        val selectedId = primaryTracker().get()
+        return loggedInTrackers.find { it.id == selectedId } ?: loggedInTrackers.first()
+    }
     // KMK <--
 }

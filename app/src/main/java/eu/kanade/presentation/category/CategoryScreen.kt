@@ -19,7 +19,6 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import eu.kanade.presentation.category.components.CategoryFloatingActionButton
 import eu.kanade.presentation.category.components.CategoryListItem
-import eu.kanade.presentation.components.AppBar
 import eu.kanade.tachiyomi.ui.category.CategoryScreenState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,17 +51,10 @@ fun CategoryScreen(
     onCommitOrder: (List<Pair<Category, Int>>) -> Unit = { changes ->
         changes.forEach { (cat, idx) -> onChangeOrder(cat, idx) }
     },
-    navigateUp: () -> Unit,
+    navigateUp: (() -> Unit)? = null,
 ) {
     val lazyListState = rememberLazyListState()
     Scaffold(
-        topBar = { scrollBehavior ->
-            AppBar(
-                title = stringResource(MR.strings.action_edit_categories),
-                navigateUp = navigateUp,
-                scrollBehavior = scrollBehavior,
-            )
-        },
         floatingActionButton = {
             CategoryFloatingActionButton(
                 lazyListState = lazyListState,

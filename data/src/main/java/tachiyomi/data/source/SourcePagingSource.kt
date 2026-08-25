@@ -1,5 +1,6 @@
 package tachiyomi.data.source
 
+import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -7,12 +8,10 @@ import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.MetadataMangasPage
 import exh.log.xLogE
 import exh.metadata.metadata.RaisedSearchMetadata
-import mihon.domain.manga.model.toDomainManga
 import tachiyomi.core.common.util.QuerySanitizer.sanitize
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.model.Manga
-import tachiyomi.domain.source.repository.SourcePagingSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -41,7 +40,7 @@ class SourceLatestPagingSource(source: CatalogueSource) : BaseSourcePagingSource
 abstract class BaseSourcePagingSource(
     protected val source: CatalogueSource,
     protected val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
-) : SourcePagingSource() {
+) : PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>>() {
 
     protected val seenManga = hashSetOf<String>()
 
@@ -50,7 +49,7 @@ abstract class BaseSourcePagingSource(
     override suspend fun load(
         params: LoadParams<Long>,
     ): LoadResult<Long, /*SY --> */ Pair<Manga, RaisedSearchMetadata?>/*SY <-- */> {
-        val page = params.key ?: 1
+        val page = params.key ?: 1L
 
         return try {
             val mangasPage = withIOContext {
@@ -69,13 +68,12 @@ abstract class BaseSourcePagingSource(
     }
 
     // SY -->
-    open suspend fun getPageLoadResult(
+    protected open suspend fun getPageLoadResult(
+        @Suppress("UNUSED_PARAMETER")
         params: LoadParams<Long>,
         mangasPage: MangasPage,
-    ): LoadResult.Page<Long, /*SY --> */ Pair<Manga, RaisedSearchMetadata?>/*SY <-- */> {
-        val page = params.key ?: 1
-
-        // SY -->
+    ): LoadResult.Page<Long, Pair<Manga, RaisedSearchMetadata?>> {
+        val page = params.key ?: 1L
         val metadata = if (mangasPage is MetadataMangasPage) {
             mangasPage.mangasMetadata
         } else {
@@ -86,15 +84,13 @@ abstract class BaseSourcePagingSource(
         val filterMangaByBlockedContent = Injekt.get<tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent>()
         val filters = filterMangaByBlockedContent.getBlockedFilters()
 
-        val manga = mangasPage.mangas
-            // SY -->
+        val mangaPairs = mangasPage.mangas
             .mapIndexed { index, sManga -> sManga.toDomainManga(source.id) to metadata.getOrNull(index) }
             .filter { seenManga.add(it.first.url) }
-            // KMK -->
-            .let { pairs -> networkToLocalManga(pairs.map { it.first }).zip(pairs.map { it.second }) }
+
+        val localMangas = networkToLocalManga(mangaPairs.map { it.first })
+        val manga = localMangas.zip(mangaPairs.map { it.second })
             .filterNot { (mangaItem, _) -> filterMangaByBlockedContent.isMangaBlocked(mangaItem, filters) }
-        // KMK <--
-        // SY <--
 
         return LoadResult.Page(
             data = manga,
@@ -112,6 +108,22 @@ abstract class BaseSourcePagingSource(
             anchorPage?.prevKey ?: anchorPage?.nextKey
         }
     }
+}
+
+fun eu.kanade.tachiyomi.source.model.SManga.toDomainManga(sourceId: Long): Manga {
+    return Manga.create().copy(
+        url = url,
+        ogTitle = title,
+        ogArtist = artist,
+        ogAuthor = author,
+        ogDescription = description,
+        ogGenre = getGenres(),
+        ogStatus = status.toLong(),
+        ogThumbnailUrl = thumbnail_url,
+        updateStrategy = update_strategy,
+        initialized = initialized,
+        source = sourceId,
+    )
 }
 
 class NoResultsException : Exception()

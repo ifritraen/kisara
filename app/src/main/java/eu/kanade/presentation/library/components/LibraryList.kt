@@ -3,7 +3,9 @@ package eu.kanade.presentation.library.components
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -24,9 +26,13 @@ internal fun LibraryList(
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
+    // KMK -->
+    listState: LazyListState = rememberLazyListState(),
+    // KMK <--
 ) {
     FastScrollLazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = contentPadding + PaddingValues(vertical = 8.dp),
     ) {
         item {
@@ -41,13 +47,7 @@ internal fun LibraryList(
 
         items(
             items = items,
-            key = {
-                try {
-                    it.libraryManga.manga.id
-                } catch (e: Throwable) {
-                    it.hashCode()
-                }
-            },
+            key = { it.libraryManga.manga.id },
             contentType = { "library_list_item" },
         ) { libraryItem ->
             val manga = libraryItem.libraryManga.manga
