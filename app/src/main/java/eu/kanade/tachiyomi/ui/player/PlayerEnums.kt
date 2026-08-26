@@ -149,6 +149,8 @@ enum class VideoFilters(
     val titleRes: StringResource,
     val preference: (DecoderPreferences) -> Preference<Int>,
     val mpvProperty: String,
+    val min: Int = -100,
+    val max: Int = 100,
 ) {
     BRIGHTNESS(
         KMR.strings.player_sheets_filters_brightness,
@@ -174,5 +176,49 @@ enum class VideoFilters(
         KMR.strings.player_sheets_filters_hue,
         { it.hueFilter() },
         "hue",
+    ),
+    SHARPEN(
+        KMR.strings.player_sheets_filters_sharpen,
+        { it.sharpenFilter() },
+        "sharpen",
+        min = -5,
+        max = 5,
+    ),
+}
+
+enum class DebandSettings(
+    val titleRes: StringResource,
+    val preference: (DecoderPreferences) -> Preference<Int>,
+    val mpvProperty: String,
+    val start: Int,
+    val end: Int,
+) {
+    ITERATIONS(
+        KMR.strings.pref_debanding_title,
+        { it.debandFilter() },
+        "deband-iterations",
+        start = 0,
+        end = 16,
+    ),
+    THRESHOLD(
+        KMR.strings.player_sheets_deband_threshold,
+        { it.debandThreshold() },
+        "deband-threshold",
+        start = 0,
+        end = 200,
+    ),
+    RANGE(
+        KMR.strings.player_sheets_deband_range,
+        { it.debandRange() },
+        "deband-range",
+        start = 1,
+        end = 64,
+    ),
+    GRAIN(
+        KMR.strings.player_sheets_filters_grain,
+        { it.grainFilter() },
+        "deband-grain",
+        start = 0,
+        end = 200,
     ),
 }

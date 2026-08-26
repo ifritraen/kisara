@@ -127,8 +127,8 @@ fun FiltersCard(
                         filter.preference(decoderPreferences).set(it)
                         MPVLib.setPropertyInt(filter.mpvProperty, it)
                     },
-                    max = 100,
-                    min = -100,
+                    max = filter.max,
+                    min = filter.min,
                 )
             }
             item {

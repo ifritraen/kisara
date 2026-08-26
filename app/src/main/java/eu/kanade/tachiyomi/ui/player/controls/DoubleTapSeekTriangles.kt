@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.ui.player.controls.components
+package eu.kanade.tachiyomi.ui.player.controls
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode

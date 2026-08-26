@@ -322,6 +322,7 @@ class AppModule(val app: Application) : InjektModule {
                 cache = get(),
             )
         }
+        addSingletonFactory { eu.kanade.tachiyomi.ui.player.Anime4KManager(app) }
         addSingletonFactory { eu.kanade.tachiyomi.ui.player.utils.TrackSelect(get(), get()) }
         addSingletonFactory { eu.kanade.tachiyomi.ui.player.aniskip.AniSkipApi() }
         addSingletonFactory { eu.kanade.tachiyomi.ui.player.aniskip.SubtitleSyncCoordinator(get()) }

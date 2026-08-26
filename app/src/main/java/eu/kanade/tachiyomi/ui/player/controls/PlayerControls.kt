@@ -83,6 +83,7 @@ import eu.kanade.tachiyomi.ui.player.VideoAspect
 import eu.kanade.tachiyomi.ui.player.controls.components.BrightnessOverlay
 import eu.kanade.tachiyomi.ui.player.controls.components.BrightnessSlider
 import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
+import eu.kanade.tachiyomi.ui.player.controls.components.FilledControlsButton
 import eu.kanade.tachiyomi.ui.player.controls.components.SeekbarWithTimers
 import eu.kanade.tachiyomi.ui.player.controls.components.TextPlayerUpdate
 import eu.kanade.tachiyomi.ui.player.controls.components.VolumeSlider
@@ -351,16 +352,15 @@ fun PlayerControls(
 
                 AnimatedVisibility(
                     controlsShown && areControlsLocked,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(playerControlsEnterAnimationSpec()),
+                    exit = fadeOut(playerControlsExitAnimationSpec()),
                     modifier = Modifier.constrainAs(unlockControlsButton) {
-                        top.linkTo(parent.top, spacing.medium)
-                        start.linkTo(parent.start, spacing.medium)
+                        bottom.linkTo(parent.bottom, spacing.large)
+                        linkTo(parent.start, parent.end)
                     },
                 ) {
-                    ControlsButton(
-                        Icons.Filled.Lock,
-                        onClick = { viewModel.unlockControls() },
+                    SlideToUnlock(
+                        onUnlock = { viewModel.unlockControls() },
                     )
                 }
                 AnimatedVisibility(
@@ -596,7 +596,7 @@ fun PlayerControls(
                         linkTo(parent.start, parent.end)
                     },
                 ) {
-                    PlaybackSpeedPill(speed = gesturePlaybackSpeed)
+                    DoubleSpeedIndicator(speed = gesturePlaybackSpeed)
                 }
             }
         }
@@ -732,53 +732,5 @@ fun PlaybackSpeedPill(
     speed: Float,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = Color.Black.copy(alpha = 0.75f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-        modifier = modifier,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (speed < 1.0f) {
-                FlashingArrows(isForward = false)
-            }
-            Text(
-                text = "${speed}x",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-            )
-            if (speed > 1.0f) {
-                FlashingArrows(isForward = true)
-            }
-        }
-    }
-}
-
-@Composable
-fun FlashingArrows(
-    isForward: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "arrows_flash")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "arrows_alpha",
-    )
-    Text(
-        text = if (isForward) ">>" else "<<",
-        style = MaterialTheme.typography.labelLarge,
-        color = Color.White.copy(alpha = alpha),
-        fontWeight = FontWeight.Bold,
-        modifier = modifier,
-    )
+    DoubleSpeedIndicator(speed = speed, modifier = modifier)
 }

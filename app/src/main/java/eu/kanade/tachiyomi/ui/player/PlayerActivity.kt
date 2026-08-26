@@ -37,6 +37,7 @@ import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Rational
 import android.view.KeyEvent
 import android.view.View
@@ -137,7 +138,20 @@ class PlayerActivity : BaseActivity() {
     private val networkPreferences: NetworkPreferences = Injekt.get()
     private val storageManager: StorageManager = Injekt.get()
     private val uiPreferences: UiPreferences = Injekt.get()
+    private val anime4kManager: Anime4KManager = Injekt.get()
     private val torrentPlaybackResolver by lazy { TorrentPlaybackResolver(contentResolver) }
+
+    private var lastThermalStatus: Int = -1
+    private val thermalListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        PowerManager.OnThermalStatusChangedListener { status ->
+            if (status >= PowerManager.THERMAL_STATUS_THROTTLING && status != lastThermalStatus) {
+                lastThermalStatus = status
+                player.checkAdaptiveScaling(Long.MAX_VALUE)
+            }
+        }
+    } else {
+        null
+    }
 
     private var audioFocusRequest: AudioFocusRequestCompat? = null
     private var restoreAudioFocus: () -> Unit = {}
@@ -326,6 +340,7 @@ class PlayerActivity : BaseActivity() {
             noisyReceiver.initialized = false
         }
 
+        player.isAdaptiveDowngraded = false
         MPVLib.removeLogObserver(playerObserver)
         MPVLib.removeObserver(playerObserver)
         player.destroy()
@@ -353,6 +368,9 @@ class PlayerActivity : BaseActivity() {
     }
 
     override fun onStop() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && thermalListener != null) {
+            powerManager.removeThermalStatusListener(thermalListener)
+        }
         window.attributes.screenBrightness.let {
             if (playerPreferences.rememberPlayerBrightness().get() && it != -1f) {
                 playerPreferences.playerBrightnessValue().set(it)
@@ -363,7 +381,18 @@ class PlayerActivity : BaseActivity() {
             viewModel.deletePendingEpisodes()
         }
 
+        player.shrinkCache()
         super.onStop()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        player.shrinkCache()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        player.restoreCache()
     }
 
     override fun onUserLeaveHint() {
@@ -391,6 +420,9 @@ class PlayerActivity : BaseActivity() {
     @Suppress("DEPRECATION")
     override fun onStart() {
         super.onStart()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && thermalListener != null) {
+            powerManager.addThermalStatusListener(thermalListener)
+        }
         setPictureInPictureParams(createPipParams())
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.setFlags(
@@ -447,16 +479,7 @@ class PlayerActivity : BaseActivity() {
         advancedPlayerPreferences.mpvInput().get().let { mpvInputFile.writeText(it) }
 
         copyUserFiles(mpvDir)
-        val anime4kPreset = decoderPreferences.anime4kShaderPreset().get()
-        if (copyAnime4kShaders(mpvDir, anime4kPreset)) {
-            anime4kPreset.mpvShaderOption()?.let {
-                MPVLib.setOptionString("glsl-shaders", it)
-            }
-        } else if (anime4kPreset != Anime4KShaderPreset.Off) {
-            logcat(LogPriority.WARN) {
-                "Anime4K preset $anime4kPreset could not be staged and was disabled"
-            }
-        }
+        anime4kManager.initialize()
         copyAssets(mpvDir)
         // Stage the user fonts synchronously so they are on disk before MPV initializes its
         // subtitle renderer; the fonts directory is registered right after initialize below.
@@ -518,47 +541,6 @@ class PlayerActivity : BaseActivity() {
         } catch (e: Exception) {
             logcat(LogPriority.WARN, e) { "Failed to copy aniyomi.lua bridge file" }
         }
-    }
-
-    private fun copyAnime4kShaders(mpvDir: UniFile, preset: Anime4KShaderPreset): Boolean {
-        if (preset == Anime4KShaderPreset.Off) return true
-
-        val targetRoot = mpvDir.createDirectory(MPV_SHADERS_DIR)?.createDirectory("anime4k")
-            ?: return false
-
-        for (shaderPath in preset.shaderPaths()) {
-            val targetFile = createAnime4kShaderTarget(targetRoot, shaderPath) ?: run {
-                logcat(LogPriority.WARN) { "Failed to prepare Anime4K shader target: $shaderPath" }
-                return false
-            }
-
-            try {
-                assets.open("shaders/anime4k/$shaderPath").use { input ->
-                    targetFile.openOutputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (e: IOException) {
-                logcat(LogPriority.WARN) { "Failed to copy Anime4K shader: $shaderPath" }
-                return false
-            }
-        }
-
-        return true
-    }
-
-    private fun createAnime4kShaderTarget(root: UniFile, shaderPath: String): UniFile? {
-        val parentPath = shaderPath.substringBeforeLast('/', "")
-        var current = root
-
-        if (parentPath.isNotEmpty()) {
-            for (segment in parentPath.split('/')) {
-                if (segment.isEmpty()) continue
-                current = current.createDirectory(segment) ?: return null
-            }
-        }
-
-        return current.createFile(shaderPath.substringAfterLast('/'))
     }
 
     private fun copyAssets(mpvDir: UniFile) {
@@ -696,6 +678,7 @@ class PlayerActivity : BaseActivity() {
             // "chapter" -> viewModel.updateChapter(value)
             "duration" -> viewModel.duration.update { value.toFloat() }
             "user-data/current-anime/intro-length" -> viewModel.setAnimeSkipIntroLength(value)
+            "vo-delayed-frame-count" -> player.checkAdaptiveScaling(value)
         }
     }
 

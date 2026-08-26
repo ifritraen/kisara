@@ -20,6 +20,12 @@ class DecoderPreferences(
         MotionInterpolationMode.Off,
     )
     fun useYUV420P() = preferenceStore.getBoolean("use_yuv420p", false)
+    fun highQualityScaling() = preferenceStore.getBoolean("pref_high_quality_scaling", false)
+    fun adaptiveShaderScaling() = preferenceStore.getBoolean("pref_adaptive_shader_scaling", true)
+
+    fun enableAnime4K() = preferenceStore.getBoolean("pref_enable_anime4k", false)
+    fun anime4kMode() = preferenceStore.getString("pref_anime4k_mode", "A")
+    fun anime4kQuality() = preferenceStore.getString("pref_anime4k_quality", "BALANCED")
 
     // Non-preferences
 
@@ -28,4 +34,10 @@ class DecoderPreferences(
     fun contrastFilter() = preferenceStore.getInt("pref_player_filter_contrast")
     fun gammaFilter() = preferenceStore.getInt("pref_player_filter_gamma")
     fun hueFilter() = preferenceStore.getInt("pref_player_filter_hue")
+    fun sharpenFilter() = preferenceStore.getInt("pref_player_filter_sharpen", 0)
+    fun debandFilter() = preferenceStore.getInt("pref_player_filter_deband", 1)
+    fun grainFilter() = preferenceStore.getInt("pref_player_filter_grain", 48)
+    fun debandThreshold() = preferenceStore.getInt("pref_player_filter_deband_threshold", 32)
+    fun debandRange() = preferenceStore.getInt("pref_player_filter_deband_range", 16)
+    fun videoFilterTheme() = preferenceStore.getInt("pref_video_filter_theme", 0)
 }

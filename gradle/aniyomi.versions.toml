@@ -1,15 +1,15 @@
 [versions]
-aniyomi-mpv-lib = "1.18.n"
+aniyomi-mpv-lib = "1.27.n"
 arthenica-smartexceptions = "0.2.1"
-constraint-layout = "1.1.0"
+constraint-layout = "1.1.1"
 ffmpeg-kit = "1.18"
-media = "1.7.0"
+media = "1.7.1"
 seeker = "1.2.2"
 torrserver = "0.1.0"
 truetypeparser = "2.1.4"
 
 [libraries]
-aniyomi-mpv = { module = "com.github.aniyomiorg:aniyomi-mpv-lib", version.ref = "aniyomi-mpv-lib" }
+aniyomi-mpv = { module = "com.github.salmanbappi:aniyomi-mpv-lib", version.ref = "aniyomi-mpv-lib" }
 arthenica-smartexceptions = { module = "com.arthenica:smart-exception-java", version.ref = "arthenica-smartexceptions" }
 compose-constraintlayout = { module = "androidx.constraintlayout:constraintlayout-compose", version.ref = "constraint-layout" }
 ffmpeg-kit = { module = "com.github.jmir1:ffmpeg-kit", version.ref = "ffmpeg-kit" }

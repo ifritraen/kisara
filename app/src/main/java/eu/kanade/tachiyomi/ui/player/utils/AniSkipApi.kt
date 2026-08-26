@@ -43,25 +43,38 @@ class AniSkipApi {
         }
     }
 
-    fun getMalIdFromAL(id: Long): Long {
+    fun resolveMalIdFromAniList(anilistId: Long): Long? {
+        if (anilistId <= 0) return null
         val query = """
-                query{
-                Media(id:$id){idMal}
+            query {
+                Media(id: $anilistId) {
+                    idMal
                 }
-        """.trimMargin()
-        val response = try {
-            client.newCall(
+            }
+        """.trimIndent()
+        return try {
+            val response = client.newCall(
                 POST(
                     "https://graphql.anilist.co",
                     body = buildJsonObject { put("query", query) }.toString()
                         .toRequestBody(jsonMime),
                 ),
             ).execute()
+            if (!response.isSuccessful) return null
+            val bodyString = response.body.string()
+            if ("\"idMal\":" !in bodyString) return null
+            val idMal = bodyString.substringAfter("\"idMal\":")
+                .substringBefore(",")
+                .substringBefore("}")
+                .trim()
+            idMal.toLongOrNull()?.takeIf { it > 0 }
         } catch (_: Exception) {
-            return 0
+            null
         }
-        return response.body.string().substringAfter("idMal\":").substringBefore("}")
-            .toLongOrNull() ?: 0
+    }
+
+    fun getMalIdFromAL(id: Long): Long {
+        return resolveMalIdFromAniList(id) ?: 0L
     }
 }
 

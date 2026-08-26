@@ -96,16 +96,18 @@ fun SeekbarWithTimers(
             onValueChange = onValueChange,
             onValueChangeFinished = onValueChangeFinished,
             readAheadValue = readAheadValue,
-            segments = chapters
-                .filter { it.start in 0f..duration }
-                .let {
-                    // add an extra segment at 0 if it doesn't exist.
-                    if (it.isNotEmpty() && it[0].start != 0f) {
-                        persistentListOf(Segment("", 0f)) + it
-                    } else {
-                        it
-                    } + it
-                },
+            segments = remember(chapters, duration) {
+                chapters
+                    .filter { it.start in 0f..duration }
+                    .let {
+                        // add an extra segment at 0 if it doesn't exist.
+                        if (it.isNotEmpty() && it[0].start != 0f) {
+                            persistentListOf(Segment("", 0f)) + it
+                        } else {
+                            it
+                        }
+                    }
+            },
             modifier = Modifier.weight(1f),
             colors = SeekerDefaults.seekerColors(
                 progressColor = MaterialTheme.colorScheme.primary,
@@ -146,6 +148,10 @@ fun VideoTimer(
         text = Utils.prettyTime(value.toInt(), isInverted),
         color = Color.White,
         textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.labelLarge.copy(
+            fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
+            fontFeatureSettings = "tnum",
+        ),
     )
 }
 

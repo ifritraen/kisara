@@ -19,6 +19,12 @@ class PlayerPreferences(
         PlayerOrientation.SensorLandscape,
     )
 
+    fun defaultStreamSelector() = preferenceStore.getString("pref_default_stream_selector", "")
+    fun perAnimeDefaultStream() = preferenceStore.getBoolean("pref_per_anime_default_stream", true)
+    fun autoScrollDefaultStream() = preferenceStore.getBoolean("pref_auto_scroll_default_stream", true)
+    fun showDefaultStreamHighlight() = preferenceStore.getBoolean("pref_show_default_stream_highlight", true)
+    fun perAnimeDefaultStreamData() = preferenceStore.getString("pref_per_anime_default_stream_data", "")
+
     // Controls
 
     fun allowGestures() = preferenceStore.getBoolean("pref_allow_gestures_in_panels", false)

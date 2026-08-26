@@ -89,6 +89,8 @@ import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationPro
 import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProviderId
 import eu.kanade.tachiyomi.ui.player.utils.AniSkipApi
 import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils.Companion.getStringRes
+import eu.kanade.tachiyomi.ui.player.utils.DefaultStreamPreferenceStore
+import eu.kanade.tachiyomi.ui.player.utils.DefaultStreamSelector
 import eu.kanade.tachiyomi.ui.player.utils.TrackSelect
 import eu.kanade.tachiyomi.ui.reader.SaveImageNotifier
 import eu.kanade.tachiyomi.util.editBackground
@@ -312,6 +314,9 @@ class PlayerViewModel @JvmOverloads constructor(
     val isDynamicSpeedActive = MutableStateFlow(false)
     val preGesturePlaybackSpeed = MutableStateFlow(1f)
     val gesturePlaybackSpeed = MutableStateFlow(1f)
+    val videoZoom = MutableStateFlow(0.0)
+    val videoPanX = MutableStateFlow(0.0)
+    val videoPanY = MutableStateFlow(0.0)
 
     val sheetShown = MutableStateFlow(Sheets.None)
     val panelShown = MutableStateFlow(Panels.None)
@@ -1059,6 +1064,55 @@ class PlayerViewModel @JvmOverloads constructor(
         MPVLib.command(arrayOf("seek", position.toString(), if (precise) "absolute" else "absolute+keyframes"))
     }
 
+    private var speedRampJob: Job? = null
+
+    fun rampPlaybackSpeed(
+        targetSpeed: Float,
+        step: Float = 0.1f,
+        intervalMs: Long = 16L,
+        onFinished: (() -> Unit)? = null,
+    ) {
+        speedRampJob?.cancel()
+        speedRampJob = viewModelScope.launchIO {
+            var currentSpeed = runCatching { MPVLib.getPropertyDouble("speed")?.toFloat() }.getOrNull()
+                ?: playbackSpeed.value
+            val clampedTarget = targetSpeed.coerceIn(0.25f, 5.0f)
+            val epsilon = 0.05f
+            while (kotlin.math.abs(currentSpeed - clampedTarget) > epsilon) {
+                currentSpeed = if (currentSpeed < clampedTarget) {
+                    (currentSpeed + step).coerceAtMost(clampedTarget)
+                } else {
+                    (currentSpeed - step).coerceAtLeast(clampedTarget)
+                }
+                MPVLib.setPropertyDouble("speed", currentSpeed.toDouble())
+                delay(intervalMs)
+            }
+            MPVLib.setPropertyDouble("speed", clampedTarget.toDouble())
+            onFinished?.invoke()
+        }
+    }
+
+    fun setVideoZoom(zoom: Double) {
+        videoZoom.update { zoom }
+        MPVLib.setPropertyDouble("video-zoom", zoom)
+    }
+
+    fun setVideoPan(panX: Double, panY: Double) {
+        videoPanX.update { panX }
+        videoPanY.update { panY }
+        MPVLib.setPropertyDouble("video-pan-x", panX)
+        MPVLib.setPropertyDouble("video-pan-y", panY)
+    }
+
+    fun resetVideoZoomAndPan() {
+        videoZoom.update { 0.0 }
+        videoPanX.update { 0.0 }
+        videoPanY.update { 0.0 }
+        MPVLib.setPropertyDouble("video-zoom", 0.0)
+        MPVLib.setPropertyDouble("video-pan-x", 0.0)
+        MPVLib.setPropertyDouble("video-pan-y", 0.0)
+    }
+
     fun changeBrightnessTo(
         brightness: Float,
     ) {
@@ -1317,20 +1371,22 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun leftSeek() {
-        if (pos.value > 0) {
-            _doubleTapSeekAmount.value -= doubleTapToSeekDuration
-        }
+        val step = doubleTapToSeekDuration
+        val current = if (_doubleTapSeekAmount.value > 0) 0 else _doubleTapSeekAmount.value
+        val newAmount = current - step
+        _doubleTapSeekAmount.value = newAmount
         _isSeekingForwards.value = false
-        seekBy(-doubleTapToSeekDuration, preciseSeek)
+        seekBy(-step, preciseSeek)
         if (showSeekBar) showSeekBar()
     }
 
     fun rightSeek() {
-        if (pos.value < duration.value) {
-            _doubleTapSeekAmount.value += doubleTapToSeekDuration
-        }
+        val step = doubleTapToSeekDuration
+        val current = if (_doubleTapSeekAmount.value < 0) 0 else _doubleTapSeekAmount.value
+        val newAmount = current + step
+        _doubleTapSeekAmount.value = newAmount
         _isSeekingForwards.value = true
-        seekBy(doubleTapToSeekDuration, preciseSeek)
+        seekBy(step, preciseSeek)
         if (showSeekBar) showSeekBar()
     }
 
@@ -1914,10 +1970,24 @@ class PlayerViewModel @JvmOverloads constructor(
                     }.awaitAll()
 
                     if (hasFoundPreferredVideo.compareAndSet(false, true)) {
-                        var (hosterIdx, videoIdx) = findVideoByPlaybackPreferences(
-                            hosterState.value,
-                            playbackPreferences,
-                        )
+                        val defaultSelector = getEffectiveDefaultStreamSelector()
+                        var (hosterIdx, videoIdx) = if (defaultSelector.isNotBlank()) {
+                            val strictRanked = DefaultStreamSelector.findRankedInHosters(defaultSelector, hosterState.value)
+                            val candidate = strictRanked.firstOrNull()
+                                ?: DefaultStreamSelector.findRankedInHostersRelaxed(defaultSelector, hosterState.value).firstOrNull()
+                            candidate ?: Pair(-1, -1)
+                        } else {
+                            Pair(-1, -1)
+                        }
+
+                        if (hosterIdx == -1) {
+                            val pref = findVideoByPlaybackPreferences(
+                                hosterState.value,
+                                playbackPreferences,
+                            )
+                            hosterIdx = pref.first
+                            videoIdx = pref.second
+                        }
 
                         logcat(LogPriority.DEBUG) {
                             "loadHosters: playback resolver returned hosterIdx=$hosterIdx, videoIdx=$videoIdx"
@@ -2063,7 +2133,30 @@ class PlayerViewModel @JvmOverloads constructor(
         return true
     }
 
+    fun setDefaultStreamSelector(hosterIndex: Int, videoIndex: Int) {
+        val hoster = _hosterState.value.getOrNull(hosterIndex)
+        val video = (hoster as? HosterState.Ready)
+            ?.videoList
+            ?.getOrNull(videoIndex)
+            ?: return
+        val currentComposite = getEffectiveDefaultStreamSelector()
+        val newComposite = DefaultStreamSelector.updateCompositeSelector(
+            currentComposite,
+            hoster.name,
+            DefaultStreamSelector.selectorFor(video, hoster.name),
+        )
+        DefaultStreamPreferenceStore(playerPreferences).setSelector(
+            animeId = currentAnime.value?.id,
+            selector = newComposite,
+        )
+    }
+
+    fun getEffectiveDefaultStreamSelector(): String {
+        return DefaultStreamPreferenceStore(playerPreferences).getEffectiveSelector(currentAnime.value?.id)
+    }
+
     fun onVideoClicked(hosterIndex: Int, videoIndex: Int) {
+        setDefaultStreamSelector(hosterIndex, videoIndex)
         val hosterState = _hosterState.value[hosterIndex] as? HosterState.Ready
         val video = hosterState?.videoList
             ?.getOrNull(videoIndex)
@@ -2550,23 +2643,30 @@ class PlayerViewModel @JvmOverloads constructor(
     suspend fun aniSkipResponse(playerDuration: Int?): List<TimeStamp>? {
         val animeId = currentAnime.value?.id ?: return null
         val trackerManager = Injekt.get<TrackerManager>()
-        var malId: Long?
         val episodeNumber = currentEpisode.value?.episode_number?.toInt() ?: return null
-        if (getTracks.await(animeId).isEmpty()) {
+        val duration = playerDuration ?: return null
+        val tracks = getTracks.await(animeId)
+        if (tracks.isEmpty()) {
             logcat { "AniSkip: No tracks found for anime $animeId" }
             return null
         }
 
-        getTracks.await(animeId).map { track ->
+        for (track in tracks) {
             val tracker = trackerManager.get(track.trackerId)
-            malId = when (tracker) {
-                is MyAnimeList -> track.remoteId
-                is Anilist -> AniSkipApi().getMalIdFromAL(track.remoteId)
+            val malId: Long? = when (tracker) {
+                is MyAnimeList -> track.remoteId.takeIf { it > 0 }
+                is Anilist -> {
+                    AniSkipApi().resolveMalIdFromAniList(track.remoteId)
+                        ?: AniSkipApi().getMalIdFromAL(track.remoteId).takeIf { it > 0 }
+                }
                 else -> null
             }
-            val duration = playerDuration ?: return null
-            return malId?.let {
-                AniSkipApi().getResult(it.toInt(), episodeNumber, duration.toLong())
+
+            if (malId != null && malId > 0) {
+                val results = AniSkipApi().getResult(malId.toInt(), episodeNumber, duration.toLong())
+                if (!results.isNullOrEmpty()) {
+                    return results
+                }
             }
         }
         return null
