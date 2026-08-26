@@ -4,9 +4,13 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
+import eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack
+import eu.kanade.tachiyomi.data.track.AnimeTracker
 import eu.kanade.tachiyomi.data.track.BaseTracker
+import eu.kanade.tachiyomi.data.track.DeletableAnimeTracker
 import eu.kanade.tachiyomi.data.track.DeletableTracker
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
+import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
 import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import exh.log.xLogW
@@ -15,10 +19,12 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.json.Json
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import uy.kohesive.injekt.injectLazy
+import tachiyomi.domain.track.anime.model.AnimeTrack as DomainAnimeTrack
 import tachiyomi.domain.track.model.Track as DomainTrack
 
-class Anilist(id: Long) : BaseTracker(id, "AniList"), DeletableTracker {
+class Anilist(id: Long) : BaseTracker(id, "AniList"), DeletableTracker, AnimeTracker, DeletableAnimeTracker {
 
     companion object {
         const val READING = 1L
@@ -43,7 +49,7 @@ class Anilist(id: Long) : BaseTracker(id, "AniList"), DeletableTracker {
 
     private val interceptor by lazy { AnilistInterceptor(this, getPassword()) }
 
-    private val api by lazy { AnilistApi(client, interceptor) }
+    val api by lazy { AnilistApi(client, interceptor) }
 
     override val supportsReadingDates: Boolean = true
 
@@ -82,6 +88,121 @@ class Anilist(id: Long) : BaseTracker(id, "AniList"), DeletableTracker {
     override fun getRereadingStatus(): Long = REREADING
 
     override fun getCompletionStatus(): Long = COMPLETED
+
+    // Anime Tracker Methods -->
+    override fun getStatusListAnime(): List<Long> {
+        return listOf(WATCHING, COMPLETED, ON_HOLD, DROPPED, PLAN_TO_WATCH, REWATCHING)
+    }
+
+    override fun getWatchingStatus(): Long = WATCHING
+
+    override fun getRewatchingStatus(): Long = REWATCHING
+
+    override fun getStatusForAnime(status: Long): StringResource? = when (status) {
+        WATCHING -> KMR.strings.watching
+        PLAN_TO_WATCH -> KMR.strings.plan_to_watch
+        COMPLETED -> MR.strings.completed
+        ON_HOLD -> MR.strings.on_hold
+        DROPPED -> MR.strings.dropped
+        REWATCHING -> KMR.strings.repeating_anime
+        else -> null
+    }
+
+    override fun displayScore(track: DomainAnimeTrack): String {
+        val score = track.score
+
+        return when (scorePreference.get()) {
+            POINT_5 -> when (score) {
+                0.0 -> "0 ★"
+                else -> "${((score + 10) / 20).toInt()} ★"
+            }
+
+            POINT_3 -> when {
+                score == 0.0 -> "0"
+                score <= 35 -> "😦"
+                score <= 60 -> "😐"
+                else -> "😊"
+            }
+
+            else -> when (scorePreference.get()) {
+                POINT_10 -> (score.toInt() / 10).toString()
+                POINT_100 -> score.toInt().toString()
+                POINT_10_DECIMAL -> (score / 10).toString()
+                else -> score.toString()
+            }
+        }
+    }
+
+    override fun get10PointScore(track: DomainAnimeTrack): Double {
+        return track.score / 10.0
+    }
+
+    override suspend fun update(track: AnimeTrack, didWatchEpisode: Boolean): AnimeTrack {
+        if (track.library_id == null || track.library_id!! == 0L) {
+            val libAnime = api.findLibAnime(track, getUsername().toInt())
+                ?: throw Exception("$track not found on user library")
+            track.library_id = libAnime.libraryId
+        }
+
+        if (track.status != COMPLETED) {
+            if (didWatchEpisode) {
+                if (track.last_episode_seen.toLong() == track.total_episodes && track.total_episodes > 0) {
+                    track.status = COMPLETED
+                    track.finished_watching_date = System.currentTimeMillis()
+                } else if (track.status != REWATCHING) {
+                    track.status = WATCHING
+                    if (track.last_episode_seen == 1.0) {
+                        track.started_watching_date = System.currentTimeMillis()
+                    }
+                }
+            }
+        }
+
+        return api.updateLibAnime(track)
+    }
+
+    override suspend fun delete(track: AnimeTrack) {
+        if (track.library_id == null || track.library_id == 0L) {
+            val libAnime = api.findLibAnime(track, getUsername().toInt()) ?: return
+            track.library_id = libAnime.libraryId
+        }
+
+        api.deleteLibAnime(track)
+    }
+
+    override suspend fun bind(track: AnimeTrack, hasSeenEpisodes: Boolean): AnimeTrack {
+        val remoteTrack = api.findLibAnime(track, getUsername().toInt())
+        return if (remoteTrack != null) {
+            val remoteDbTrack = remoteTrack.toTrack()
+            track.copyPersonalFrom(remoteDbTrack, copyRemotePrivate = false)
+            track.library_id = remoteTrack.libraryId
+
+            if (track.status != COMPLETED) {
+                val isRewatching = track.status == REWATCHING
+                track.status = if (!isRewatching && hasSeenEpisodes) WATCHING else track.status
+            }
+
+            update(track)
+        } else {
+            track.status = if (hasSeenEpisodes) WATCHING else PLAN_TO_WATCH
+            track.score = 0.0
+            api.addLibAnime(track)
+        }
+    }
+
+    override suspend fun searchAnime(query: String): List<AnimeTrackSearch> {
+        return api.searchAnime(query)
+    }
+
+    override suspend fun refresh(track: AnimeTrack): AnimeTrack {
+        val remoteTrack = api.getLibAnime(track, getUsername().toInt())
+        val remoteDbTrack = remoteTrack.toTrack()
+        track.copyPersonalFrom(remoteDbTrack)
+        track.title = remoteDbTrack.title
+        track.total_episodes = remoteDbTrack.total_episodes
+        return track
+    }
+    // Anime Tracker Methods <--
 
     override fun getScoreList(): ImmutableList<String> {
         return when (scorePreference.get()) {

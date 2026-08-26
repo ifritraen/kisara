@@ -491,6 +491,29 @@
     <string name="label_mu_advanced_search">Adv. Search</string>
     <string name="mu_login_prompt">Log in to MangaUpdates to access personal lists, inbox, and user CP.</string>
 
+    <!-- Track Tab: AniList (Anime Mode) -->
+    <string name="label_al_trending">Trending</string>
+    <string name="label_al_this_season">This Season</string>
+    <string name="label_al_top_rated">Top 100</string>
+    <string name="label_al_search">Search</string>
+    <string name="label_al_genres">Genres &amp; Tags</string>
+    <string name="label_al_studios">Studios</string>
+    <string name="label_al_my_list">My Anime List</string>
+    <string name="label_al_profile">AniList Profile</string>
+    <string name="al_login_prompt">Log in to AniList to sync and manage your anime list.</string>
+
+    <!-- Track Tab: MangaUpdates (Novel Mode) -->
+    <string name="label_mu_novel_releases">Novel Releases</string>
+    <string name="label_mu_novel_recommended">Top Novels</string>
+    <string name="label_mu_novel_directory">Novel Directory</string>
+    <string name="label_mu_novel_search">Novel Search</string>
+    <string name="label_mu_novel_genres">Novel Genres</string>
+    <string name="label_mu_novel_reviews">Novel Reviews</string>
+    <string name="label_mu_novel_lists">My Novel Lists</string>
+
+    <string name="action_search_in_sources">Search in Sources</string>
+    <string name="action_open_in_browser">Open in Browser</string>
+
     <!-- Multi-Media Mode (Anime / Manga / Novel) -->
     <string name="label_media_type_manga">Manga</string>
     <string name="label_media_type_anime">Anime</string>

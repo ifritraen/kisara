@@ -3,14 +3,21 @@ package eu.kanade.tachiyomi.data.track.anilist
 import android.net.Uri
 import androidx.core.net.toUri
 import eu.kanade.tachiyomi.data.database.models.Track
+import eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddMangaResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALError
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALGenreCollectionResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALIdSearchResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaMetadata
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALStudioNode
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALStudioSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListMangaQueryResult
+import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
 import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.network.POST
@@ -483,6 +490,485 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
         }
     }
     // SY <--
+
+    // Anime Tracking & Feeds -->
+    suspend fun addLibAnime(track: AnimeTrack): AnimeTrack {
+        return withIOContext {
+            val query = $$"""
+            |mutation AddAnime($animeId: Int, $progress: Int, $status: MediaListStatus, $private: Boolean) {
+                |SaveMediaListEntry (mediaId: $animeId, progress: $progress, status: $status, private: $private) {
+                |   id
+                |   status
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("animeId", track.remote_id)
+                    put("progress", track.last_episode_seen.toInt())
+                    put("status", track.toApiStatus())
+                    put("private", track.private)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALAddMangaResult>()
+                    .let {
+                        track.library_id = it.data.entry.id
+                        track
+                    }
+            }
+        }
+    }
+
+    suspend fun updateLibAnime(track: AnimeTrack): AnimeTrack {
+        return withIOContext {
+            val query = $$"""
+            |mutation UpdateAnime(
+                |$listId: Int, $progress: Int, $status: MediaListStatus, $private: Boolean,
+                |$score: Int, $startedAt: FuzzyDateInput, $completedAt: FuzzyDateInput
+            |) {
+                |SaveMediaListEntry(
+                    |id: $listId, progress: $progress, status: $status, private: $private,
+                    |scoreRaw: $score, startedAt: $startedAt, completedAt: $completedAt
+                |) {
+                    |id
+                    |status
+                    |progress
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("listId", track.library_id)
+                    put("progress", track.last_episode_seen.toInt())
+                    put("status", track.toApiStatus())
+                    put("score", track.score.toInt())
+                    put("startedAt", createDate(track.started_watching_date))
+                    put("completedAt", createDate(track.finished_watching_date))
+                    put("private", track.private)
+                }
+            }
+            authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                .awaitSuccess()
+                .use { it.parseALError() }
+            track
+        }
+    }
+
+    suspend fun deleteLibAnime(track: AnimeTrack) {
+        withIOContext {
+            val query = $$"""
+            |mutation DeleteAnime($listId: Int) {
+                |DeleteMediaListEntry(id: $listId) {
+                    |deleted
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("listId", track.library_id)
+                }
+            }
+            authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                .awaitSuccess()
+                .use { it.parseALError() }
+        }
+    }
+
+    suspend fun searchAnime(search: String): List<AnimeTrackSearch> {
+        return withIOContext {
+            val query = $$"""
+            |query SearchAnime($query: String) {
+                |Page (perPage: 50) {
+                    |media(search: $query, type: ANIME) {
+                        |id
+                        |title {
+                            |userPreferred
+                        |}
+                        |coverImage {
+                            |large
+                        |}
+                        |format
+                        |status
+                        |episodes
+                        |description
+                        |startDate {
+                            |year
+                            |month
+                            |day
+                        |}
+                        |averageScore
+                        |genres
+                        |studios {
+                            |edges {
+                                |isMain
+                                |node {
+                                    |name
+                                |}
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("query", search)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALSearchResult>()
+                    .data.page.media
+                    .map { it.toALAnime().toTrack() }
+            }
+        }
+    }
+
+    suspend fun findLibAnime(track: AnimeTrack, userid: Int): ALUserAnime? {
+        return withIOContext {
+            val query = $$"""
+            |query ($id: Int!, $anime_id: Int!) {
+                |Page {
+                    |mediaList(userId: $id, type: ANIME, mediaId: $anime_id) {
+                        |id
+                        |status
+                        |scoreRaw: score(format: POINT_100)
+                        |progress
+                        |private
+                        |startedAt {
+                            |year
+                            |month
+                            |day
+                        |}
+                        |completedAt {
+                            |year
+                            |month
+                            |day
+                        |}
+                        |media {
+                            |id
+                            |title {
+                                |userPreferred
+                            |}
+                            |coverImage {
+                                |large
+                            |}
+                            |format
+                            |status
+                            |episodes
+                            |description
+                            |startDate {
+                                |year
+                                |month
+                                |day
+                            |}
+                            |genres
+                            |studios {
+                                |edges {
+                                    |isMain
+                                    |node {
+                                        |name
+                                    |}
+                                |}
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("id", userid)
+                    put("anime_id", track.remote_id)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALUserListMangaQueryResult>()
+                    .data.page.mediaList
+                    .map { it.toALUserAnime() }
+                    .firstOrNull()
+            }
+        }
+    }
+
+    suspend fun getLibAnime(track: AnimeTrack, userId: Int): ALUserAnime {
+        return findLibAnime(track, userId) ?: throw Exception("Could not find anime in library")
+    }
+
+    suspend fun getTrendingAnime(page: Int = 1, perPage: Int = 25): List<ALAnime> {
+        return withIOContext {
+            val query = $$"""
+            |query ($page: Int, $perPage: Int) {
+                |Page (page: $page, perPage: $perPage) {
+                    |media(type: ANIME, sort: TRENDING_DESC) {
+                        |id
+                        |title { userPreferred }
+                        |coverImage { large }
+                        |format
+                        |status
+                        |episodes
+                        |description
+                        |averageScore
+                        |genres
+                        |startDate { year month day }
+                        |studios {
+                            |edges {
+                                |isMain
+                                |node { name }
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("page", page)
+                    put("perPage", perPage)
+                }
+            }
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALSearchResult>()
+                    .data.page.media
+                    .map { it.toALAnime() }
+            }
+        }
+    }
+
+    suspend fun getSeasonalAnime(season: String, seasonYear: Int, page: Int = 1, perPage: Int = 25): List<ALAnime> {
+        return withIOContext {
+            val query = $$"""
+            |query ($season: MediaSeason, $seasonYear: Int, $page: Int, $perPage: Int) {
+                |Page (page: $page, perPage: $perPage) {
+                    |media(type: ANIME, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC) {
+                        |id
+                        |title { userPreferred }
+                        |coverImage { large }
+                        |format
+                        |status
+                        |episodes
+                        |description
+                        |averageScore
+                        |genres
+                        |startDate { year month day }
+                        |studios {
+                            |edges {
+                                |isMain
+                                |node { name }
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("season", season)
+                    put("seasonYear", seasonYear)
+                    put("page", page)
+                    put("perPage", perPage)
+                }
+            }
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALSearchResult>()
+                    .data.page.media
+                    .map { it.toALAnime() }
+            }
+        }
+    }
+
+    suspend fun getTopRatedAnime(page: Int = 1, perPage: Int = 25): List<ALAnime> {
+        return withIOContext {
+            val query = $$"""
+            |query ($page: Int, $perPage: Int) {
+                |Page (page: $page, perPage: $perPage) {
+                    |media(type: ANIME, sort: SCORE_DESC) {
+                        |id
+                        |title { userPreferred }
+                        |coverImage { large }
+                        |format
+                        |status
+                        |episodes
+                        |description
+                        |averageScore
+                        |genres
+                        |startDate { year month day }
+                        |studios {
+                            |edges {
+                                |isMain
+                                |node { name }
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("page", page)
+                    put("perPage", perPage)
+                }
+            }
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALSearchResult>()
+                    .data.page.media
+                    .map { it.toALAnime() }
+            }
+        }
+    }
+
+    suspend fun getUserAnimeList(userId: Int, status: String? = null): List<ALUserAnime> {
+        return withIOContext {
+            val query = $$"""
+            |query ($id: Int!, $status: MediaListStatus) {
+                |Page (perPage: 50) {
+                    |mediaList(userId: $id, type: ANIME, status: $status) {
+                        |id
+                        |status
+                        |scoreRaw: score(format: POINT_100)
+                        |progress
+                        |private
+                        |startedAt { year month day }
+                        |completedAt { year month day }
+                        |media {
+                            |id
+                            |title { userPreferred }
+                            |coverImage { large }
+                            |format
+                            |status
+                            |episodes
+                            |description
+                            |startDate { year month day }
+                            |genres
+                            |studios {
+                                |edges {
+                                    |isMain
+                                    |node { name }
+                                |}
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("id", userId)
+                    if (status != null) put("status", status)
+                }
+            }
+            with(json) {
+                authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALUserListMangaQueryResult>()
+                    .data.page.mediaList
+                    .map { it.toALUserAnime() }
+            }
+        }
+    }
+
+    suspend fun searchStudios(search: String): List<ALStudioNode> {
+        return withIOContext {
+            val query = $$"""
+            |query ($query: String) {
+                |Page (perPage: 25) {
+                    |studios(search: $query) {
+                        |id
+                        |name
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("query", search)
+                }
+            }
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALStudioSearchResult>()
+                    .data.page.studios
+            }
+        }
+    }
+
+    suspend fun getAnimeGenres(): List<String> {
+        return withIOContext {
+            val query = """
+            |query {
+                |GenreCollection
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+            }
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALGenreCollectionResult>()
+                    .data.genres
+            }
+        }
+    }
+    // Anime Tracking & Feeds <--
 
     private fun createDate(dateValue: Long): JsonObject {
         if (dateValue == 0L) {

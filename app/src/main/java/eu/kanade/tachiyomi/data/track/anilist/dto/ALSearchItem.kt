@@ -11,9 +11,12 @@ data class ALSearchItem(
     val format: String?,
     val status: String?,
     val startDate: ALFuzzyDate? = null,
-    val chapters: Long?,
-    val averageScore: Int?,
+    val chapters: Long? = null,
+    val episodes: Long? = null,
+    val averageScore: Int? = null,
     val staff: ALStaff? = null,
+    val studios: ALStudios? = null,
+    val genres: List<String>? = null,
 ) {
     fun toALManga(): ALManga = ALManga(
         remoteId = id,
@@ -26,6 +29,20 @@ data class ALSearchItem(
         totalChapters = chapters ?: 0,
         averageScore = averageScore ?: -1,
         staff = staff ?: ALStaff(emptyList()),
+    )
+
+    fun toALAnime(): ALAnime = ALAnime(
+        remoteId = id,
+        title = title.userPreferred,
+        imageUrl = coverImage.large,
+        description = description,
+        format = format?.replace("_", "-") ?: "",
+        publishingStatus = status ?: "",
+        startDateFuzzy = startDate?.toEpochMilli() ?: 0L,
+        totalEpisodes = episodes ?: 0,
+        averageScore = averageScore ?: -1,
+        studios = studios ?: ALStudios(emptyList()),
+        genres = genres ?: emptyList(),
     )
 }
 

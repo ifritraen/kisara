@@ -838,20 +838,43 @@ object HomeScreen : Screen() {
                                                                 }
                                                             }
                                                             is eu.kanade.tachiyomi.ui.track.TrackTab -> {
-                                                                val trackSubTabNames = listOf(
-                                                                    "New Releases" to 0,
-                                                                    "Top Recommended" to 1,
-                                                                    "Releases" to 2,
-                                                                    "Series Info" to 3,
-                                                                    "Scanlators" to 4,
-                                                                    "Mangaka" to 5,
-                                                                    "Publishers" to 6,
-                                                                    "Reviews" to 7,
-                                                                    "Genres" to 8,
-                                                                    "Search" to 9,
-                                                                    "My Lists" to 10,
-                                                                    "User CP" to 11,
-                                                                )
+                                                                val trackSubTabNames = when (activeMediaType) {
+                                                                    MediaType.ANIME -> listOf(
+                                                                        "Trending" to 0,
+                                                                        "This Season" to 1,
+                                                                        "Top 100" to 2,
+                                                                        "Search" to 3,
+                                                                        "Genres & Tags" to 4,
+                                                                        "Studios" to 5,
+                                                                        "My Anime List" to 6,
+                                                                        "Profile" to 7,
+                                                                    )
+                                                                    MediaType.NOVEL -> listOf(
+                                                                        "Novel Releases" to 0,
+                                                                        "Top Novels" to 1,
+                                                                        "Novel Directory" to 2,
+                                                                        "Novel Search" to 3,
+                                                                        "Novel Genres" to 4,
+                                                                        "Publishers" to 5,
+                                                                        "Novel Reviews" to 6,
+                                                                        "My Novel Lists" to 7,
+                                                                        "User CP" to 8,
+                                                                    )
+                                                                    else -> listOf(
+                                                                        "New Releases" to 0,
+                                                                        "Top Recommended" to 1,
+                                                                        "Releases" to 2,
+                                                                        "Series Info" to 3,
+                                                                        "Scanlators" to 4,
+                                                                        "Mangaka" to 5,
+                                                                        "Publishers" to 6,
+                                                                        "Reviews" to 7,
+                                                                        "Genres" to 8,
+                                                                        "Search" to 9,
+                                                                        "My Lists" to 10,
+                                                                        "User CP" to 11,
+                                                                    )
+                                                                }
                                                                 Row(
                                                                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                                                                     horizontalArrangement = Arrangement.spacedBy(4.dp),

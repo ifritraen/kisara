@@ -160,7 +160,7 @@ class MangaUpdatesApi(
         }
     }
 
-    suspend fun search(query: String): List<MURecord> {
+    suspend fun search(query: String, type: String? = null): List<MURecord> {
         val q = query.trim().ifBlank { "a" }
         val body = buildJsonObject {
             put("stype", "title")
@@ -168,10 +168,13 @@ class MangaUpdatesApi(
             put("orderby", "rating")
             put("asc", "desc")
             put("perpage", 25)
+            if (!type.isNullOrBlank()) {
+                put("types", buildJsonArray { add(type) })
+            }
         }
 
         return with(json) {
-            client.newCall(
+            val list = client.newCall(
                 POST(
                     url = "$BASE_URL/v1/series/search",
                     body = body.toString().toRequestBody(CONTENT_TYPE),
@@ -181,6 +184,12 @@ class MangaUpdatesApi(
                 .parseAs<MUSearchResult>()
                 .results
                 .map { it.record }
+
+            if (!type.isNullOrBlank()) {
+                list.filter { it.type?.contains(type, ignoreCase = true) == true }
+            } else {
+                list
+            }
         }
     }
 

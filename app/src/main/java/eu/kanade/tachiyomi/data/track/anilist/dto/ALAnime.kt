@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.util.lang.htmlDecode
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -24,7 +25,35 @@ data class ALStudioEdge(
 
 @Serializable
 data class ALStudioNode(
+    val id: Long? = null,
     val name: String,
+)
+
+@Serializable
+data class ALStudioSearchResult(
+    val data: ALStudioPage,
+)
+
+@Serializable
+data class ALStudioPage(
+    @SerialName("Page")
+    val page: ALStudioContainer,
+)
+
+@Serializable
+data class ALStudioContainer(
+    val studios: List<ALStudioNode> = emptyList(),
+)
+
+@Serializable
+data class ALGenreCollectionResult(
+    val data: ALGenreData,
+)
+
+@Serializable
+data class ALGenreData(
+    @SerialName("GenreCollection")
+    val genres: List<String> = emptyList(),
 )
 
 data class ALAnime(
