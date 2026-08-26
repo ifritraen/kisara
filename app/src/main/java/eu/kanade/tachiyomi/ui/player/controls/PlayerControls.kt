@@ -214,6 +214,7 @@ fun PlayerControls(
                 val seekbar = createRef()
                 val (playerUpdates) = createRefs()
                 val speedPill = createRef()
+                val floatingSkipButton = createRef()
 
                 val hasPreviousEpisode by viewModel.hasPreviousEpisode.collectAsStateWithLifecycle()
                 val hasNextEpisode by viewModel.hasNextEpisode.collectAsStateWithLifecycle()
@@ -545,6 +546,21 @@ fun PlayerControls(
                                 },
                             )
                         },
+                    )
+                }
+                AnimatedVisibility(
+                    !controlsShown && visibleSkipIntroButton != null && !areControlsLocked && !isDynamicSpeedActive,
+                    enter = fadeIn(playerControlsEnterAnimationSpec()),
+                    exit = fadeOut(playerControlsExitAnimationSpec()),
+                    modifier = Modifier.constrainAs(floatingSkipButton) {
+                        bottom.linkTo(parent.bottom, spacing.large)
+                        end.linkTo(parent.end, spacing.medium)
+                    },
+                ) {
+                    FilledControlsButton(
+                        text = visibleSkipIntroButton!!,
+                        onClick = viewModel::onSkipIntro,
+                        onLongClick = {},
                     )
                 }
                 // Bottom left controls
