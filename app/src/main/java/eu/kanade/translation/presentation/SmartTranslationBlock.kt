@@ -210,14 +210,18 @@ fun SmartTranslationBlock(
             val layoutYOffset = (size.height - finalLayout.size.height) / 2f
             drawContext.canvas.nativeCanvas.translate(0f, layoutYOffset)
 
+            val isDarkBg = (bgColor.red * 0.299f + bgColor.green * 0.587f + bgColor.blue * 0.114f) < 0.5f
+            val textColor = if (isDarkBg) Color.White else Color.Black
+            val strokeColor = if (isDarkBg) Color.Black else Color.White
+
             drawText(
                 textLayoutResult = finalLayout,
-                color = Color.White,
+                color = strokeColor,
                 drawStyle = Stroke(width = 4f, join = StrokeJoin.Round),
             )
             drawText(
                 textLayoutResult = finalLayout,
-                color = Color.Black,
+                color = textColor,
             )
 
             drawContext.canvas.nativeCanvas.restore()

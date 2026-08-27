@@ -292,6 +292,7 @@ class MangaScreen(
             onDownloadChapter = screenModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslationChapter = screenModel::runChapterTranslationActions.takeIf { !successState.source.isLocalOrStub() },
             onColorizeChapter = screenModel::runChapterColorizerActions.takeIf { !successState.source.isLocalOrStub() },
+            onSuperResolutionChapter = screenModel::runChapterSuperResolutionActions.takeIf { !successState.source.isLocalOrStub() },
             onToggleAutoTranslate = screenModel::toggleAutoTranslate,
             onAddToLibraryClicked = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -419,6 +420,8 @@ class MangaScreen(
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDeleteClicked = screenModel::showDeleteChapterDialog,
             onMultiTranslateClicked = screenModel::runBulkTranslation.takeIf { !successState.source.isLocalOrStub() },
+            onMultiColorizeClicked = screenModel::runBulkColorizer.takeIf { !successState.source.isLocalOrStub() },
+            onMultiSuperResolutionClicked = screenModel::runBulkSuperResolution.takeIf { !successState.source.isLocalOrStub() },
             onChapterSwipe = screenModel::chapterSwipe,
             onChapterSelected = screenModel::toggleSelection,
             onAllChapterSelected = screenModel::toggleAllSelection,

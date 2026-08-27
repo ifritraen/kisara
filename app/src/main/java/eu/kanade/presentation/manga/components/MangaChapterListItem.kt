@@ -64,6 +64,7 @@ fun MangaChapterListItem(
     // KMK -->
     translationStateProvider: () -> eu.kanade.translation.model.Translation.State = { eu.kanade.translation.model.Translation.State.NOT_TRANSLATED },
     colorizerStateProvider: () -> eu.kanade.translation.model.Translation.State = { eu.kanade.translation.model.Translation.State.NOT_TRANSLATED },
+    superResolutionStateProvider: () -> eu.kanade.translation.model.Translation.State = { eu.kanade.translation.model.Translation.State.NOT_TRANSLATED },
     // KMK <--
     chapterSwipeStartAction: LibraryPreferences.ChapterSwipeAction,
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
@@ -74,6 +75,7 @@ fun MangaChapterListItem(
     // KMK -->
     onTranslationClick: ((ChapterTranslationAction) -> Unit)? = null,
     onColorizeClick: ((ChapterTranslationAction) -> Unit)? = null,
+    onSuperResolutionClick: ((ChapterTranslationAction) -> Unit)? = null,
     // KMK <--
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -216,6 +218,12 @@ fun MangaChapterListItem(
                     modifier = Modifier.padding(start = 4.dp),
                     colorizerStateProvider = colorizerStateProvider,
                     onClick = { onColorizeClick?.invoke(it) },
+                )
+                ChapterSuperResolutionIndicator(
+                    enabled = true,
+                    modifier = Modifier.padding(start = 4.dp),
+                    superResolutionStateProvider = superResolutionStateProvider,
+                    onClick = { onSuperResolutionClick?.invoke(it) },
                 )
                 ChapterTranslationIndicator(
                     enabled = true,

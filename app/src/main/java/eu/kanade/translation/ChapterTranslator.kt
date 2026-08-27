@@ -102,6 +102,8 @@ class ChapterTranslator(
     private var mangaOcrRecognizer: MangaOcrTextRecognizer? = null
     private var paddleOcrRecognizer: PaddleOcrTextRecognizer? = null
     private var bubbleDetector: BubbleDetector? = null
+    private var comicTextDetector: eu.kanade.translation.recognizer.ComicTextDetector? = null
+    private val bubbleGroupingCoordinator by lazy { eu.kanade.translation.recognizer.BubbleGroupingCoordinator() }
     // KMK <--
 
     init {
@@ -270,7 +272,9 @@ class ChapterTranslator(
             val ocrEngine = translationPreferences.ocrEngine().get()
             val useMangaOcr = ocrEngine == 1
             val usePaddleOcr = ocrEngine == 2
+            val useComicTextDetector = ocrEngine == 3
             val useBubbleDetection = translationPreferences.bubbleDetectionEnabled().get()
+            val isGeminiVision = textTranslator is GeminiVisionTranslator
 
             val ocrEngineReady = if (useMangaOcr) {
                 val recognizer = mangaOcrRecognizer ?: MangaOcrTextRecognizer(context, translation.fromLang).also { mangaOcrRecognizer = it }
@@ -278,6 +282,9 @@ class ChapterTranslator(
             } else if (usePaddleOcr) {
                 val recognizer = paddleOcrRecognizer ?: PaddleOcrTextRecognizer(context, translation.fromLang).also { paddleOcrRecognizer = it }
                 recognizer.isReady
+            } else if (useComicTextDetector) {
+                val detector = comicTextDetector ?: eu.kanade.translation.recognizer.ComicTextDetector(context).also { comicTextDetector = it }
+                detector.isReady
             } else {
                 true
             }
@@ -321,8 +328,32 @@ class ChapterTranslator(
                                     null
                                 } ?: return@withPermit null
 
-                                val regions = if (detector != null && detector.isReady) {
-                                    val activeProgress = (completedPages.get() + 1).coerceAtMost(streams.size)
+                                val pageTranslation = PageTranslation(imgWidth = fullBitmap.width.toFloat(), imgHeight = fullBitmap.height.toFloat())
+
+                                // 1. Direct End-to-End Gemini Multimodal Vision Translation
+                                if (isGeminiVision) {
+                                    _progressState.value = Progress(
+                                        chapterId = translation.chapter.id,
+                                        chapterName = translation.chapter.name,
+                                        currentPage = activeProgress,
+                                        totalPages = streams.size,
+                                        step = "Translating with Gemini Vision on page ${index + 1}...",
+                                    )
+                                    val visionBlocks = (textTranslator as GeminiVisionTranslator).translatePageBitmap(fullBitmap, pageTranslation)
+                                    pageTranslation.blocks.addAll(visionBlocks)
+                                    return@withPermit if (pageTranslation.blocks.isNotEmpty()) Pair(fileName, pageTranslation) else null
+                                }
+
+                                // 2. Modular Two-Stage OCR Pipeline
+                                val regions = if (useComicTextDetector && ocrEngineReady) {
+                                    val ctd = comicTextDetector ?: eu.kanade.translation.recognizer.ComicTextDetector(context).also { comicTextDetector = it }
+                                    val detectedBoxes = ctd.detect(fullBitmap)
+                                    if (detectedBoxes.isNotEmpty()) {
+                                        detectedBoxes.map { BubbleDetector.DetectedRegion(it, 1f, true) }
+                                    } else {
+                                        listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
+                                    }
+                                } else if (detector != null && detector.isReady) {
                                     _progressState.value = Progress(
                                         chapterId = translation.chapter.id,
                                         chapterName = translation.chapter.name,
@@ -332,28 +363,18 @@ class ChapterTranslator(
                                     )
                                     try {
                                         val detected = detector.detect(fullBitmap)
-                                        TranslationReport.log("INFO", "BubbleDetector", "Detected ${detected.size} speech bubbles/regions on page ${index + 1}")
-                                        _progressState.value = Progress(
-                                            chapterId = translation.chapter.id,
-                                            chapterName = translation.chapter.name,
-                                            currentPage = activeProgress,
-                                            totalPages = streams.size,
-                                            step = "Bubble detection done on page ${index + 1} (${detected.size} found)",
-                                        )
+                                        TranslationReport.log("INFO", "BubbleDetector", "Detected ${detected.size} speech bubbles on page ${index + 1}")
                                         detected.ifEmpty {
-                                            TranslationReport.log("INFO", "BubbleDetector", "No bubbles detected on page ${index + 1}, using full page")
                                             listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
                                         }
                                     } catch (e: Throwable) {
-                                        TranslationReport.log("ERROR", "BubbleDetector", "Bubble detector crashed on page ${index + 1}, fallback to full page", e)
+                                        TranslationReport.log("ERROR", "BubbleDetector", "Bubble detector crashed on page ${index + 1}", e)
                                         listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
                                     }
                                 } else {
                                     listOf(BubbleDetector.DetectedRegion(android.graphics.Rect(0, 0, fullBitmap.width, fullBitmap.height), 1f, false))
                                 }
 
-                                val pageTranslation = PageTranslation(imgWidth = fullBitmap.width.toFloat(), imgHeight = fullBitmap.height.toFloat())
-                                val activeProgress = (completedPages.get() + 1).coerceAtMost(streams.size)
                                 for ((regionIndex, regionObj) in regions.withIndex()) {
                                     val region = regionObj.rect
                                     val isBubbleRegion = regionObj.isBubble
@@ -386,7 +407,7 @@ class ChapterTranslator(
                                                 TranslationReport.log("INFO", "MangaOCR", "MangaOCR recognized crop ${regionIndex + 1} text: $it")
                                             }
                                         } catch (e: Throwable) {
-                                            TranslationReport.log("ERROR", "MangaOCR", "MangaOCR failed on page ${index + 1} crop ${regionIndex + 1}, fallback to MLKit", e)
+                                            TranslationReport.log("ERROR", "MangaOCR", "MangaOCR failed on page ${index + 1}, fallback to MLKit", e)
                                             val fallbackBlocks = runMlKitOcrOnCrop(crop, region)
                                             fallbackBlocks.joinToString("\n") { it.text }
                                         }
@@ -411,48 +432,27 @@ class ChapterTranslator(
                                         runMlKitOcrOnCrop(crop, region)
                                     }
 
-                                    val blocks = if (isBubbleRegion && rawBlocks.isNotEmpty()) {
-                                        val isRtl = translation.fromLang.code.startsWith("ja", ignoreCase = true) ||
-                                            translation.fromLang.code.startsWith("zh", ignoreCase = true) ||
-                                            translation.fromLang.code.startsWith("ko", ignoreCase = true)
-
-                                        val sortedBlocks = if (isRtl) {
-                                            rawBlocks.sortedWith(compareByDescending<TranslationBlock> { it.x }.thenBy { it.y })
-                                        } else {
-                                            rawBlocks.sortedWith(compareBy<TranslationBlock> { it.y }.thenBy { it.x })
-                                        }
-
-                                        val merged = sortedBlocks.reduce { acc, b -> mergeTextBlock(acc, b) }
-                                        merged.isBubble = true
-                                        merged.width = region.width().toFloat()
-                                        merged.height = region.height().toFloat()
-                                        merged.x = region.left.toFloat()
-                                        merged.y = region.top.toFloat()
-                                        listOf(merged)
-                                    } else {
-                                        rawBlocks
-                                    }
-
-                                    for (block in blocks) {
-                                        pageTranslation.blocks.add(
-                                            TranslationBlock(
-                                                text = block.text,
-                                                width = block.width,
-                                                height = block.height,
-                                                x = block.x,
-                                                y = block.y,
-                                                symWidth = block.symWidth,
-                                                symHeight = block.symHeight,
-                                                angle = block.angle,
-                                                isBubble = block.isBubble,
-                                            ),
-                                        )
+                                    for (block in rawBlocks) {
+                                        pageTranslation.blocks.add(block)
                                     }
                                 }
 
                                 if (pageTranslation.blocks.isNotEmpty()) {
-                                    val deduped = deduplicateBlocks(pageTranslation.blocks)
-                                    pageTranslation.blocks = smartMergeBlocks(deduped, 50, 30, 30)
+                                    val isRtl = translation.fromLang.code.startsWith("ja", ignoreCase = true) ||
+                                        translation.fromLang.code.startsWith("zh", ignoreCase = true) ||
+                                        translation.fromLang.code.startsWith("ko", ignoreCase = true)
+
+                                    val finalBlocks = if (translationPreferences.bubbleGroupingEnabled().get()) {
+                                        bubbleGroupingCoordinator.groupBlocks(
+                                            blocks = pageTranslation.blocks,
+                                            bubbleRegions = regions.map { it.rect },
+                                            isRtl = isRtl,
+                                        )
+                                    } else {
+                                        val deduped = deduplicateBlocks(pageTranslation.blocks)
+                                        smartMergeBlocks(deduped, 50, 30, 30)
+                                    }
+                                    pageTranslation.blocks = ArrayList(finalBlocks)
                                     Pair(fileName, pageTranslation)
                                 } else {
                                     null
@@ -477,48 +477,52 @@ class ChapterTranslator(
                     pages[fileName] = pageTrans
                 }
             }
-            _progressState.value = Progress(
-                chapterId = translation.chapter.id,
-                chapterName = translation.chapter.name,
-                currentPage = streams.size,
-                totalPages = streams.size,
-                step = "Translating text blocks...",
-            )
-            withContext(Dispatchers.IO) {
-                try {
-                    TranslationReport.log("INFO", "Translator", "Translating text blocks using ${textTranslator.javaClass.simpleName}")
-                    textTranslator.translate(pages) { completed, total ->
-                        _progressState.value = Progress(
-                            chapterId = translation.chapter.id,
-                            chapterName = translation.chapter.name,
-                            currentPage = streams.size,
-                            totalPages = streams.size,
-                            step = "Translating text blocks ($completed/$total)...",
-                        )
-                    }
-                    TranslationReport.log("INFO", "Translator", "Translation completed successfully")
-                } catch (e: Throwable) {
-                    TranslationReport.log("ERROR", "Translator", "Translator engine ${textTranslator.javaClass.simpleName} failed", e)
-                    if (textTranslator.javaClass.simpleName != "MlKitTranslator") {
-                        TranslationReport.log("INFO", "Translator", "Attempting fallback translation with ML Kit")
-                        try {
-                            val fallbackTranslator = TextTranslators.MLKIT.build(translationPreferences, translation.fromLang, translation.toLang)
-                            fallbackTranslator.translate(pages) { completed, total ->
-                                _progressState.value = Progress(
-                                    chapterId = translation.chapter.id,
-                                    chapterName = translation.chapter.name,
-                                    currentPage = streams.size,
-                                    totalPages = streams.size,
-                                    step = "Translating text blocks ($completed/$total)...",
-                                )
-                            }
-                            TranslationReport.log("INFO", "Translator", "Fallback ML Kit translation succeeded")
-                        } catch (mlKitErr: Throwable) {
-                            TranslationReport.log("ERROR", "Translator", "Fallback ML Kit translation also failed", mlKitErr)
-                            throw mlKitErr
+
+            // Translate blocks if not already done via Gemini Vision
+            if (!isGeminiVision) {
+                _progressState.value = Progress(
+                    chapterId = translation.chapter.id,
+                    chapterName = translation.chapter.name,
+                    currentPage = streams.size,
+                    totalPages = streams.size,
+                    step = "Translating text blocks...",
+                )
+                withContext(Dispatchers.IO) {
+                    try {
+                        TranslationReport.log("INFO", "Translator", "Translating text blocks using ${textTranslator.javaClass.simpleName}")
+                        textTranslator.translate(pages) { completed, total ->
+                            _progressState.value = Progress(
+                                chapterId = translation.chapter.id,
+                                chapterName = translation.chapter.name,
+                                currentPage = streams.size,
+                                totalPages = streams.size,
+                                step = "Translating text blocks ($completed/$total)...",
+                            )
                         }
-                    } else {
-                        throw e
+                        TranslationReport.log("INFO", "Translator", "Translation completed successfully")
+                    } catch (e: Throwable) {
+                        TranslationReport.log("ERROR", "Translator", "Translator engine ${textTranslator.javaClass.simpleName} failed", e)
+                        if (textTranslator.javaClass.simpleName != "MlKitTranslator") {
+                            TranslationReport.log("INFO", "Translator", "Attempting fallback translation with ML Kit")
+                            try {
+                                val fallbackTranslator = TextTranslators.MLKIT.build(translationPreferences, translation.fromLang, translation.toLang)
+                                fallbackTranslator.translate(pages) { completed, total ->
+                                    _progressState.value = Progress(
+                                        chapterId = translation.chapter.id,
+                                        chapterName = translation.chapter.name,
+                                        currentPage = streams.size,
+                                        totalPages = streams.size,
+                                        step = "Translating text blocks ($completed/$total)...",
+                                    )
+                                }
+                                TranslationReport.log("INFO", "Translator", "Fallback ML Kit translation succeeded")
+                            } catch (mlKitErr: Throwable) {
+                                TranslationReport.log("ERROR", "Translator", "Fallback ML Kit translation also failed", mlKitErr)
+                                throw mlKitErr
+                            }
+                        } else {
+                            throw e
+                        }
                     }
                 }
             }
@@ -531,10 +535,12 @@ class ChapterTranslator(
             val toLabel = translation.toLang.label
             val engine = TextTranslators.fromPref(translationPreferences.translationEngine())
             val methodName = when (engine) {
-                TextTranslators.MLKIT -> "MlKits"
+                TextTranslators.MLKIT -> "MlKit"
                 TextTranslators.GOOGLE -> "Google Translate"
-                TextTranslators.GEMINI -> "Gemini"
+                TextTranslators.GEMINI -> "Gemini AI"
+                TextTranslators.GEMINI_VISION -> "Gemini Vision"
                 TextTranslators.OPENROUTER -> "OpenRouter"
+                TextTranslators.OPENAI_COMPATIBLE -> "OpenAI-Compatible LLM"
             }
             withContext(Dispatchers.Main) {
                 context.toast(

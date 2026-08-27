@@ -202,6 +202,7 @@ fun MangaScreen(
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onSuperResolutionChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)? = null,
     // KMK <--
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -250,6 +251,8 @@ fun MangaScreen(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)? = null,
+    onMultiColorizeClicked: ((List<ChapterList.Item>) -> Unit)? = null,
+    onMultiSuperResolutionClicked: ((List<ChapterList.Item>) -> Unit)? = null,
 
     // For chapter swipe
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -357,6 +360,7 @@ fun MangaScreen(
                     // KMK -->
                     onTranslationChapter = onTranslationChapter,
                     onColorizeChapter = onColorizeChapter,
+                    onSuperResolutionChapter = onSuperResolutionChapter,
                     // KMK <--
                     onAddToLibraryClicked = onAddToLibraryClicked,
                     onWebViewClicked = onWebViewClicked,
@@ -395,6 +399,8 @@ fun MangaScreen(
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     onMultiTranslateClicked = onMultiTranslateClicked,
+                    onMultiColorizeClicked = onMultiColorizeClicked,
+                    onMultiSuperResolutionClicked = onMultiSuperResolutionClicked,
                     onChapterSwipe = onChapterSwipe,
                     onChapterSelected = onChapterSelected,
                     onAllChapterSelected = onAllChapterSelected,
@@ -440,6 +446,7 @@ fun MangaScreen(
                     // KMK -->
                     onTranslationChapter = onTranslationChapter,
                     onColorizeChapter = onColorizeChapter,
+                    onSuperResolutionChapter = onSuperResolutionChapter,
                     // KMK <--
                     onAddToLibraryClicked = onAddToLibraryClicked,
                     onWebViewClicked = onWebViewClicked,
@@ -478,6 +485,8 @@ fun MangaScreen(
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     onMultiTranslateClicked = onMultiTranslateClicked,
+                    onMultiColorizeClicked = onMultiColorizeClicked,
+                    onMultiSuperResolutionClicked = onMultiSuperResolutionClicked,
                     onChapterSwipe = onChapterSwipe,
                     onChapterSelected = onChapterSelected,
                     onAllChapterSelected = onAllChapterSelected,
@@ -567,6 +576,7 @@ private fun MangaScreenSmallImpl(
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onSuperResolutionChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)? = null,
     // KMK <--
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -614,6 +624,8 @@ private fun MangaScreenSmallImpl(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)?,
+    onMultiColorizeClicked: ((List<ChapterList.Item>) -> Unit)? = null,
+    onMultiSuperResolutionClicked: ((List<ChapterList.Item>) -> Unit)? = null,
 
     // For chapter swipe
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -815,6 +827,8 @@ private fun MangaScreenSmallImpl(
                     onDownloadChapter = onDownloadChapter,
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     onMultiTranslateClicked = onMultiTranslateClicked,
+                    onMultiColorizeClicked = onMultiColorizeClicked,
+                    onMultiSuperResolutionClicked = onMultiSuperResolutionClicked,
                     fillFraction = 1f,
                 )
             },
@@ -1298,6 +1312,7 @@ private fun MangaScreenSmallImpl(
                                             // KMK -->
                                             onTranslationChapter = onTranslationChapter,
                                             onColorizeChapter = onColorizeChapter,
+                                            onSuperResolutionChapter = onSuperResolutionChapter,
                                             // KMK <--
                                             onChapterSelected = onChapterSelected,
                                             onChapterSwipe = onChapterSwipe,
@@ -1326,6 +1341,7 @@ private fun MangaScreenLargeImpl(
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onSuperResolutionChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)? = null,
     // KMK <--
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -1373,6 +1389,8 @@ private fun MangaScreenLargeImpl(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)?,
+    onMultiColorizeClicked: ((List<ChapterList.Item>) -> Unit)? = null,
+    onMultiSuperResolutionClicked: ((List<ChapterList.Item>) -> Unit)? = null,
 
     // For swipe actions
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -1550,6 +1568,8 @@ private fun MangaScreenLargeImpl(
                     onDownloadChapter = onDownloadChapter,
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     onMultiTranslateClicked = onMultiTranslateClicked,
+                    onMultiColorizeClicked = onMultiColorizeClicked,
+                    onMultiSuperResolutionClicked = onMultiSuperResolutionClicked,
                     fillFraction = 0.5f,
                 )
             }
@@ -1873,6 +1893,7 @@ private fun MangaScreenLargeImpl(
                                     // KMK -->
                                     onTranslationChapter = onTranslationChapter,
                                     onColorizeChapter = onColorizeChapter,
+                                    onSuperResolutionChapter = onSuperResolutionChapter,
                                     // KMK <--
                                     onChapterSelected = onChapterSelected,
                                     onChapterSwipe = onChapterSwipe,
@@ -1895,6 +1916,8 @@ private fun SharedMangaBottomActionMenu(
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiTranslateClicked: ((List<ChapterList.Item>) -> Unit)?,
+    onMultiColorizeClicked: ((List<ChapterList.Item>) -> Unit)? = null,
+    onMultiSuperResolutionClicked: ((List<ChapterList.Item>) -> Unit)? = null,
     fillFraction: Float,
     modifier: Modifier = Modifier,
 ) {
@@ -1911,7 +1934,7 @@ private fun SharedMangaBottomActionMenu(
             onMultiMarkAsReadClicked(selected.fastMap { it.chapter }, true)
         }.takeIf { selected.fastAny { !it.chapter.read } },
         onMarkAsUnreadClicked = {
-            onMultiMarkAsReadClicked(selected.fastMap { it.chapter }, false)
+            onMultiMarkAsUnreadClicked(selected.fastMap { it.chapter }, false)
         }.takeIf { selected.fastAny { it.chapter.read || it.chapter.lastPageRead > 0L } },
         onMarkPreviousAsReadClicked = {
             onMarkPreviousAsReadClicked(selected[0].chapter)
@@ -1920,6 +1943,16 @@ private fun SharedMangaBottomActionMenu(
             onDownloadChapter!!(selected.toList(), ChapterDownloadAction.START)
         }.takeIf {
             onDownloadChapter != null && selected.fastAny { it.downloadState != Download.State.DOWNLOADED }
+        },
+        onColorizeClicked = {
+            onMultiColorizeClicked!!(selected)
+        }.takeIf {
+            onMultiColorizeClicked != null && selected.fastAny { it.downloadState == Download.State.DOWNLOADED }
+        },
+        onSuperResolutionClicked = {
+            onMultiSuperResolutionClicked!!(selected)
+        }.takeIf {
+            onMultiSuperResolutionClicked != null && selected.fastAny { it.downloadState == Download.State.DOWNLOADED }
         },
         onTranslateClicked = {
             onMultiTranslateClicked!!(selected)
@@ -1949,6 +1982,7 @@ private fun LazyListScope.sharedChapterItems(
     // KMK -->
     onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     onColorizeChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
+    onSuperResolutionChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     // KMK <--
     onChapterSelected: (ChapterList.Item, Boolean, Boolean) -> Unit,
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -2026,6 +2060,12 @@ private fun LazyListScope.sharedChapterItems(
                     colorizerStateProvider = { item.colorizerState },
                     onColorizeClick = if (onColorizeChapter != null) {
                         { onColorizeChapter(item, it) }
+                    } else {
+                        null
+                    },
+                    superResolutionStateProvider = { item.superResolutionState },
+                    onSuperResolutionClick = if (onSuperResolutionChapter != null) {
+                        { onSuperResolutionChapter(item, it) }
                     } else {
                         null
                     },

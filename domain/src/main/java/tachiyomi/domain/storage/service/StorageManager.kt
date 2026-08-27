@@ -135,6 +135,10 @@ class StorageManager(
         return baseDir?.createDirectory(COLORIZER_PATH)
     }
 
+    fun getSuperResolutionDirectory(): UniFile? {
+        return baseDir?.createDirectory(SUPER_RESOLUTION_PATH)
+    }
+
     fun getFontsDirectory(): UniFile? {
         return baseDir?.createDirectory(FONTS_PATH)
     }
@@ -302,4 +306,5 @@ private const val SCRIPT_OPTS_PATH = "script-opts"
 private const val SHADERS_PATH = "shaders"
 private const val TRANSLATION_PATH = "translations"
 private const val COLORIZER_PATH = "colorizer"
+private const val SUPER_RESOLUTION_PATH = "superres"
 // KMK <--

@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.ai.AiModelManager
-import eu.kanade.tachiyomi.data.ai.MangaColorizeEngine
+import eu.kanade.tachiyomi.data.ai.SuperResolutionEngine
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.storage.DiskUtil
@@ -32,38 +32,36 @@ import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.storage.service.StorageManager
-import tachiyomi.domain.translation.TranslationPreferences
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.File
-import java.io.FileOutputStream
 
 /**
- * Manages local on-device batch chapter colorization using ONNX AI models (Manga-Colorizer-v2 / DeOldify).
- * Saves colorized chapter images into storageManager.getColorizerDirectory().
+ * Manages local on-device batch chapter Super-Resolution using ONNX AI models (Anime4K ACNet / Real-ESRGAN).
+ * Saves super-resolved chapter images into storageManager.getSuperResolutionDirectory().
  */
-class ColorizerManager(
+class SuperResolutionManager(
     private val context: Context,
     private val storageManager: StorageManager = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
-    private val translationPreferences: TranslationPreferences = Injekt.get(),
     private val downloadProvider: DownloadProvider = Injekt.get(),
+    private val colorizerManager: ColorizerManager = Injekt.get(),
+    private val translationPreferences: tachiyomi.domain.translation.TranslationPreferences = Injekt.get(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _queueState = MutableStateFlow<List<Translation>>(emptyList())
     val queueState = _queueState.asStateFlow()
 
-    private val colorizeEngine by lazy { MangaColorizeEngine() }
+    private val srEngine by lazy { SuperResolutionEngine() }
     private val modelManager by lazy { AiModelManager(context) }
 
-    private val colorizerDir: UniFile?
-        get() = storageManager.getColorizerDirectory()
+    private val superResDir: UniFile?
+        get() = storageManager.getSuperResolutionDirectory()
 
-    fun getQueuedColorizerOrNull(chapterId: Long): Translation? {
+    fun getQueuedSuperResolutionOrNull(chapterId: Long): Translation? {
         return queueState.value.find { it.chapter.id == chapterId }
     }
 
-    fun colorizeChapter(manga: Manga, chapter: Chapter) {
+    fun superResolveChapter(manga: Manga, chapter: Chapter) {
         val source = sourceManager.get(manga.source) ?: return
         val translation = Translation(source, manga, chapter)
 
@@ -85,35 +83,21 @@ class ColorizerManager(
 
             next.status = Translation.State.TRANSLATING
             try {
-                val isCloudBackend = translationPreferences.colorizerEngine().get() == 1
-                val kaggleApiKey = translationPreferences.colorizerKaggleApiKey().get()
-                val ngrokToken = translationPreferences.colorizerNgrokAuthToken().get()
-
-                // Check if user explicitly configured and wants remote Cloud processing
-                if (isCloudBackend && (kaggleApiKey.isNotBlank() || ngrokToken.isNotBlank())) {
-                    logcat { "Using remote Cloud Kaggle colorizer backend" }
-                    // Cloud processing stub / bridge: marked translated upon remote completion
-                    next.status = Translation.State.TRANSLATED
-                    return@launch
-                }
-
-                // Default: Local On-Device AI (ONNX)
-                val prefModelId = translationPreferences.colorizerModel().get()
+                // Ensure model is available
+                val prefModelId = translationPreferences.superResolutionModel().get()
                 val modelType = when (prefModelId) {
-                    "deoldify_artistic" -> AiModelManager.ModelType.DEOLDIFY_ARTISTIC
-                    "ddcolor_tiny" -> AiModelManager.ModelType.DDCOLOR_TINY
-                    else -> AiModelManager.ModelType.MANGA_COLORIZER_V2
+                    "realesrgan_compact" -> AiModelManager.ModelType.REAL_ESRGAN_COMPACT
+                    else -> AiModelManager.ModelType.ANIME4K_ACNET
                 }
 
                 var modelFile = modelManager.getModelFile(modelType)
                 if (!modelFile.exists() || modelFile.length() < modelType.minSize) {
                     val downloaded = modelManager.downloadModel(modelType)
                     if (!downloaded) {
-                        // Fallback to Manga Colorizer v2 or DeOldify
-                        val fallbackType = if (modelType != AiModelManager.ModelType.MANGA_COLORIZER_V2) {
-                            AiModelManager.ModelType.MANGA_COLORIZER_V2
+                        val fallbackType = if (modelType != AiModelManager.ModelType.ANIME4K_ACNET) {
+                            AiModelManager.ModelType.ANIME4K_ACNET
                         } else {
-                            AiModelManager.ModelType.DEOLDIFY_ARTISTIC
+                            AiModelManager.ModelType.REAL_ESRGAN_COMPACT
                         }
                         modelFile = modelManager.getModelFile(fallbackType)
                         if (!modelFile.exists() || modelFile.length() < fallbackType.minSize) {
@@ -123,14 +107,22 @@ class ColorizerManager(
                 }
 
                 if (!modelFile.exists()) {
-                    throw IllegalStateException("No valid colorization AI model found.")
+                    throw IllegalStateException("No valid Super-Resolution AI model found.")
                 }
 
-                val intensity = translationPreferences.colorizerIntensity().get().coerceIn(0.3f, 2.0f)
-                val useNnapi = translationPreferences.colorizerUseNnapi().get()
+                val scale = translationPreferences.superResolutionScale().get().coerceIn(2, 4)
+                val useNnapi = translationPreferences.superResolutionUseNnapi().get()
 
-                // Locate downloaded chapter directory
-                val chapterDir = downloadProvider.findChapterDir(
+                // Locate source chapter directory (prioritizing Colorized directory if already colorized)
+                val colorizedChapterDir = colorizerManager.getColorizedPageFile(
+                    chapterName = next.chapter.name,
+                    scanlator = next.chapter.scanlator,
+                    mangaTitle = next.manga.ogTitle,
+                    source = next.source,
+                    pageName = "",
+                )?.parent
+
+                val rawChapterDir = downloadProvider.findChapterDir(
                     chapterName = next.chapter.name,
                     chapterScanlator = next.chapter.scanlator,
                     chapterUrl = next.chapter.url,
@@ -138,21 +130,27 @@ class ColorizerManager(
                     source = next.source,
                 )
 
-                if (chapterDir == null || !chapterDir.exists()) {
+                val inputDir = if (colorizedChapterDir != null && colorizedChapterDir.exists() && colorizedChapterDir.listFiles()?.isNotEmpty() == true) {
+                    colorizedChapterDir
+                } else {
+                    rawChapterDir
+                }
+
+                if (inputDir == null || !inputDir.exists()) {
                     throw IllegalStateException("Downloaded chapter files not found.")
                 }
 
                 val outChapterDir = getMangaDir(next.manga.ogTitle, next.source)
                     ?.createDirectory(getChapterDirName(next.chapter.name, next.chapter.scanlator))
-                    ?: throw IllegalStateException("Failed to create colorizer output directory")
+                    ?: throw IllegalStateException("Failed to create super-resolution output directory")
 
-                val imageFiles = chapterDir.listFiles()?.filter { file ->
+                val imageFiles = inputDir.listFiles()?.filter { file ->
                     val name = file.name.orEmpty().lowercase()
                     name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".webp")
                 } ?: emptyList()
 
                 if (imageFiles.isEmpty()) {
-                    throw IllegalStateException("No image files in downloaded chapter.")
+                    throw IllegalStateException("No image files in source chapter.")
                 }
 
                 for ((idx, file) in imageFiles.withIndex()) {
@@ -163,19 +161,19 @@ class ColorizerManager(
                     file.openInputStream()?.use { inputStream ->
                         val inputBitmap = BitmapFactory.decodeStream(inputStream)
                         if (inputBitmap != null) {
-                            val colorizedBitmap = colorizeEngine.colorize(
+                            val upscaledBitmap = srEngine.upscale(
                                 inputBitmap = inputBitmap,
                                 modelFile = modelFile,
-                                intensity = intensity,
+                                scale = scale,
                                 useNnapi = useNnapi,
                             )
 
                             outFile.openOutputStream()?.use { outputStream ->
-                                colorizedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+                                upscaledBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
                                 outputStream.flush()
                             }
-                            if (colorizedBitmap != inputBitmap) {
-                                colorizedBitmap.recycle()
+                            if (upscaledBitmap != inputBitmap) {
+                                upscaledBitmap.recycle()
                             }
                             inputBitmap.recycle()
                         }
@@ -187,7 +185,7 @@ class ColorizerManager(
                 next.status = Translation.State.NOT_TRANSLATED
                 throw e
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Colorization failed" }
+                logcat(LogPriority.ERROR, e) { "Super-Resolution failed" }
                 next.status = Translation.State.ERROR
             } finally {
                 synchronized(_queueState) {
@@ -198,13 +196,13 @@ class ColorizerManager(
         }
     }
 
-    fun cancelQueuedColorizer(translation: Translation) {
+    fun cancelQueuedSuperResolution(translation: Translation) {
         synchronized(_queueState) {
             _queueState.value = _queueState.value - translation
         }
     }
 
-    fun deleteColorizer(chapter: Chapter, manga: Manga, source: Source) {
+    fun deleteSuperResolution(chapter: Chapter, manga: Manga, source: Source) {
         scope.launch {
             val mangaDir = getMangaDir(manga.ogTitle, source)
             val chapterDirName = getChapterDirName(chapter.name, chapter.scanlator)
@@ -212,20 +210,20 @@ class ColorizerManager(
         }
     }
 
-    fun getChapterColorizerStatus(
+    fun getChapterSuperResolutionStatus(
         chapterId: Long,
         chapterName: String,
         scanlator: String?,
         title: String,
         sourceId: Long,
     ): Translation.State {
-        val active = getQueuedColorizerOrNull(chapterId)
+        val active = getQueuedSuperResolutionOrNull(chapterId)
         if (active != null) return active.status
-        if (isChapterColorized(chapterName, scanlator, title, sourceId)) return Translation.State.TRANSLATED
+        if (isChapterSuperResolved(chapterName, scanlator, title, sourceId)) return Translation.State.TRANSLATED
         return Translation.State.NOT_TRANSLATED
     }
 
-    fun isChapterColorized(
+    fun isChapterSuperResolved(
         chapterName: String,
         chapterScanlator: String?,
         mangaTitle: String,
@@ -236,7 +234,7 @@ class ColorizerManager(
         return chapterDir?.exists() == true && chapterDir.listFiles()?.isNotEmpty() == true
     }
 
-    fun getColorizedPageFile(
+    fun getSuperResolutionPageFile(
         chapterName: String,
         scanlator: String?,
         mangaTitle: String,
@@ -255,7 +253,7 @@ class ColorizerManager(
     private fun getMangaDir(mangaTitle: String, source: Source): UniFile? {
         val sourceDirName = getSourceDirName(source)
         val mangaDirName = getMangaDirName(mangaTitle)
-        return colorizerDir?.createDirectory(sourceDirName)?.createDirectory(mangaDirName)
+        return superResDir?.createDirectory(sourceDirName)?.createDirectory(mangaDirName)
     }
 
     private fun getSourceDirName(source: Source): String {

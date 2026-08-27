@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.CopyAll
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RemoveDone
 import androidx.compose.material.icons.outlined.SwapCalls
@@ -84,6 +86,8 @@ fun MangaBottomActionMenu(
     onMarkAsUnreadClicked: (() -> Unit)? = null,
     onMarkPreviousAsReadClicked: (() -> Unit)? = null,
     onDownloadClicked: (() -> Unit)? = null,
+    onColorizeClicked: (() -> Unit)? = null,
+    onSuperResolutionClicked: (() -> Unit)? = null,
     onTranslateClicked: (() -> Unit)? = null,
     onDeleteClicked: (() -> Unit)? = null,
 ) {
@@ -99,7 +103,7 @@ fun MangaBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false, false) }
+            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false, false, false, false) }
             var resetJob by remember { mutableStateOf<Job?>(null) }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -173,12 +177,30 @@ fun MangaBottomActionMenu(
                         onClick = onDownloadClicked,
                     )
                 }
+                if (onColorizeClicked != null) {
+                    Button(
+                        title = "Colorize",
+                        icon = Icons.Outlined.Palette,
+                        toConfirm = confirm[6],
+                        onLongClick = { onLongClickItem(6) },
+                        onClick = onColorizeClicked,
+                    )
+                }
+                if (onSuperResolutionClicked != null) {
+                    Button(
+                        title = "Super-Res",
+                        icon = Icons.Outlined.AutoAwesome,
+                        toConfirm = confirm[7],
+                        onLongClick = { onLongClickItem(7) },
+                        onClick = onSuperResolutionClicked,
+                    )
+                }
                 if (onTranslateClicked != null) {
                     Button(
                         title = stringResource(KMR.strings.manga_translate),
                         icon = Icons.Default.Translate,
-                        toConfirm = confirm[6],
-                        onLongClick = { onLongClickItem(6) },
+                        toConfirm = confirm[8],
+                        onLongClick = { onLongClickItem(8) },
                         onClick = onTranslateClicked,
                     )
                 }
@@ -186,8 +208,8 @@ fun MangaBottomActionMenu(
                     Button(
                         title = stringResource(MR.strings.action_delete),
                         icon = Icons.Outlined.Delete,
-                        toConfirm = confirm[7],
-                        onLongClick = { onLongClickItem(7) },
+                        toConfirm = confirm[9],
+                        onLongClick = { onLongClickItem(9) },
                         onClick = onDeleteClicked,
                     )
                 }

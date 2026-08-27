@@ -31,6 +31,7 @@ internal class DownloadPageLoader(
     private val context: Application by injectLazy()
     private val translationManager: TranslationManager by injectLazy()
     private val colorizerManager: ColorizerManager by injectLazy()
+    private val superResolutionManager: eu.kanade.translation.SuperResolutionManager by injectLazy()
 
     private var archivePageLoader: ArchivePageLoader? = null
 
@@ -87,6 +88,17 @@ internal class DownloadPageLoader(
         return pages.map { page ->
             val pageName = page.uri?.path?.substringAfterLast("/")
             ReaderPage(page.index, page.url, page.imageUrl) {
+                val superResFile = if (pageName != null) {
+                    superResolutionManager.getSuperResolutionPageFile(
+                        chapterName = dbChapter.name,
+                        scanlator = dbChapter.scanlator,
+                        mangaTitle = manga.ogTitle,
+                        source = source,
+                        pageName = pageName,
+                    )
+                } else {
+                    null
+                }
                 val colorizedFile = if (pageName != null) {
                     colorizerManager.getColorizedPageFile(
                         chapterName = dbChapter.name,
@@ -98,7 +110,9 @@ internal class DownloadPageLoader(
                 } else {
                     null
                 }
-                if (colorizedFile != null && colorizedFile.exists()) {
+                if (superResFile != null && superResFile.exists()) {
+                    superResFile.openInputStream()!!
+                } else if (colorizedFile != null && colorizedFile.exists()) {
                     colorizedFile.openInputStream()!!
                 } else {
                     context.contentResolver.openInputStream(page.uri ?: Uri.EMPTY)!!

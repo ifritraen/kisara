@@ -28,6 +28,7 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.AndroidSourceManager
 import eu.kanade.tachiyomi.util.system.isDebugBuildType
 import eu.kanade.translation.ColorizerManager
+import eu.kanade.translation.SuperResolutionManager
 import eu.kanade.translation.TranslationManager
 import eu.kanade.translation.data.TranslationProvider
 import exh.eh.EHentaiUpdateHelper
@@ -490,6 +491,7 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { TranslationProvider(app) }
         addSingletonFactory { TranslationManager(app) }
         addSingletonFactory { ColorizerManager(app) }
+        addSingletonFactory { SuperResolutionManager(app) }
         addSingletonFactory { eu.kanade.tachiyomi.data.favorite.FavoriteManager(app) }
         // KMK <--
 

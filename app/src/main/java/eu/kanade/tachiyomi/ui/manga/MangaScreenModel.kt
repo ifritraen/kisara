@@ -75,6 +75,7 @@ import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.getBitmapOrNull
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.translation.ColorizerManager
+import eu.kanade.translation.SuperResolutionManager
 import eu.kanade.translation.TranslationManager
 import eu.kanade.translation.model.Translation
 import exh.debug.DebugToggles
@@ -202,6 +203,7 @@ class MangaScreenModel(
     // KMK -->
     private val translationManager: TranslationManager = Injekt.get(),
     private val colorizerManager: ColorizerManager = Injekt.get(),
+    private val superResolutionManager: SuperResolutionManager = Injekt.get(),
     // KMK <--
     private val downloadCache: DownloadCache = Injekt.get(),
     private val getMangaAndChapters: GetMangaWithChapters = Injekt.get(),
@@ -454,6 +456,7 @@ class MangaScreenModel(
         // KMK -->
         observeTranslations()
         observeColorizer()
+        observeSuperResolution()
 
         screenModelScope.launchIO {
             getMangaExternalMetadata.subscribe(mangaId)
@@ -1234,6 +1237,20 @@ class MangaScreenModel(
         }
     }
 
+    private fun observeSuperResolution() {
+        screenModelScope.launchIO {
+            superResolutionManager.statusFlow()
+                .filter { it.manga.id == successState?.manga?.id }
+                .catch { error -> logcat(LogPriority.ERROR, error) }
+                .flowWithLifecycle(lifecycle)
+                .collect {
+                    withUIContext {
+                        updateSuperResolutionState(it)
+                    }
+                }
+        }
+    }
+
     private fun updateTranslationState(translation: Translation) {
         updateSuccessState { successState ->
             val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
@@ -1256,6 +1273,20 @@ class MangaScreenModel(
             val newChapters = successState.chapters.toMutableList().apply {
                 val item = removeAt(modifiedIndex)
                     .copy(colorizerState = translation.status)
+                add(modifiedIndex, item)
+            }
+            successState.copy(chapters = newChapters)
+        }
+    }
+
+    private fun updateSuperResolutionState(translation: Translation) {
+        updateSuccessState { successState ->
+            val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
+            if (modifiedIndex < 0) return@updateSuccessState successState
+
+            val newChapters = successState.chapters.toMutableList().apply {
+                val item = removeAt(modifiedIndex)
+                    .copy(superResolutionState = translation.status)
                 add(modifiedIndex, item)
             }
             successState.copy(chapters = newChapters)
@@ -1307,6 +1338,7 @@ class MangaScreenModel(
             // KMK -->
             var translationState = Translation.State.NOT_TRANSLATED
             var colorizerState = Translation.State.NOT_TRANSLATED
+            var superResolutionState = Translation.State.NOT_TRANSLATED
             if (downloadState == Download.State.DOWNLOADED) {
                 translationState = translationManager.getChapterTranslationStatus(
                     chapterId = chapter.id,
@@ -1316,6 +1348,13 @@ class MangaScreenModel(
                     sourceId = manga.source,
                 )
                 colorizerState = colorizerManager.getChapterColorizerStatus(
+                    chapterId = chapter.id,
+                    chapterName = chapter.name,
+                    scanlator = chapter.scanlator,
+                    title = manga.ogTitle,
+                    sourceId = manga.source,
+                )
+                superResolutionState = superResolutionManager.getChapterSuperResolutionStatus(
                     chapterId = chapter.id,
                     chapterName = chapter.name,
                     scanlator = chapter.scanlator,
@@ -1337,6 +1376,7 @@ class MangaScreenModel(
                 // KMK -->
                 translationState = translationState,
                 colorizerState = colorizerState,
+                superResolutionState = superResolutionState,
                 // KMK <--
             )
         }
@@ -1633,6 +1673,28 @@ class MangaScreenModel(
         }
     }
 
+    fun runBulkColorizer(items: List<ChapterList.Item>) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            items.forEach { item ->
+                if (item.downloadState == Download.State.DOWNLOADED) {
+                    colorizerManager.colorizeChapter(manga, item.chapter)
+                }
+            }
+        }
+    }
+
+    fun runBulkSuperResolution(items: List<ChapterList.Item>) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            items.forEach { item ->
+                if (item.downloadState == Download.State.DOWNLOADED) {
+                    superResolutionManager.superResolveChapter(manga, item.chapter)
+                }
+            }
+        }
+    }
+
     fun runChapterColorizerActions(
         item: ChapterList.Item,
         action: ChapterTranslationAction,
@@ -1693,6 +1755,54 @@ class MangaScreenModel(
         val manga = successState?.manga ?: return
         chaptersToColorize.forEach { chapterItem ->
             colorizerManager.colorizeChapter(manga, chapterItem)
+        }
+    }
+
+    fun runChapterSuperResolutionActions(
+        item: ChapterList.Item,
+        action: ChapterTranslationAction,
+    ) {
+        when (action) {
+            ChapterTranslationAction.START -> {
+                if (item.downloadState != Download.State.DOWNLOADED) return
+                val manga = successState?.manga ?: return
+                screenModelScope.launchNonCancellable {
+                    superResolutionManager.superResolveChapter(manga, item.chapter)
+                }
+            }
+
+            ChapterTranslationAction.CANCEL -> {
+                val active = superResolutionManager.getQueuedSuperResolutionOrNull(item.chapter.id) ?: return
+                superResolutionManager.cancelQueuedSuperResolution(active)
+                updateSuperResolutionState(active.apply { status = Translation.State.NOT_TRANSLATED })
+            }
+
+            ChapterTranslationAction.DELETE -> {
+                screenModelScope.launchNonCancellable {
+                    try {
+                        successState?.let { state ->
+                            superResolutionManager.deleteSuperResolution(
+                                item.chapter,
+                                state.manga,
+                                state.source,
+                            )
+                            updateSuccessState { successState ->
+                                val modifiedIndex = successState.chapters.indexOfFirst { it.id == item.chapter.id }
+                                if (modifiedIndex < 0) return@updateSuccessState successState
+
+                                val newChapters = successState.chapters.toMutableList().apply {
+                                    val updatedItem = removeAt(modifiedIndex)
+                                        .copy(superResolutionState = Translation.State.NOT_TRANSLATED)
+                                    add(modifiedIndex, updatedItem)
+                                }
+                                successState.copy(chapters = newChapters)
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        logcat(LogPriority.ERROR, e)
+                    }
+                }
+            }
         }
     }
     // KMK <--
@@ -2505,6 +2615,7 @@ sealed class ChapterList {
         // SY <--
         val translationState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
         val colorizerState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
+        val superResolutionState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
     ) : ChapterList() {
         val id = chapter.id
         val isDownloaded = downloadState == Download.State.DOWNLOADED

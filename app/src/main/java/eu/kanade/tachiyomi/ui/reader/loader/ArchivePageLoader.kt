@@ -37,6 +37,7 @@ internal class ArchivePageLoader(
     private val context: Application by injectLazy()
     private val readerPreferences: ReaderPreferences by injectLazy()
     private val colorizerManager: ColorizerManager by injectLazy()
+    private val superResolutionManager: eu.kanade.translation.SuperResolutionManager by injectLazy()
     private val tmpDir = File(context.externalCacheDir, "reader_${reader.archiveHashCode}").also {
         it.deleteRecursively()
     }
@@ -82,6 +83,13 @@ internal class ArchivePageLoader(
                 list.getOrNull(i)?.name?.let { entryName ->
                     page.translation = translations[entryName]
                     page.translationKey = entryName
+                    val superResFile = superResolutionManager.getSuperResolutionPageFile(
+                        chapterName = chapterName,
+                        scanlator = scanlator,
+                        mangaTitle = mangaTitle,
+                        source = source,
+                        pageName = entryName.substringAfterLast("/"),
+                    )
                     val colorizedFile = colorizerManager.getColorizedPageFile(
                         chapterName = chapterName,
                         scanlator = scanlator,
@@ -89,7 +97,9 @@ internal class ArchivePageLoader(
                         source = source,
                         pageName = entryName.substringAfterLast("/"),
                     )
-                    if (colorizedFile != null && colorizedFile.exists()) {
+                    if (superResFile != null && superResFile.exists()) {
+                        page.stream = { superResFile.openInputStream()!! }
+                    } else if (colorizedFile != null && colorizedFile.exists()) {
                         page.stream = { colorizedFile.openInputStream()!! }
                     }
                 }
@@ -121,6 +131,13 @@ internal class ArchivePageLoader(
                 ReaderPage(i).apply {
                     // SY -->
                     stream = {
+                        val superResFile = superResolutionManager.getSuperResolutionPageFile(
+                            chapterName = chapterName,
+                            scanlator = scanlator,
+                            mangaTitle = mangaTitle,
+                            source = source,
+                            pageName = entry.name.substringAfterLast("/"),
+                        )
                         val colorizedFile = colorizerManager.getColorizedPageFile(
                             chapterName = chapterName,
                             scanlator = scanlator,
@@ -128,7 +145,9 @@ internal class ArchivePageLoader(
                             source = source,
                             pageName = entry.name.substringAfterLast("/"),
                         )
-                        if (colorizedFile != null && colorizedFile.exists()) {
+                        if (superResFile != null && superResFile.exists()) {
+                            superResFile.openInputStream()!!
+                        } else if (colorizedFile != null && colorizedFile.exists()) {
                             colorizedFile.openInputStream()!!
                         } else {
                             imageBytes?.copyOf()?.inputStream() ?: reader.getInputStream(entry.name)!!
