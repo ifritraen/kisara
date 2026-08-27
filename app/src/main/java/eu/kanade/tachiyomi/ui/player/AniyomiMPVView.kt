@@ -126,7 +126,6 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
     override fun initOptions(vo: String) {
         initialized = true
         setVo(if (decoderPreferences.gpuNext().get()) "gpu-next" else "gpu")
-        MPVLib.setPropertyBoolean("pause", true)
         MPVLib.setOptionString("profile", "fast")
         MPVLib.setOptionString("hwdec", if (decoderPreferences.tryHWDecoding().get()) "auto" else "no")
 
@@ -151,8 +150,8 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
 
         MPVLib.setOptionString("msg-level", "all=" + if (networkPreferences.verboseLogging().get()) "v" else "warn")
 
-        MPVLib.setPropertyBoolean("keep-open", true)
-        MPVLib.setPropertyBoolean("input-default-bindings", true)
+        MPVLib.setOptionString("keep-open", "always")
+        MPVLib.setOptionString("input-default-bindings", "yes")
 
         MPVLib.setOptionString("ytdl", "no")
         MPVLib.setOptionString("tls-verify", "yes")

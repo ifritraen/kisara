@@ -1122,15 +1122,25 @@ class PlayerActivity : BaseActivity() {
     }
 
     private fun loadMpvFile(url: String?, videoOptions: String) {
-        MPVLib.command(
-            arrayOf(
-                "loadfile",
-                url,
-                "replace",
-                "0",
-                videoOptions,
-            ),
-        )
+        if (url == null) return
+        if (videoOptions.isNotBlank()) {
+            MPVLib.command(
+                arrayOf(
+                    "loadfile",
+                    url,
+                    "replace",
+                    "0",
+                    videoOptions,
+                ),
+            )
+        } else {
+            MPVLib.command(
+                arrayOf(
+                    "loadfile",
+                    url,
+                ),
+            )
+        }
     }
 
     fun parseVideoUrl(videoUrl: String?): String? {
@@ -1151,9 +1161,18 @@ class PlayerActivity : BaseActivity() {
             it.key + ": " + it.value.replace(",", "\\,")
         }.joinToString(",")
 
-        MPVLib.setOptionString("user-agent", options.userAgent.orEmpty())
-        MPVLib.setOptionString("referrer", options.referrer.orEmpty())
-        MPVLib.setOptionString("http-header-fields", httpHeaderString)
+        if (httpHeaderString.isNotBlank()) {
+            MPVLib.setOptionString("http-header-fields", httpHeaderString)
+            MPVLib.setPropertyString("http-header-fields", httpHeaderString)
+        }
+        if (!options.userAgent.isNullOrEmpty()) {
+            MPVLib.setOptionString("user-agent", options.userAgent)
+            MPVLib.setPropertyString("user-agent", options.userAgent)
+        }
+        if (!options.referrer.isNullOrEmpty()) {
+            MPVLib.setOptionString("referrer", options.referrer)
+            MPVLib.setPropertyString("referrer", options.referrer)
+        }
 
         // need to fix the cache
         // MPVLib.setOptionString("cache-on-disk", "yes")

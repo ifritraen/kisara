@@ -30,15 +30,15 @@ fun applyFilter(filter: VideoFilters, value: Int, prefs: DecoderPreferences) {
 fun applyDebandMode(mode: Debanding, prefs: DecoderPreferences) {
     when (mode) {
         Debanding.None -> {
-            MPVLib.setOptionString("deband", "no")
+            MPVLib.setPropertyString("deband", "no")
             MPVLib.command(arrayOf("vf", "remove", "@deband"))
         }
         Debanding.CPU -> {
-            MPVLib.setOptionString("deband", "no")
+            MPVLib.setPropertyString("deband", "no")
             MPVLib.command(arrayOf("vf", "add", "@deband:gradfun=radius=12"))
         }
         Debanding.GPU -> {
-            MPVLib.setOptionString("deband", "yes")
+            MPVLib.setPropertyString("deband", "yes")
             MPVLib.command(arrayOf("vf", "remove", "@deband"))
             // Apply GPU debanding settings
             DebandSettings.entries.forEach {
@@ -53,8 +53,9 @@ fun applyDebandSetting(setting: DebandSettings, value: Int) {
 }
 
 fun applyHighQualityScaling(enabled: Boolean, isInit: Boolean = false) {
-    val scaler = if (enabled) "spline36" else "bilinear"
-    val dither = if (enabled) "fruit" else "no"
+    if (!enabled) return
+    val scaler = "spline36"
+    val dither = "fruit"
 
     if (isInit) {
         MPVLib.setOptionString("scale", scaler)
@@ -89,7 +90,9 @@ fun buildVideoFilterChain(debanding: Debanding, useYuv420p: Boolean): String? {
             Debanding.CPU -> add("gradfun=radius=12")
             Debanding.GPU, Debanding.None -> {}
         }
-        if (useYuv420p) add("format=yuv420p")
+        if (useYuv420p) {
+            add("format=yuv420p")
+        }
     }
     return filters.takeIf { it.isNotEmpty() }?.joinToString(",")
 }
@@ -107,9 +110,7 @@ fun applyAnime4K(prefs: DecoderPreferences, manager: Anime4KManager, isInit: Boo
     val gpuNext = prefs.gpuNext().get()
     if (enabled && gpuNext) {
         logcat("Anime4K", LogPriority.WARN) { "Anime4K is incompatible with gpu-next. Skipping to prevent crashes." }
-        if (isInit) {
-            MPVLib.setOptionString("glsl-shaders", "")
-        } else {
+        if (!isInit) {
             MPVLib.setPropertyString("glsl-shaders", "")
         }
         return
@@ -135,10 +136,9 @@ fun applyAnime4K(prefs: DecoderPreferences, manager: Anime4KManager, isInit: Boo
         preset.quality
     }
 
-    // Ensure shaders are unpacked to disk
-    manager.initialize()
-
     val chain = if (enabled && mode != Anime4KManager.Mode.OFF) {
+        // Ensure shaders are unpacked to disk
+        manager.initialize()
         manager.getShaderChain(mode, quality)
     } else {
         ""
@@ -147,7 +147,9 @@ fun applyAnime4K(prefs: DecoderPreferences, manager: Anime4KManager, isInit: Boo
     logcat("Anime4K", LogPriority.DEBUG) { "Applying Anime4K chain (enabled=$enabled, mode=$mode, quality=$quality): $chain" }
 
     if (isInit) {
-        MPVLib.setOptionString("glsl-shaders", chain)
+        if (chain.isNotBlank()) {
+            MPVLib.setOptionString("glsl-shaders", chain)
+        }
     } else {
         MPVLib.setPropertyString("glsl-shaders", chain)
     }
