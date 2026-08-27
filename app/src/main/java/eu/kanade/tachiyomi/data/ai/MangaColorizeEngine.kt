@@ -129,8 +129,8 @@ class MangaColorizeEngine(
         }
 
         val modelDim = 256
-        val isNormalized = modelFile.name.contains("ddcolor", ignoreCase = true)
-        val isBgr = !modelFile.name.contains("rgb", ignoreCase = true)
+        val isNormalized = true
+        val isBgr = modelFile.name.contains("bgr", ignoreCase = true)
 
         // 1. Prepare 256x256 NCHW Input FloatBuffer
         val inputBuffer = ColorizeImageUtils.bitmapToNchwFloatBuffer(
@@ -165,19 +165,26 @@ class MangaColorizeEngine(
 
         if (rawFloats.size >= 3 * plane) {
             // 3-channel output (DeOldify / Manga-Colorization-v2 RGB/BGR):
-            // Convert RGB/BGR output into CIE-Lab (a, b) space
+            // Check dynamic range of output (normalized [0..1] vs [0..255])
+            var maxVal = 0.0f
+            for (i in 0 until kotlin.math.min(rawFloats.size, 1000)) {
+                val v = kotlin.math.abs(rawFloats[i])
+                if (v > maxVal) maxVal = v
+            }
+            val normFactor = if (maxVal <= 2.0f) 1.0f else 255.0f
+
             for (i in 0 until plane) {
-                val c0 = rawFloats[i] // B or R
+                val c0 = rawFloats[i] // R or B
                 val c1 = rawFloats[plane + i] // G
-                val c2 = rawFloats[2 * plane + i] // R or B
+                val c2 = rawFloats[2 * plane + i] // B or R
                 val r = if (isBgr) c2 else c0
                 val g = c1
                 val b = if (isBgr) c0 else c2
 
                 // Calculate CIE-Lab a and b
-                val rNorm = (r / 255.0f).coerceIn(0.0f, 1.0f)
-                val gNorm = (g / 255.0f).coerceIn(0.0f, 1.0f)
-                val bNorm = (b / 255.0f).coerceIn(0.0f, 1.0f)
+                val rNorm = (r / normFactor).coerceIn(0.0f, 1.0f)
+                val gNorm = (g / normFactor).coerceIn(0.0f, 1.0f)
+                val bNorm = (b / normFactor).coerceIn(0.0f, 1.0f)
 
                 val x = 0.4124564f * rNorm + 0.3575761f * gNorm + 0.1804375f * bNorm
                 val y = 0.2126729f * rNorm + 0.7151522f * gNorm + 0.0721750f * bNorm

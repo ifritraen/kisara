@@ -57,6 +57,12 @@ class StorageManager(
                 parent.createDirectory(TRANSLATION_PATH).also {
                     DiskUtil.createNoMediaFile(it, context)
                 }
+                parent.createDirectory(COLORIZER_PATH).also {
+                    DiskUtil.createNoMediaFile(it, context)
+                }
+                parent.createDirectory(SUPER_RESOLUTION_PATH).also {
+                    DiskUtil.createNoMediaFile(it, context)
+                }
                 // KMK <--
             }
         }
@@ -74,6 +80,12 @@ class StorageManager(
                     }
                     // KMK -->
                     parent.createDirectory(TRANSLATION_PATH).also {
+                        DiskUtil.createNoMediaFile(it, context)
+                    }
+                    parent.createDirectory(COLORIZER_PATH).also {
+                        DiskUtil.createNoMediaFile(it, context)
+                    }
+                    parent.createDirectory(SUPER_RESOLUTION_PATH).also {
                         DiskUtil.createNoMediaFile(it, context)
                     }
                     // KMK <--

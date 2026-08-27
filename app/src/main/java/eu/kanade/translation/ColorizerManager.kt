@@ -143,8 +143,10 @@ class ColorizerManager(
                     throw IllegalStateException("Downloaded chapter files not found.")
                 }
 
-                val outChapterDir = getMangaDir(next.manga.ogTitle, next.source)
-                    ?.createDirectory(getChapterDirName(next.chapter.name, next.chapter.scanlator))
+                val mangaDir = getMangaDir(next.manga.ogTitle, next.source)
+                    ?: throw IllegalStateException("Failed to access colorizer manga directory")
+                val chapterDirName = getChapterDirName(next.chapter.name, next.chapter.scanlator)
+                val outChapterDir = mangaDir.findFile(chapterDirName) ?: mangaDir.createDirectory(chapterDirName)
                     ?: throw IllegalStateException("Failed to create colorizer output directory")
 
                 val imageFiles = chapterDir.listFiles()?.filter { file ->
@@ -249,14 +251,29 @@ class ColorizerManager(
     }
 
     internal fun findChapterDir(chapterName: String, scanlator: String?, mangaTitle: String, source: Source): UniFile? {
-        val mangaDir = getMangaDir(mangaTitle, source)
-        return mangaDir?.findFile(getChapterDirName(chapterName, scanlator))
+        val mangaDir = getMangaDir(mangaTitle, source) ?: return null
+        val candidates = listOf(
+            getChapterDirName(chapterName, scanlator),
+            DiskUtil.buildValidFilename(chapterName),
+            chapterName,
+        )
+        return candidates.asSequence()
+            .mapNotNull {
+                try {
+                    mangaDir.findFile(it)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            .firstOrNull()
     }
 
     private fun getMangaDir(mangaTitle: String, source: Source): UniFile? {
+        val dir = colorizerDir ?: return null
         val sourceDirName = getSourceDirName(source)
         val mangaDirName = getMangaDirName(mangaTitle)
-        return colorizerDir?.createDirectory(sourceDirName)?.createDirectory(mangaDirName)
+        val sourceDir = dir.findFile(sourceDirName) ?: dir.createDirectory(sourceDirName) ?: return null
+        return sourceDir.findFile(mangaDirName) ?: sourceDir.createDirectory(mangaDirName)
     }
 
     private fun getSourceDirName(source: Source): String {
