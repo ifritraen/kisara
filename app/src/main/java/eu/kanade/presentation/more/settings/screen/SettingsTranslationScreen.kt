@@ -72,9 +72,11 @@ object SettingsTranslationScreen : SearchableSettings {
         val entries = TranslationFont.entries
         val translationPreferences = remember { Injekt.get<TranslationPreferences>() }
         return listOf(
+            getOverviewStatusGroup(translationPreferences),
             Preference.PreferenceItem.SwitchPreference(
                 preference = translationPreferences.autoTranslateAfterDownload(),
                 title = stringResource(KMR.strings.pref_translate_after_downloading),
+                subtitle = "Automatically runs translation when a chapter completes downloading",
             ),
             Preference.PreferenceItem.ListPreference(
                 preference = translationPreferences.translationFont(),
@@ -92,13 +94,30 @@ object SettingsTranslationScreen : SearchableSettings {
     }
 
     @Composable
+    private fun getOverviewStatusGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = "Pipeline Health & Active Engine Overview",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.CustomPreference(
+                    title = "System Status Dashboard",
+                    content = {
+                        PipelineStatusOverviewCard(translationPreferences = translationPreferences)
+                    },
+                ),
+            ),
+        )
+    }
+
+    @Composable
     private fun getTranslationLangGroup(
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
         val fromLangs = TextRecognizerLanguage.entries
         val toLangs = TextTranslatorLanguage.entries
         return Preference.PreferenceGroup(
-            title = stringResource(KMR.strings.pref_group_setup),
+            title = "1. Source & Target Languages",
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
                     preference = translationPreferences.translateFromLanguage(),
@@ -118,19 +137,17 @@ object SettingsTranslationScreen : SearchableSettings {
     private fun getTranslatioEngineGroup(
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
-        val engines = TextTranslators.entries
         val currentEngine by translationPreferences.translationEngine().collectAsState()
         val isOpenAiMode = currentEngine == TextTranslators.OPENAI_COMPATIBLE.ordinal
         val isVisionMode = currentEngine == TextTranslators.GEMINI_VISION.ordinal
 
-        val presets = persistentListOf(
-            "DeepSeek (Recommended)" to ("https://api.deepseek.com/v1/chat/completions" to "deepseek-chat"),
-            "OpenAI (GPT-4o-mini)" to ("https://api.openai.com/v1/chat/completions" to "gpt-4o-mini"),
-            "Anthropic Claude 3.5" to ("https://api.anthropic.com/v1/chat/completions" to "claude-3-5-sonnet-20241022"),
-            "Alibaba Qwen Plus" to ("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" to "qwen-plus"),
-            "Zhipu GLM 4 Flash" to ("https://open.bigmodel.cn/api/paas/v4/chat/completions" to "glm-4-flash"),
-            "Moonshot Kimi" to ("https://api.moonshot.ai/v1/chat/completions" to "kimi-k1.5"),
-            "OpenRouter" to ("https://openrouter.ai/api/v1/chat/completions" to "google/gemini-2.0-flash-001"),
+        val engineDisplayNames = mapOf(
+            TextTranslators.GOOGLE.ordinal to "Google Translate [FREE • Ready • No Setup]",
+            TextTranslators.MLKIT.ordinal to "MLKit [FREE • Offline • On-Device]",
+            TextTranslators.OPENAI_COMPATIBLE.ordinal to "DeepSeek / OpenAI / Qwen [LLM • Needs API Key]",
+            TextTranslators.GEMINI_VISION.ordinal to "Gemini Multimodal Vision [End-to-End • Needs Key]",
+            TextTranslators.GEMINI.ordinal to "Gemini AI Text [Needs Gemini Key]",
+            TextTranslators.OPENROUTER.ordinal to "OpenRouter [Multi-LLM • Needs Key]",
         )
 
         val items = mutableListOf<Preference.PreferenceItem<out Any, out Any>>()
@@ -139,7 +156,7 @@ object SettingsTranslationScreen : SearchableSettings {
             Preference.PreferenceItem.ListPreference(
                 preference = translationPreferences.translationEngine(),
                 title = stringResource(KMR.strings.pref_translator_engine),
-                entries = engines.withIndex().associate { it.index to it.value.label }.toImmutableMap(),
+                entries = engineDisplayNames.toImmutableMap(),
             ),
         )
 
@@ -264,16 +281,16 @@ object SettingsTranslationScreen : SearchableSettings {
         val context = androidx.compose.ui.platform.LocalContext.current
         val modelManager = remember { eu.kanade.tachiyomi.data.ai.AiModelManager(context) }
         return Preference.PreferenceGroup(
-            title = stringResource(KMR.strings.pref_group_ocr),
+            title = "2. Text Recognizer (OCR) & Speech Balloon Detection",
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
                     preference = translationPreferences.ocrEngine(),
                     title = stringResource(KMR.strings.pref_ocr_engine),
                     entries = mapOf(
-                        0 to stringResource(KMR.strings.pref_ocr_engine_mlkit),
-                        1 to stringResource(KMR.strings.pref_ocr_engine_mangaocr),
-                        2 to stringResource(KMR.strings.pref_ocr_engine_paddleocr),
-                        3 to "Comic Text Detector (ONNX)",
+                        0 to "MLKit OCR [FREE • Built-in • No Downloads]",
+                        1 to "MangaOCR [Offline Japanese • Needs Download]",
+                        2 to "PaddleOCR [Offline Multilingual • Needs Download]",
+                        3 to "Comic Text Detector (ONNX) [Deep Learning • Needs Download]",
                     ).toImmutableMap(),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
@@ -287,7 +304,7 @@ object SettingsTranslationScreen : SearchableSettings {
                     subtitle = stringResource(KMR.strings.pref_bubble_detection_summary),
                 ),
                 Preference.PreferenceItem.CustomPreference(
-                    title = "Comic Text Detector Model",
+                    title = "Comic Text Detector Model (~94.7 MB)",
                     content = {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                             ModelDownloadCard(
@@ -337,13 +354,13 @@ object SettingsTranslationScreen : SearchableSettings {
     ): Preference.PreferenceGroup {
         val engineMode by translationPreferences.colorizerEngine().collectAsState()
         val engines = persistentListOf(
-            0 to "Local On-Device AI (ONNX)",
-            1 to "Remote Cloud (Kaggle Server / ngrok)",
+            0 to "Local On-Device AI (ONNX) [Fast • Offline]",
+            1 to "Remote Cloud (Kaggle Server / ngrok) [Needs Account]",
         )
         val colorizerModels = persistentListOf(
-            "manga_colorizer_v2" to "Manga Colorizer v2 (INT8 - Recommended)",
-            "deoldify_artistic" to "DeOldify Artistic (INT8)",
-            "ddcolor_tiny" to "DDColor Tiny (INT8)",
+            "manga_colorizer_v2" to "Manga Colorizer v2 (INT8 • 61.7MB • Recommended)",
+            "deoldify_artistic" to "DeOldify Artistic (INT8 • 254MB)",
+            "ddcolor_tiny" to "DDColor Tiny (INT8 • 50MB)",
         )
 
         val items = mutableListOf<Preference.PreferenceItem<out Any, out Any>>()
@@ -352,7 +369,7 @@ object SettingsTranslationScreen : SearchableSettings {
             Preference.PreferenceItem.SwitchPreference(
                 preference = translationPreferences.useColorizer(),
                 title = "Enable Manga Colorization",
-                subtitle = "Enables colorization actions on downloaded chapters",
+                subtitle = "Enables colorization button on downloaded chapters",
             ),
         )
         items.add(
@@ -445,7 +462,7 @@ object SettingsTranslationScreen : SearchableSettings {
         )
 
         return Preference.PreferenceGroup(
-            title = "Manga Colorizer (Local / Cloud)",
+            title = "3. Manga Colorization (AI Colorizer)",
             preferenceItems = items.toImmutableList(),
         )
     }
@@ -455,8 +472,8 @@ object SettingsTranslationScreen : SearchableSettings {
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
         val srModels = persistentListOf(
-            "anime4k_acnet" to "Anime4K ACNet (ONNX - 2x Luma)",
-            "realesrgan_compact" to "Real-ESRGAN Compact (INT8 - 2x-4x RGB)",
+            "anime4k_acnet" to "Anime4K ACNet (ONNX • 21.7KB • Ultra Fast 2x Luma)",
+            "realesrgan_compact" to "Real-ESRGAN Compact (INT8 • 4.87MB • High Res 2x-4x RGB)",
         )
         val scales = persistentListOf(
             2 to "2x Upscale (Default)",
@@ -464,7 +481,7 @@ object SettingsTranslationScreen : SearchableSettings {
         )
 
         return Preference.PreferenceGroup(
-            title = "Super-Resolution (On-Device AI)",
+            title = "4. AI Super-Resolution (Upscaler)",
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = translationPreferences.useSuperResolution(),
@@ -533,6 +550,271 @@ object SettingsTranslationScreen : SearchableSettings {
                 ),
             ),
         )
+    }
+}
+
+@Composable
+private fun PipelineStatusOverviewCard(
+    translationPreferences: TranslationPreferences,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val modelManager = remember { eu.kanade.tachiyomi.data.ai.AiModelManager(context) }
+
+    val currentEngineIndex by translationPreferences.translationEngine().collectAsState()
+    val currentEngine = TextTranslators.entries.getOrElse(currentEngineIndex) { TextTranslators.GOOGLE }
+    val currentOcrIndex by translationPreferences.ocrEngine().collectAsState()
+    val apiKey by translationPreferences.translationEngineApiKey().collectAsState()
+    val apiKeysSet by translationPreferences.translationEngineApiKeys().collectAsState()
+    val hasApiKey = apiKey.isNotBlank() || apiKeysSet.any { it.isNotBlank() }
+
+    val useColorizer by translationPreferences.useColorizer().collectAsState()
+    val colorizerEngine by translationPreferences.colorizerEngine().collectAsState()
+    val colorizerModelId by translationPreferences.colorizerModel().collectAsState()
+
+    val useSuperRes by translationPreferences.useSuperResolution().collectAsState()
+    val superResModelId by translationPreferences.superResolutionModel().collectAsState()
+
+    // 1. Translation Engine Status
+    val (engineTitle, engineStatus, isEngineReady) = when (currentEngine) {
+        TextTranslators.GOOGLE -> Triple("Google Translate", "Ready • Free (No API Key Required)", true)
+        TextTranslators.MLKIT -> Triple("MLKit (Offline)", "Ready • Free (On-Device Model)", true)
+        TextTranslators.GEMINI -> if (hasApiKey) {
+            Triple("Gemini AI", "Ready • API Key Configured", true)
+        } else {
+            Triple("Gemini AI", "⚠️ Action Required • Missing Gemini API Key", false)
+        }
+        TextTranslators.GEMINI_VISION -> if (hasApiKey) {
+            Triple("Gemini Multimodal Vision", "Ready • API Key Configured", true)
+        } else {
+            Triple("Gemini Multimodal Vision", "⚠️ Action Required • Missing Gemini API Key", false)
+        }
+        TextTranslators.OPENROUTER -> if (hasApiKey) {
+            Triple("OpenRouter", "Ready • API Key Configured", true)
+        } else {
+            Triple("OpenRouter", "⚠️ Action Required • Missing OpenRouter API Key", false)
+        }
+        TextTranslators.OPENAI_COMPATIBLE -> if (hasApiKey) {
+            val model = translationPreferences.translationEngineModel().get()
+            Triple("LLM (${model.ifBlank { "DeepSeek/OpenAI" }})", "Ready • API Key Configured", true)
+        } else {
+            Triple("OpenAI-Compatible LLM", "⚠️ Action Required • Missing API Key", false)
+        }
+    }
+
+    // 2. OCR Text Recognizer Status
+    val (ocrTitle, ocrStatus, isOcrReady) = when (currentOcrIndex) {
+        0 -> Triple("MLKit OCR", "Ready • Built-in (No Downloads Needed)", true)
+        1 -> {
+            val dir = File(context.filesDir, "mangaocr")
+            val ready = (dir.listFiles()?.sumOf { it.length() } ?: 0L) > 10 * 1024 * 1024L
+            if (ready) Triple("MangaOCR", "Ready • Model Downloaded (~100MB)", true)
+            else Triple("MangaOCR", "⚠️ Download Needed • Download MangaOCR below", false)
+        }
+        2 -> {
+            val dir = File(context.filesDir, "paddleocr")
+            val ready = (dir.listFiles()?.sumOf { it.length() } ?: 0L) > 10 * 1024 * 1024L
+            if (ready) Triple("PaddleOCR", "Ready • Model Downloaded (~30MB)", true)
+            else Triple("PaddleOCR", "⚠️ Download Needed • Download PaddleOCR below", false)
+        }
+        3 -> {
+            val ready = modelManager.isModelDownloaded(eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.COMIC_TEXT_DETECTOR)
+            if (ready) Triple("Comic Text Detector", "Ready • ONNX Model Loaded (~94MB)", true)
+            else Triple("Comic Text Detector", "⚠️ Download Needed • Download CTD ONNX below", false)
+        }
+        else -> Triple("MLKit OCR", "Ready", true)
+    }
+
+    // 3. Colorizer Status
+    val (colorizerTitle, colorizerStatus, isColorizerReady) = if (!useColorizer) {
+        Triple("Manga Colorizer", "Disabled in Settings (Tap below to enable)", true)
+    } else if (colorizerEngine == 1) {
+        val hasKaggle = translationPreferences.colorizerKaggleApiKey().get().isNotBlank()
+        if (hasKaggle) Triple("Kaggle Remote Colorizer", "Ready • Cloud Bridge Configured", true)
+        else Triple("Kaggle Remote Colorizer", "⚠️ Action Required • Missing Kaggle API Key", false)
+    } else {
+        val modelType = when (colorizerModelId) {
+            "deoldify_artistic" -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.DEOLDIFY_ARTISTIC
+            "ddcolor_tiny" -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.DDCOLOR_TINY
+            else -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.MANGA_COLORIZER_V2
+        }
+        val ready = modelManager.isModelDownloaded(modelType)
+        if (ready) Triple(modelType.displayName, "Ready • Local ONNX Model Loaded", true)
+        else Triple(modelType.displayName, "⚠️ Download Needed • Download model below", false)
+    }
+
+    // 4. Super-Resolution Status
+    val (srTitle, srStatus, isSrReady) = if (!useSuperRes) {
+        Triple("Super-Resolution", "Disabled in Settings (Tap below to enable)", true)
+    } else {
+        val modelType = if (superResModelId == "realesrgan_compact") {
+            eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.REAL_ESRGAN_COMPACT
+        } else {
+            eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.ANIME4K_ACNET
+        }
+        val ready = modelManager.isModelDownloaded(modelType)
+        if (ready) Triple(modelType.displayName, "Ready • Local ONNX Model Loaded", true)
+        else Triple(modelType.displayName, "⚠️ Download Needed • Download model below", false)
+    }
+
+    var showGuideDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Live AI & Pipeline Status",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = "Overview of active engines, downloaded models & API keys",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { showGuideDialog = true }) {
+                        Text("📖 Quick Guide")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                StatusItemRow(
+                    category = "Translator",
+                    name = engineTitle,
+                    status = engineStatus,
+                    isReady = isEngineReady,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                StatusItemRow(
+                    category = "OCR Detector",
+                    name = ocrTitle,
+                    status = ocrStatus,
+                    isReady = isOcrReady,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                StatusItemRow(
+                    category = "Colorizer",
+                    name = colorizerTitle,
+                    status = colorizerStatus,
+                    isReady = isColorizerReady,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                StatusItemRow(
+                    category = "Upscaler (SR)",
+                    name = srTitle,
+                    status = srStatus,
+                    isReady = isSrReady,
+                )
+            }
+        }
+    }
+
+    if (showGuideDialog) {
+        AlertDialog(
+            onDismissRequest = { showGuideDialog = false },
+            title = { Text("How AI Translation & Enhancements Work") },
+            text = {
+                val scrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .height(380.dp)
+                        .verticalScroll(scrollState),
+                ) {
+                    Text(
+                        text = "1. Zero-Setup / 100% Free Translation:",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "• Set Translation Engine = 'Google Translate'\n• Set OCR Engine = 'MLKit (Built-in)'\n👉 Works immediately out-of-the-box! Zero downloads, zero API keys required.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "2. Highest-Quality AI Translation (LLM):",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "• Set Translation Engine = 'DeepSeek / OpenAI / Qwen'\n• Tap 'DeepSeek' preset button and enter your DeepSeek API key.\n• Set OCR Engine = 'Comic Text Detector (ONNX)' and download the model (~94MB).\n👉 Produces natural, context-aware manga dialogues with balloon grouping.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "3. On-Device Manga Colorizer:",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "• Enable Manga Colorization.\n• Download 'Manga Colorizer v2 (INT8)' (~61.7MB).\n• Open any downloaded manga, and tap the 'Colorize' button in the chapter list or reader.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "4. AI Super-Resolution (Upscaler):",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "• Enable Super-Resolution.\n• Download 'Anime4K ACNet' (22KB, ultra-fast 2x) or 'Real-ESRGAN' (4.8MB, 4x).\n• Tap the 'Super Resolution' button on any downloaded chapter to upscale all pages.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGuideDialog = false }) {
+                    Text("Got It")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun StatusItemRow(
+    category: String,
+    name: String,
+    status: String,
+    isReady: Boolean,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = if (isReady) MaterialTheme.colorScheme.surface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                shape = MaterialTheme.shapes.small,
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "$category: $name",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 
