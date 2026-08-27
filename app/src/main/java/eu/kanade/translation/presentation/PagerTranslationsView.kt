@@ -63,11 +63,14 @@ class PagerTranslationsView :
         val viewTL by viewTLState.collectAsState()
         val scale by scaleState.collectAsState()
         val pageBitmap by pageBitmapState.collectAsState()
+        val safeScale = if (scale.isFinite() && scale > 0f) scale else 1f
+        val safeX = if (viewTL.x.isFinite()) viewTL.x else 0f
+        val safeY = if (viewTL.y.isFinite()) viewTL.y else 0f
         Box(
             modifier = Modifier
-                .absoluteOffset(viewTL.x.pxToDp(), viewTL.y.pxToDp()),
+                .absoluteOffset(safeX.pxToDp(), safeY.pxToDp()),
         ) {
-            TextBlockContent(scale, pageBitmap)
+            TextBlockContent(safeScale, pageBitmap)
         }
     }
 

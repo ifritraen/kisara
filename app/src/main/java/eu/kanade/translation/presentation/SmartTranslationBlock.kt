@@ -77,16 +77,17 @@ fun SmartTranslationBlock(
     fontFamily: FontFamily,
     pageBitmap: android.graphics.Bitmap?,
 ) {
-    val rawWidth = max(block.width, 10f)
-    val rawHeight = max(block.height, 10f)
+    val safeScale = if (scaleFactor.isFinite() && scaleFactor > 0f) scaleFactor else 1f
+    val rawWidth = max(block.width.takeIf { it.isFinite() && it > 0f } ?: 10f, 10f)
+    val rawHeight = max(block.height.takeIf { it.isFinite() && it > 0f } ?: 10f, 10f)
 
-    val centroidX = block.x + block.width / 2f
-    val centroidY = block.y + block.height / 2f
+    val centroidX = (block.x.takeIf { it.isFinite() } ?: 0f) + rawWidth / 2f
+    val centroidY = (block.y.takeIf { it.isFinite() } ?: 0f) + rawHeight / 2f
 
-    val xPx = max(centroidX * scaleFactor - rawWidth * scaleFactor / 2f, 0f)
-    val yPx = max(centroidY * scaleFactor - rawHeight * scaleFactor / 2f, 0f)
-    val width = (rawWidth * scaleFactor).pxToDp()
-    val height = (rawHeight * scaleFactor).pxToDp()
+    val xPx = max(centroidX * safeScale - rawWidth * safeScale / 2f, 0f)
+    val yPx = max(centroidY * safeScale - rawHeight * safeScale / 2f, 0f)
+    val width = (rawWidth * safeScale).pxToDp()
+    val height = (rawHeight * safeScale).pxToDp()
 
     val density = LocalDensity.current
     val bgColor = remember(pageBitmap, block) { getBubbleBackgroundColor(pageBitmap, block) }
@@ -124,8 +125,8 @@ fun SmartTranslationBlock(
             textAlign = TextAlign.Center,
         )
 
-        val maxWidthPx = with(density) { width.toPx() }
-        val maxHeightPx = with(density) { height.toPx() }
+        val maxWidthPx = max(with(density) { width.toPx() }.takeIf { it.isFinite() } ?: 10f, 10f)
+        val maxHeightPx = max(with(density) { height.toPx() }.takeIf { it.isFinite() } ?: 10f, 10f)
 
         var low = 6
         var high = 36

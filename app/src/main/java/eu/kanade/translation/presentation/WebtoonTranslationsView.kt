@@ -71,8 +71,9 @@ class WebtoonTranslationsView :
                     }
                 },
         ) {
-            if (size == IntSize.Zero) return@Box
-            val scaleFactor = size.width / translation.imgWidth
+            if (size == IntSize.Zero || translation.imgWidth <= 0f) return@Box
+            val rawScale = size.width.toFloat() / translation.imgWidth
+            val scaleFactor = if (rawScale.isFinite() && rawScale > 0f) rawScale else 1f
             TextBlockContent(scaleFactor)
         }
     }

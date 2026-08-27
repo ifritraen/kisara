@@ -528,7 +528,11 @@ class ChapterTranslator(
                 }
             }
             // Serialize the Map and save to translations json file
-            Json.encodeToStream(pages, translationMangaDir.createFile(saveFile)!!.openOutputStream())
+            val targetJsonFile = translationMangaDir.findFile(saveFile) ?: translationMangaDir.createFile(saveFile)
+                ?: throw java.io.IOException("Cannot create translation file: $saveFile")
+            targetJsonFile.openOutputStream()!!.use { out ->
+                Json.encodeToStream(pages, out)
+            }
             translation.status = Translation.State.TRANSLATED
 
             // KMK -->

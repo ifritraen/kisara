@@ -30,9 +30,13 @@ class TranslationProvider(
      */
     internal fun getMangaDir(mangaTitle: String, source: Source): UniFile {
         try {
-            return translationDir!!
-                .createDirectory(getSourceDirName(source))!!
-                .createDirectory(getMangaDirName(mangaTitle))!!
+            val root = translationDir ?: throw Exception("Invalid translation directory")
+            val sourceDirName = getSourceDirName(source)
+            val mangaDirName = getMangaDirName(mangaTitle)
+            val sourceDir = root.findFile(sourceDirName) ?: root.createDirectory(sourceDirName)
+                ?: throw Exception("Could not create source translation directory")
+            return sourceDir.findFile(mangaDirName) ?: sourceDir.createDirectory(mangaDirName)
+                ?: throw Exception("Could not create manga translation directory")
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e) { "Invalid translation directory" }
             throw Exception(
@@ -50,8 +54,13 @@ class TranslationProvider(
      * @param source the source to query.
      */
     fun findSourceDir(source: Source): UniFile? {
-        val sourceDir = translationDir?.findFile(getSourceDirName(source))
-        return sourceDir
+        val dir = translationDir ?: return null
+        val sourceName = getSourceDirName(source)
+        return try {
+            dir.findFile(sourceName)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -61,8 +70,21 @@ class TranslationProvider(
      * @param source the source of the manga.
      */
     fun findMangaDir(mangaTitle: String, source: Source): UniFile? {
-        val sourceDir = findSourceDir(source)
-        return sourceDir?.findFile(getMangaDirName(mangaTitle))
+        val sourceDir = findSourceDir(source) ?: return null
+        val candidates = listOf(
+            getMangaDirName(mangaTitle),
+            DiskUtil.buildValidFilename(mangaTitle),
+            mangaTitle,
+        )
+        return candidates.asSequence()
+            .mapNotNull {
+                try {
+                    sourceDir.findFile(it)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            .firstOrNull()
     }
 
     /**
@@ -73,15 +95,27 @@ class TranslationProvider(
      * @param mangaTitle the title of the manga to query.
      * @param source the source of the chapter.
      */
-
     fun findTranslationFile(
         chapterName: String,
         chapterScanlator: String?,
         mangaTitle: String,
         source: Source,
     ): UniFile? {
-        val mangaDir = findMangaDir(mangaTitle, source)
-        return mangaDir?.findFile(getTranslationFileName(chapterName, chapterScanlator))
+        val mangaDir = findMangaDir(mangaTitle, source) ?: return null
+        val candidates = listOf(
+            getTranslationFileName(chapterName, chapterScanlator),
+            "${DiskUtil.buildValidFilename(chapterName)}.json",
+            "$chapterName.json",
+        )
+        return candidates.asSequence()
+            .mapNotNull {
+                try {
+                    mangaDir.findFile(it)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            .firstOrNull()
     }
 
     /**
