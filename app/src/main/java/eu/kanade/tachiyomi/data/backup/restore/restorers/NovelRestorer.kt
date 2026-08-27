@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import kotlinx.serialization.json.JsonObject
+import tachiyomi.data.StringListColumnAdapter
+import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.data.entries.novel.NovelMapper
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
@@ -105,7 +107,7 @@ class NovelRestorer(
             author = novel.author,
             description = novel.description,
             notes = novel.notes,
-            genre = novel.genre,
+            genre = novel.genre?.let(StringListColumnAdapter::encode),
             title = novel.title,
             status = novel.status,
             thumbnailUrl = novel.thumbnailUrl,
@@ -119,7 +121,7 @@ class NovelRestorer(
             coverLastModified = novel.coverLastModified,
             dateAdded = novel.dateAdded,
             novelId = novel.id,
-            updateStrategy = novel.updateStrategy,
+            updateStrategy = novel.updateStrategy.let(UpdateStrategyColumnAdapter::encode),
             version = novel.version,
             isSyncing = 1,
             pinned = novel.pinned,
@@ -131,7 +133,7 @@ class NovelRestorer(
                 customTitle = novel.customTitle,
                 customAuthor = novel.customAuthor,
                 customDescription = novel.customDescription,
-                customGenre = novel.customGenre,
+                customGenre = novel.customGenre?.let(StringListColumnAdapter::encode),
                 customStatus = novel.customStatus,
                 novelId = novel.id,
             )
@@ -171,7 +173,7 @@ class NovelRestorer(
                 customTitle = novel.customTitle,
                 customAuthor = novel.customAuthor,
                 customDescription = novel.customDescription,
-                customGenre = novel.customGenre,
+                customGenre = novel.customGenre?.let(StringListColumnAdapter::encode),
                 customStatus = novel.customStatus,
                 novelId = id,
             )

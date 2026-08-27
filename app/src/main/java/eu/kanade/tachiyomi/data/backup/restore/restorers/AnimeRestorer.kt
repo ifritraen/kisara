@@ -8,6 +8,9 @@ import eu.kanade.tachiyomi.data.backup.models.BackupEpisode
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import kotlinx.serialization.json.JsonObject
+import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
+import tachiyomi.data.FetchTypeColumnAdapter
+import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.entries.anime.AnimeMapper
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.track.anime.AnimeTrackMapper
@@ -112,7 +115,7 @@ class AnimeRestorer(
             author = anime.author,
             description = anime.description,
             notes = anime.notes,
-            genre = anime.genre,
+            genre = anime.genre?.let(StringListColumnAdapter::encode),
             title = anime.title,
             status = anime.status,
             thumbnailUrl = anime.thumbnailUrl,
@@ -128,10 +131,10 @@ class AnimeRestorer(
             backgroundLastModified = anime.backgroundLastModified,
             dateAdded = anime.dateAdded,
             animeId = anime.id,
-            updateStrategy = anime.updateStrategy,
+            updateStrategy = anime.updateStrategy.let(AnimeUpdateStrategyColumnAdapter::encode),
             version = anime.version,
             isSyncing = 1,
-            fetchType = anime.fetchType,
+            fetchType = anime.fetchType.let(FetchTypeColumnAdapter::encode),
             parentId = anime.parentId,
             seasonFlags = anime.seasonFlags,
             seasonNumber = anime.seasonNumber,
@@ -146,7 +149,7 @@ class AnimeRestorer(
                 customArtist = anime.customArtist,
                 customAuthor = anime.customAuthor,
                 customDescription = anime.customDescription,
-                customGenre = anime.customGenre,
+                customGenre = anime.customGenre?.let(StringListColumnAdapter::encode),
                 customStatus = anime.customStatus,
                 animeId = anime.id,
             )
@@ -195,7 +198,7 @@ class AnimeRestorer(
                 customArtist = anime.customArtist,
                 customAuthor = anime.customAuthor,
                 customDescription = anime.customDescription,
-                customGenre = anime.customGenre,
+                customGenre = anime.customGenre?.let(StringListColumnAdapter::encode),
                 customStatus = anime.customStatus,
                 animeId = id,
             )
