@@ -5,12 +5,10 @@ import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
-import tachiyomi.data.StringListColumnAdapter
-import tachiyomi.data.UpdateStrategyColumnAdapter
+import kotlinx.serialization.json.JsonObject
 import tachiyomi.data.entries.novel.NovelMapper
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
-import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.novel.data.NovelDatabase
@@ -25,7 +23,6 @@ class NovelRestorer(
 
     private val handler: NovelDatabaseHandler = Injekt.get(),
     private val getCategories: GetNovelCategories = Injekt.get(),
-    private val getNovel: GetNovel = Injekt.get(),
 ) {
 
     suspend fun sortByNew(backupNovels: List<BackupNovel>): List<BackupNovel> {
@@ -70,7 +67,9 @@ class NovelRestorer(
     }
 
     private suspend fun findExistingNovel(backupNovel: BackupNovel): Novel? {
-        return getNovel.await(backupNovel.url, backupNovel.source)
+        return handler.awaitOneOrNull { db ->
+            db.novelsQueries.getNovelByUrlAndSource(backupNovel.url, backupNovel.source, NovelMapper::mapNovel)
+        }
     }
 
     private fun restoreExistingNovel(db: NovelDatabase, novel: Novel, dbNovel: Novel): Novel {
@@ -106,7 +105,7 @@ class NovelRestorer(
             author = novel.author,
             description = novel.description,
             notes = novel.notes,
-            genre = novel.genre?.let(StringListColumnAdapter::encode),
+            genre = novel.genre,
             title = novel.title,
             status = novel.status,
             thumbnailUrl = novel.thumbnailUrl,
@@ -120,7 +119,7 @@ class NovelRestorer(
             coverLastModified = novel.coverLastModified,
             dateAdded = novel.dateAdded,
             novelId = novel.id,
-            updateStrategy = novel.updateStrategy.let(UpdateStrategyColumnAdapter::encode),
+            updateStrategy = novel.updateStrategy,
             version = novel.version,
             isSyncing = 1,
             pinned = novel.pinned,
@@ -132,7 +131,7 @@ class NovelRestorer(
                 customTitle = novel.customTitle,
                 customAuthor = novel.customAuthor,
                 customDescription = novel.customDescription,
-                customGenre = novel.customGenre?.let(StringListColumnAdapter::encode),
+                customGenre = novel.customGenre,
                 customStatus = novel.customStatus,
                 novelId = novel.id,
             )
@@ -172,7 +171,7 @@ class NovelRestorer(
                 customTitle = novel.customTitle,
                 customAuthor = novel.customAuthor,
                 customDescription = novel.customDescription,
-                customGenre = novel.customGenre?.let(StringListColumnAdapter::encode),
+                customGenre = novel.customGenre,
                 customStatus = novel.customStatus,
                 novelId = id,
             )
@@ -294,7 +293,7 @@ class NovelRestorer(
         db.novels_categoriesQueries.deleteNovelCategoryByNovelId(novel.id)
         if (categories.isNotEmpty()) {
             val dbCategories = db.novel_categoriesQueries.getCategories { id, name, order, flags, hidden, _, parentId ->
-                tachiyomi.domain.category.model.Category(id, name, order, flags, hidden == 1L, parentId)
+                tachiyomi.domain.category.model.Category(id, name, order, flags, parentId, hidden == 1L)
             }.executeAsList()
             val dbCategoriesByName = dbCategories.associateBy { it.name }
 
@@ -323,16 +322,17 @@ class NovelRestorer(
                         id = dbTrack.id,
                         novelId = novel.id,
                         syncId = track.syncId.toLong(),
-                        remoteId = if (track.mediaIdInt != 0) track.mediaIdInt.toLong() else track.mediaId,
+                        mediaId = if (track.mediaIdInt != 0) track.mediaIdInt.toLong() else track.mediaId,
                         libraryId = track.libraryId,
                         title = track.title,
                         lastChapterRead = max(dbTrack.lastChapterRead, track.lastChapterRead.toDouble()),
-                        totalChapters = track.totalChapters.toLong(),
+                        totalChapter = track.totalChapters.toLong(),
                         status = track.status.toLong(),
                         score = track.score.toDouble(),
-                        remoteUrl = track.trackingUrl,
+                        trackingUrl = track.trackingUrl,
                         startDate = track.startedReadingDate,
                         finishDate = track.finishedReadingDate,
+                        private = track.private,
                     )
                 } else {
                     db.novel_syncQueries.insert(
@@ -348,6 +348,7 @@ class NovelRestorer(
                         remoteUrl = track.trackingUrl,
                         startDate = track.startedReadingDate,
                         finishDate = track.finishedReadingDate,
+                        private = track.private,
                     )
                 }
             }
@@ -365,7 +366,7 @@ class NovelRestorer(
                     db.novel_historyQueries.upsert(
                         chapterId = chapter.id,
                         readAt = Date(hist.lastRead),
-                        sessionReadDuration = hist.readDuration,
+                        time_read = hist.readDuration,
                     )
                 }
             }
@@ -385,24 +386,28 @@ class NovelRestorer(
         sourceOrder: Long,
         dateFetch: Long,
         dateUpload: Long,
+        dateUploadRaw: String?,
         lastModifiedAt: Long,
         version: Long,
-        dateUploadRaw: String?,
+        @Suppress("UNUSED_PARAMETER")
+        isSyncing: Long,
+        memo: JsonObject,
     ) = NovelChapter(
         id = id,
         novelId = novelId,
-        url = url,
-        name = name,
-        scanlator = scanlator,
         read = read,
         bookmark = bookmark,
         lastPageRead = lastPageRead,
-        chapterNumber = chapterNumber,
-        sourceOrder = sourceOrder,
         dateFetch = dateFetch,
+        sourceOrder = sourceOrder,
+        url = url,
+        name = name,
         dateUpload = dateUpload,
+        chapterNumber = chapterNumber,
+        scanlator = scanlator,
         lastModifiedAt = lastModifiedAt,
         version = version,
         dateUploadRaw = dateUploadRaw,
+        memo = memo,
     )
 }

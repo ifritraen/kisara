@@ -5,10 +5,12 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupEpisode
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
+import kotlinx.serialization.json.JsonObject
 import tachiyomi.data.AnimeMapper
 import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
 import tachiyomi.data.FetchTypeColumnAdapter
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
+import tachiyomi.data.track.anime.AnimeTrackMapper
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
@@ -217,7 +219,7 @@ class AnimeRestorer(
     }
 
     private fun restoreEpisodes(db: AnimeDatabase, anime: Anime, backupEpisodes: List<BackupEpisode>) {
-        val dbEpisodes = db.episodesQueries.getEpisodesByAnimeId(anime.id, AnimeMapper::mapEpisode).executeAsList()
+        val dbEpisodes = db.episodesQueries.getEpisodesByAnimeId(anime.id, ::mapEpisode).executeAsList()
         val dbEpisodesByUrl = dbEpisodes.associateBy { it.url }
 
         val (existingEpisodes, newEpisodes) = backupEpisodes
@@ -339,7 +341,7 @@ class AnimeRestorer(
 
     private fun restoreAnimeTracking(db: AnimeDatabase, anime: Anime, tracks: List<BackupTracking>) {
         if (tracks.isNotEmpty()) {
-            val existingTracks = db.anime_syncQueries.getTracksByAnimeId(anime.id, AnimeMapper::mapTrack).executeAsList()
+            val existingTracks = db.anime_syncQueries.getTracksByAnimeId(anime.id, AnimeTrackMapper::mapTrack).executeAsList()
             val existingTracksBySyncId = existingTracks.associateBy { it.trackerId }
 
             for (track in tracks) {
@@ -349,16 +351,17 @@ class AnimeRestorer(
                         id = dbTrack.id,
                         animeId = anime.id,
                         syncId = track.syncId.toLong(),
-                        remoteId = if (track.mediaIdInt != 0) track.mediaIdInt.toLong() else track.mediaId,
+                        mediaId = if (track.mediaIdInt != 0) track.mediaIdInt.toLong() else track.mediaId,
                         libraryId = track.libraryId,
                         title = track.title,
                         lastEpisodeSeen = max(dbTrack.lastEpisodeSeen, track.lastChapterRead.toDouble()),
                         totalEpisodes = track.totalChapters.toLong(),
                         status = track.status.toLong(),
                         score = track.score.toDouble(),
-                        remoteUrl = track.trackingUrl,
+                        trackingUrl = track.trackingUrl,
                         startDate = track.startedReadingDate,
                         finishDate = track.finishedReadingDate,
+                        private = track.private,
                     )
                 } else {
                     db.anime_syncQueries.insert(
@@ -374,6 +377,7 @@ class AnimeRestorer(
                         remoteUrl = track.trackingUrl,
                         startDate = track.startedReadingDate,
                         finishDate = track.finishedReadingDate,
+                        private = track.private,
                     )
                 }
             }
@@ -382,7 +386,7 @@ class AnimeRestorer(
 
     private fun restoreAnimeHistory(db: AnimeDatabase, history: List<BackupHistory>, animeId: Long) {
         if (history.isNotEmpty()) {
-            val episodes = db.episodesQueries.getEpisodesByAnimeId(animeId, AnimeMapper::mapEpisode).executeAsList()
+            val episodes = db.episodesQueries.getEpisodesByAnimeId(animeId, ::mapEpisode).executeAsList()
             val episodesByUrl = episodes.associateBy { it.url }
 
             for (hist in history) {
@@ -396,4 +400,48 @@ class AnimeRestorer(
             }
         }
     }
+
+    private fun mapEpisode(
+        id: Long,
+        animeId: Long,
+        url: String,
+        name: String,
+        scanlator: String?,
+        seen: Boolean,
+        bookmark: Boolean,
+        lastSecondSeen: Long,
+        totalSeconds: Long,
+        episodeNumber: Double,
+        sourceOrder: Long,
+        dateFetch: Long,
+        dateUpload: Long,
+        lastModifiedAt: Long,
+        version: Long,
+        @Suppress("UNUSED_PARAMETER")
+        isSyncing: Long,
+        summary: String?,
+        previewUrl: String?,
+        fillermark: Boolean,
+        memo: JsonObject,
+    ): Episode = Episode(
+        id = id,
+        animeId = animeId,
+        seen = seen,
+        bookmark = bookmark,
+        fillermark = fillermark,
+        lastSecondSeen = lastSecondSeen,
+        totalSeconds = totalSeconds,
+        dateFetch = dateFetch,
+        sourceOrder = sourceOrder,
+        url = url,
+        name = name,
+        dateUpload = dateUpload,
+        episodeNumber = episodeNumber,
+        scanlator = scanlator,
+        summary = summary,
+        previewUrl = previewUrl,
+        lastModifiedAt = lastModifiedAt,
+        version = version,
+        memo = memo,
+    )
 }
