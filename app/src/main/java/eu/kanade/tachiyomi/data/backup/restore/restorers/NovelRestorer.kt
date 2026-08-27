@@ -133,7 +133,7 @@ class NovelRestorer(
                 customTitle = novel.customTitle,
                 customAuthor = novel.customAuthor,
                 customDescription = novel.customDescription,
-                customGenre = novel.customGenre?.let(StringListColumnAdapter::encode),
+                customGenre = novel.customGenre,
                 customStatus = novel.customStatus,
                 novelId = novel.id,
             )
@@ -173,7 +173,7 @@ class NovelRestorer(
                 customTitle = novel.customTitle,
                 customAuthor = novel.customAuthor,
                 customDescription = novel.customDescription,
-                customGenre = novel.customGenre?.let(StringListColumnAdapter::encode),
+                customGenre = novel.customGenre,
                 customStatus = novel.customStatus,
                 novelId = id,
             )

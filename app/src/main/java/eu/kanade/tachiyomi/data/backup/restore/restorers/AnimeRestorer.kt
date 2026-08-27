@@ -149,7 +149,7 @@ class AnimeRestorer(
                 customArtist = anime.customArtist,
                 customAuthor = anime.customAuthor,
                 customDescription = anime.customDescription,
-                customGenre = anime.customGenre?.let(StringListColumnAdapter::encode),
+                customGenre = anime.customGenre,
                 customStatus = anime.customStatus,
                 animeId = anime.id,
             )
@@ -198,7 +198,7 @@ class AnimeRestorer(
                 customArtist = anime.customArtist,
                 customAuthor = anime.customAuthor,
                 customDescription = anime.customDescription,
-                customGenre = anime.customGenre?.let(StringListColumnAdapter::encode),
+                customGenre = anime.customGenre,
                 customStatus = anime.customStatus,
                 animeId = id,
             )
