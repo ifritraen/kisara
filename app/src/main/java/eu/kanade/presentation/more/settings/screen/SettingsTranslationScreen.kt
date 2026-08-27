@@ -638,8 +638,13 @@ private fun PipelineStatusOverviewCard(
             else -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.MANGA_COLORIZER_V2
         }
         val ready = modelManager.isModelDownloaded(modelType)
-        if (ready) Triple(modelType.displayName, "Ready • Local ONNX Model Loaded", true)
-        else Triple(modelType.displayName, "⚠️ Download Needed • Download model below", false)
+        if (ready) {
+            val size = formatBytes(modelManager.getModelFile(modelType).length())
+            Triple(modelType.displayName, "Ready • Local ONNX Model Loaded ($size)", true)
+        } else {
+            val expected = formatBytes(modelType.minSize)
+            Triple(modelType.displayName, "⚠️ Download Needed • Download model below (~$expected)", false)
+        }
     }
 
     // 4. Super-Resolution Status
@@ -652,8 +657,13 @@ private fun PipelineStatusOverviewCard(
             eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.ANIME4K_ACNET
         }
         val ready = modelManager.isModelDownloaded(modelType)
-        if (ready) Triple(modelType.displayName, "Ready • Local ONNX Model Loaded", true)
-        else Triple(modelType.displayName, "⚠️ Download Needed • Download model below", false)
+        if (ready) {
+            val size = formatBytes(modelManager.getModelFile(modelType).length())
+            Triple(modelType.displayName, "Ready • Local ONNX Model Loaded ($size)", true)
+        } else {
+            val expected = formatBytes(modelType.minSize)
+            Triple(modelType.displayName, "⚠️ Download Needed • Download model below (~$expected)", false)
+        }
     }
 
     var showGuideDialog by remember { mutableStateOf(false) }
@@ -818,11 +828,18 @@ private fun StatusItemRow(
     }
 }
 
-private fun getFolderSizeMb(dir: File): Double {
-    if (!dir.exists()) return 0.0
-    val files = dir.listFiles() ?: return 0.0
-    val bytes = files.sumOf { it.length() }
-    return bytes.toDouble() / (1024.0 * 1024.0)
+private fun formatBytes(bytes: Long): String {
+    return when {
+        bytes <= 0L -> "0 KB"
+        bytes < 1024L * 1024L -> String.format("%.1f KB", bytes.toDouble() / 1024.0)
+        else -> String.format("%.1f MB", bytes.toDouble() / (1024.0 * 1024.0))
+    }
+}
+
+private fun getFolderSizeBytes(dir: File): Long {
+    if (!dir.exists()) return 0L
+    val files = dir.listFiles() ?: return 0L
+    return files.sumOf { it.length() }
 }
 
 private fun deleteFolder(dir: File) {
@@ -843,13 +860,13 @@ private fun ModelDownloadPreference(
     val scope = rememberCoroutineScope()
     val modelDir = remember { File(context.filesDir, modelDirName) }
 
-    var sizeMb by remember { mutableStateOf(getFolderSizeMb(modelDir)) }
+    var sizeBytes by remember { mutableStateOf(getFolderSizeBytes(modelDir)) }
     var downloadStatus by remember { mutableStateOf("") }
     var isDownloading by remember { mutableStateOf(false) }
     var errorDialogText by remember { mutableStateOf<String?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    val isDownloaded = sizeMb > 0.1
+    val isDownloaded = sizeBytes > 1024L
 
     Column(
         modifier = Modifier
@@ -871,7 +888,7 @@ private fun ModelDownloadPreference(
                     text = if (isDownloading) {
                         downloadStatus
                     } else if (isDownloaded) {
-                        "Downloaded (${String.format("%.2f", sizeMb)} MB)"
+                        "Downloaded (${formatBytes(sizeBytes)})"
                     } else {
                         subtitle
                     },
@@ -882,7 +899,7 @@ private fun ModelDownloadPreference(
             if (isDownloaded && !isDownloading) {
                 IconButton(onClick = {
                     deleteFolder(modelDir)
-                    sizeMb = getFolderSizeMb(modelDir)
+                    sizeBytes = getFolderSizeBytes(modelDir)
                     context.toast("Model files deleted")
                 }) {
                     Icon(
@@ -911,11 +928,11 @@ private fun ModelDownloadPreference(
                             onDownload { progress ->
                                 downloadStatus = progress
                             }
-                            sizeMb = getFolderSizeMb(modelDir)
+                            sizeBytes = getFolderSizeBytes(modelDir)
                             context.toast("Download complete!")
                         } catch (e: CancellationException) {
                             context.toast("Download cancelled")
-                            sizeMb = getFolderSizeMb(modelDir) // Refresh size to show clean state
+                            sizeBytes = getFolderSizeBytes(modelDir) // Refresh size to show clean state
                         } catch (e: Exception) {
                             errorDialogText = e.stackTraceToString()
                             context.toast("Download failed!")
@@ -1216,14 +1233,15 @@ private fun ModelDownloadCard(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     val file = modelManager.getModelFile(modelType)
-                    val sizeMb = if (file.exists()) file.length().toDouble() / (1024 * 1024) else 0.0
+                    val sizeText = if (file.exists()) formatBytes(file.length()) else "0 KB"
+                    val expectedSizeText = formatBytes(modelType.minSize)
                     Text(
                         text = if (isDownloading) {
                             if (downloadStatus.isNotBlank()) downloadStatus else "Downloading (${(downloadProgress * 100).toInt()}%)"
                         } else if (isDownloaded) {
-                            "Ready (${String.format("%.1f", sizeMb)} MB)"
+                            "Ready ($sizeText)"
                         } else {
-                            "Not downloaded (~${modelType.minSize / (1024 * 1024)} MB)"
+                            "Not downloaded (~$expectedSizeText)"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
