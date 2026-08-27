@@ -195,7 +195,11 @@ class NovelRestorer(
     }
 
     private fun restoreChapters(db: NovelDatabase, novel: Novel, backupChapters: List<BackupNovelChapter>) {
-        val dbChapters = db.novel_chaptersQueries.getChaptersByNovelId(novel.id, ::mapNovelChapter).executeAsList()
+        val dbChapters = db.novel_chaptersQueries.getChaptersByNovelId(
+            novelId = novel.id,
+            applyScanlatorFilter = 0L,
+            mapper = ::mapNovelChapter,
+        ).executeAsList()
         val dbChaptersByUrl = dbChapters.associateBy { it.url }
 
         val (existingChapters, newChapters) = backupChapters
@@ -357,7 +361,11 @@ class NovelRestorer(
 
     private fun restoreNovelHistory(db: NovelDatabase, history: List<BackupHistory>, novelId: Long) {
         if (history.isNotEmpty()) {
-            val chapters = db.novel_chaptersQueries.getChaptersByNovelId(novelId, ::mapNovelChapter).executeAsList()
+            val chapters = db.novel_chaptersQueries.getChaptersByNovelId(
+                novelId = novelId,
+                applyScanlatorFilter = 0L,
+                mapper = ::mapNovelChapter,
+            ).executeAsList()
             val chaptersByUrl = chapters.associateBy { it.url }
 
             for (hist in history) {

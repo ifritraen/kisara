@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.protobuf.ProtoNumber
 import tachiyomi.domain.items.episode.model.Episode
 
@@ -48,7 +49,28 @@ data class BackupEpisode(
     }
 }
 
-val backupEpisodeMapper = {
+val backupEpisodeMapper: (
+    Long,
+    Long,
+    String,
+    String,
+    String?,
+    Boolean,
+    Boolean,
+    Long,
+    Long,
+    Double,
+    Long,
+    Long,
+    Long,
+    Long,
+    Long,
+    Long,
+    String?,
+    String?,
+    Boolean,
+    JsonObject,
+) -> BackupEpisode = {
         _: Long,
         _: Long,
         url: String,
@@ -56,7 +78,6 @@ val backupEpisodeMapper = {
         scanlator: String?,
         seen: Boolean,
         bookmark: Boolean,
-        fillermark: Boolean,
         lastSecondSeen: Long,
         totalSeconds: Long,
         episodeNumber: Double,
@@ -65,8 +86,11 @@ val backupEpisodeMapper = {
         dateUpload: Long,
         lastModifiedAt: Long,
         version: Long,
+        _: Long,
         summary: String?,
         previewUrl: String?,
+        fillermark: Boolean,
+        _: JsonObject,
     ->
     BackupEpisode(
         url = url,

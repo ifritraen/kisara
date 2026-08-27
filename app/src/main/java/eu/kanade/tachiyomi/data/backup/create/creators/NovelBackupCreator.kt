@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.data.backup.create.creators
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
-import eu.kanade.tachiyomi.data.backup.models.BackupNovelChapter
 import eu.kanade.tachiyomi.data.backup.models.backupNovelChapterMapper
 import eu.kanade.tachiyomi.data.backup.models.backupTrackMapper
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
@@ -29,14 +28,16 @@ class NovelBackupCreator(
         val novelObject = novel.toBackupNovel()
 
         if (options.chapters) {
-            handler.awaitList { db ->
+            val chapters = handler.awaitList { db ->
                 db.novel_chaptersQueries.getChaptersByNovelId(
                     novelId = novel.id,
+                    applyScanlatorFilter = 0L,
                     mapper = backupNovelChapterMapper,
                 )
             }
-                .takeUnless(List<BackupNovelChapter>::isEmpty)
-                ?.let { novelObject.chapters = it }
+            if (chapters.isNotEmpty()) {
+                novelObject.chapters = chapters
+            }
         }
 
         if (options.categories) {

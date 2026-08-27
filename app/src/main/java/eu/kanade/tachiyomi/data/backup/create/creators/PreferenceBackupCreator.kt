@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.data.backup.create.creators
 
+import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import eu.kanade.tachiyomi.animesource.preferenceKey
+import eu.kanade.tachiyomi.animesource.sourcePreferences
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
 import eu.kanade.tachiyomi.data.backup.models.BooleanPreferenceValue
@@ -8,11 +11,16 @@ import eu.kanade.tachiyomi.data.backup.models.IntPreferenceValue
 import eu.kanade.tachiyomi.data.backup.models.LongPreferenceValue
 import eu.kanade.tachiyomi.data.backup.models.StringPreferenceValue
 import eu.kanade.tachiyomi.data.backup.models.StringSetPreferenceValue
+import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
+import eu.kanade.tachiyomi.novelsource.preferenceKey
+import eu.kanade.tachiyomi.novelsource.sourcePreferences
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.preferenceKey
 import eu.kanade.tachiyomi.source.sourcePreferences
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -41,9 +49,9 @@ class PreferenceBackupCreator(
     }
 
     fun createAnimeSource(includePrivatePreferences: Boolean): List<BackupSourcePreferences> {
-        val animeSourceManager = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>()
+        val animeSourceManager = Injekt.get<AnimeSourceManager>()
         return animeSourceManager.getCatalogueSources()
-            .filterIsInstance<eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource>()
+            .filterIsInstance<ConfigurableAnimeSource>()
             .map {
                 BackupSourcePreferences(
                     it.preferenceKey(),
@@ -55,9 +63,9 @@ class PreferenceBackupCreator(
     }
 
     fun createNovelSource(includePrivatePreferences: Boolean): List<BackupSourcePreferences> {
-        val novelSourceManager = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>()
+        val novelSourceManager = Injekt.get<NovelSourceManager>()
         return novelSourceManager.getCatalogueSources()
-            .filterIsInstance<eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource>()
+            .filterIsInstance<ConfigurableNovelSource>()
             .map {
                 BackupSourcePreferences(
                     it.preferenceKey(),

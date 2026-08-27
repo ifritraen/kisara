@@ -29,14 +29,15 @@ class AnimeBackupCreator(
         val animeObject = anime.toBackupAnime()
 
         if (options.chapters) {
-            handler.awaitList { db ->
+            val episodes = handler.awaitList { db ->
                 db.episodesQueries.getEpisodesByAnimeId(
                     animeId = anime.id,
                     mapper = backupEpisodeMapper,
                 )
             }
-                .takeUnless(List<BackupEpisode>::isEmpty)
-                ?.let { animeObject.episodes = it }
+            if (episodes.isNotEmpty()) {
+                animeObject.episodes = episodes
+            }
         }
 
         if (options.categories) {

@@ -1,18 +1,17 @@
 package eu.kanade.tachiyomi.data.backup.restore.restorers
 
+import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
+import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupEpisode
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import kotlinx.serialization.json.JsonObject
-import tachiyomi.data.AnimeMapper
-import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
-import tachiyomi.data.FetchTypeColumnAdapter
+import tachiyomi.data.entries.anime.AnimeMapper
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.track.anime.AnimeTrackMapper
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
-import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.mi.data.AnimeDatabase
@@ -27,7 +26,6 @@ class AnimeRestorer(
 
     private val handler: AnimeDatabaseHandler = Injekt.get(),
     private val getCategories: GetAnimeCategories = Injekt.get(),
-    private val getAnime: GetAnime = Injekt.get(),
 ) {
 
     suspend fun sortByNew(backupAnimes: List<BackupAnime>): List<BackupAnime> {
@@ -72,7 +70,9 @@ class AnimeRestorer(
     }
 
     private suspend fun findExistingAnime(backupAnime: BackupAnime): Anime? {
-        return getAnime.await(backupAnime.url, backupAnime.source)
+        return handler.awaitOneOrNull { db ->
+            db.animesQueries.getAnimeByUrlAndSource(backupAnime.url, backupAnime.source, AnimeMapper::mapAnime)
+        }
     }
 
     private fun restoreExistingAnime(db: AnimeDatabase, anime: Anime, dbAnime: Anime): Anime {
@@ -128,10 +128,10 @@ class AnimeRestorer(
             backgroundLastModified = anime.backgroundLastModified,
             dateAdded = anime.dateAdded,
             animeId = anime.id,
-            updateStrategy = anime.updateStrategy.let(AnimeUpdateStrategyColumnAdapter::encode),
+            updateStrategy = anime.updateStrategy,
             version = anime.version,
             isSyncing = 1,
-            fetchType = anime.fetchType.let(FetchTypeColumnAdapter::encode),
+            fetchType = anime.fetchType,
             parentId = anime.parentId,
             seasonFlags = anime.seasonFlags,
             seasonNumber = anime.seasonNumber,
@@ -325,7 +325,9 @@ class AnimeRestorer(
     ) {
         db.animes_categoriesQueries.deleteAnimeCategoryByAnimeId(anime.id)
         if (categories.isNotEmpty()) {
-            val dbCategories = db.categoriesQueries.getCategories(AnimeMapper::mapCategory).executeAsList()
+            val dbCategories = db.categoriesQueries.getCategories { id, name, order, flags, hidden, _, parentId ->
+                tachiyomi.domain.category.model.Category(id, name, order, flags, parentId, hidden == 1L)
+            }.executeAsList()
             val dbCategoriesByName = dbCategories.associateBy { it.name }
 
             val animeCategories = categories.mapNotNull { categoryOrder ->

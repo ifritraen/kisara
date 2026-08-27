@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.protobuf.ProtoNumber
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
@@ -42,7 +43,25 @@ data class BackupNovelChapter(
     }
 }
 
-val backupNovelChapterMapper = {
+val backupNovelChapterMapper: (
+    Long,
+    Long,
+    String,
+    String,
+    String?,
+    Boolean,
+    Boolean,
+    Long,
+    Double,
+    Long,
+    Long,
+    Long,
+    String?,
+    Long,
+    Long,
+    Long,
+    JsonObject,
+) -> BackupNovelChapter = {
         _: Long,
         _: Long,
         url: String,
@@ -55,9 +74,11 @@ val backupNovelChapterMapper = {
         sourceOrder: Long,
         dateFetch: Long,
         dateUpload: Long,
+        dateUploadRaw: String?,
         lastModifiedAt: Long,
         version: Long,
-        dateUploadRaw: String?,
+        _: Long,
+        _: JsonObject,
     ->
     BackupNovelChapter(
         url = url,
