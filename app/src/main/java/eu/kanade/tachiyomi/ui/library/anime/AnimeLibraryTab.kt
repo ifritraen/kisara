@@ -269,6 +269,21 @@ data object AnimeLibraryTab : Tab {
                     screenModel.activeCategoryIndex = index
                 }
             }
+            launch {
+                eu.kanade.tachiyomi.ui.library.LibraryTab.selectSubcategoryEvent.receiveAsFlow().collectLatest { subId ->
+                    if (subId != null) {
+                        val sub = state.categories.find { it.id == subId }
+                        if (sub?.parentId != null) {
+                            val pIndex = state.categories.indexOfFirst { it.id == sub.parentId }
+                            if (pIndex != -1) {
+                                previousCategoryIndex = pIndex
+                                screenModel.activeCategoryIndex = pIndex
+                            }
+                        }
+                    }
+                    activeSubcategoryId = subId
+                }
+            }
         }
 
         val categoryBarPinnedPref = libraryPreferences.categoryBarPinned()

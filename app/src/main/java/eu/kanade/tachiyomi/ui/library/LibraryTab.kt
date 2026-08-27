@@ -174,6 +174,7 @@ import uy.kohesive.injekt.api.get
 data object LibraryTab : Tab {
     val toggleCategoryBarEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val selectCategoryEvent = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
+    val selectSubcategoryEvent = Channel<Long?>(1, BufferOverflow.DROP_OLDEST)
     val searchEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val filterSettingsEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val syncEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
@@ -308,6 +309,21 @@ data object LibraryTab : Tab {
             launch {
                 selectCategoryEvent.receiveAsFlow().collectLatest { index ->
                     screenModel.updateActiveCategoryIndex(index)
+                }
+            }
+            launch {
+                selectSubcategoryEvent.receiveAsFlow().collectLatest { subId ->
+                    if (subId != null) {
+                        val sub = state.categories.find { it.id == subId }
+                        if (sub?.parentId != null) {
+                            val pIndex = state.categories.indexOfFirst { it.id == sub.parentId }
+                            if (pIndex != -1) {
+                                previousCategoryIndex = pIndex
+                                screenModel.updateActiveCategoryIndex(pIndex)
+                            }
+                        }
+                    }
+                    activeSubcategoryId = subId
                 }
             }
             launch {
