@@ -256,6 +256,7 @@ object HomeScreen : Screen() {
         val subTabButtonBounds = remember { mutableStateMapOf<String, ButtonActionBounds>() }
         var hoveredButtonKey by remember { mutableStateOf<String?>(null) }
         var popupSelectedCategoryId by remember { mutableStateOf<Long?>(null) }
+        var popupSelectedSubcategoryId by remember { mutableStateOf<Long?>(null) }
         var categoryToEdit by remember { mutableStateOf<Category?>(null) }
         val categoriesState by produceState<List<Category>>(emptyList(), activeMediaType) {
             when (activeMediaType) {
@@ -392,10 +393,18 @@ object HomeScreen : Screen() {
                                                         subTabButtonBounds = subTabButtonBounds,
                                                         onHover = { key ->
                                                             hoveredButtonKey = key
-                                                            if (key != null && key.startsWith("Library_") && !key.startsWith("Library_sub_")) {
-                                                                val catId = key.removePrefix("Library_").toLongOrNull()
-                                                                if (catId != null) {
-                                                                    popupSelectedCategoryId = catId
+                                                            if (key != null) {
+                                                                if (key.startsWith("Library_sub_")) {
+                                                                    val subId = key.removePrefix("Library_sub_").toLongOrNull()
+                                                                    if (subId != null) {
+                                                                        popupSelectedSubcategoryId = subId
+                                                                    }
+                                                                } else if (key.startsWith("Library_")) {
+                                                                    val catId = key.removePrefix("Library_").toLongOrNull()
+                                                                    if (catId != null) {
+                                                                        popupSelectedCategoryId = catId
+                                                                        popupSelectedSubcategoryId = null
+                                                                    }
                                                                 }
                                                             }
                                                         },
@@ -516,7 +525,8 @@ object HomeScreen : Screen() {
                                                 .groupBy { it.parentId }
                                                 .mapValues { entry -> entry.value.sortedBy { it.order } }
                                         }
-                                        val subcategories = popupSelectedCategoryId?.let { childrenByParent[it] }.orEmpty()
+                                        val selectedParentId = popupSelectedCategoryId ?: parentCategories.firstOrNull()?.id
+                                        val subcategories = selectedParentId?.let { childrenByParent[it] }.orEmpty()
 
                                         val effectiveCornerRadius = if (syncControlsWithDockRadius) {
                                             uiPreferences.bottomBarCornerRadius().collectAsState().value.dp
@@ -553,14 +563,21 @@ object HomeScreen : Screen() {
                                                                 // "All" button
                                                                 SubTabButton(
                                                                     text = "All",
-                                                                    selected = popupSelectedCategoryId == null,
+                                                                    selected = popupSelectedSubcategoryId == null,
                                                                     onLongClick = {
-                                                                        parentCategories.firstOrNull()?.let { editCategory(it) }
+                                                                        parentCategories.firstOrNull { it.id == selectedParentId }?.let { editCategory(it) }
                                                                         if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                     },
                                                                 ) {
-                                                                    popupSelectedCategoryId = null
+                                                                    popupSelectedSubcategoryId = null
                                                                     tabNavigator.current = LibraryTab
+                                                                    selectedParentId?.let { pId ->
+                                                                        val parentIndex = categoriesState.indexOfFirst { it.id == pId }
+                                                                        if (parentIndex != -1) {
+                                                                            LibraryTab.selectCategoryEvent.trySend(parentIndex)
+                                                                        }
+                                                                    }
+                                                                    LibraryTab.selectSubcategoryEvent.trySend(null)
                                                                     if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                 }
 
@@ -568,7 +585,7 @@ object HomeScreen : Screen() {
                                                                     val key = "Library_sub_${sub.id}"
                                                                     SubTabButton(
                                                                         text = sub.visualName,
-                                                                        selected = popupSelectedCategoryId == sub.id,
+                                                                        selected = popupSelectedSubcategoryId == sub.id,
                                                                         hovered = hoveredButtonKey == key,
                                                                         onLongClick = {
                                                                             editCategory(sub)
@@ -576,21 +593,16 @@ object HomeScreen : Screen() {
                                                                         },
                                                                         modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                             subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                popupSelectedSubcategoryId = sub.id
                                                                                 tabNavigator.current = LibraryTab
-                                                                                val actualIndex = categoriesState.indexOfFirst { it.id == sub.id }
-                                                                                if (actualIndex != -1) {
-                                                                                    LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                                                                }
+                                                                                LibraryTab.selectSubcategoryEvent.trySend(sub.id)
                                                                                 if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                             }
                                                                         },
                                                                     ) {
-                                                                        popupSelectedCategoryId = sub.id
+                                                                        popupSelectedSubcategoryId = sub.id
                                                                         tabNavigator.current = LibraryTab
-                                                                        val actualIndex = categoriesState.indexOfFirst { it.id == sub.id }
-                                                                        if (actualIndex != -1) {
-                                                                            LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                                                        }
+                                                                        LibraryTab.selectSubcategoryEvent.trySend(sub.id)
                                                                         if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                     }
                                                                 }
@@ -607,7 +619,7 @@ object HomeScreen : Screen() {
                                                                 val key = "Library_${category.id}"
                                                                 SubTabButton(
                                                                     text = category.visualName,
-                                                                    selected = popupSelectedCategoryId == category.id,
+                                                                    selected = selectedParentId == category.id,
                                                                     hovered = hoveredButtonKey == key,
                                                                     onLongClick = {
                                                                         editCategory(category)
@@ -615,21 +627,26 @@ object HomeScreen : Screen() {
                                                                     },
                                                                     modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                         subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                            popupSelectedCategoryId = category.id
+                                                                            popupSelectedSubcategoryId = null
                                                                             tabNavigator.current = LibraryTab
                                                                             val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
                                                                             if (actualIndex != -1) {
                                                                                 LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                             }
+                                                                            LibraryTab.selectSubcategoryEvent.trySend(null)
                                                                             if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                         }
                                                                     },
                                                                 ) {
                                                                     popupSelectedCategoryId = category.id
+                                                                    popupSelectedSubcategoryId = null
                                                                     tabNavigator.current = LibraryTab
                                                                     val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
                                                                     if (actualIndex != -1) {
                                                                         LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                     }
+                                                                    LibraryTab.selectSubcategoryEvent.trySend(null)
                                                                     if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                 }
                                                             }
@@ -1127,10 +1144,18 @@ object HomeScreen : Screen() {
                                                                         scope = scope,
                                                                         onHover = { key ->
                                                                             hoveredButtonKey = key
-                                                                            if (key != null && key.startsWith("Library_") && !key.startsWith("Library_sub_")) {
-                                                                                val catId = key.removePrefix("Library_").toLongOrNull()
-                                                                                if (catId != null) {
-                                                                                    popupSelectedCategoryId = catId
+                                                                            if (key != null) {
+                                                                                if (key.startsWith("Library_sub_")) {
+                                                                                    val subId = key.removePrefix("Library_sub_").toLongOrNull()
+                                                                                    if (subId != null) {
+                                                                                        popupSelectedSubcategoryId = subId
+                                                                                    }
+                                                                                } else if (key.startsWith("Library_")) {
+                                                                                    val catId = key.removePrefix("Library_").toLongOrNull()
+                                                                                    if (catId != null) {
+                                                                                        popupSelectedCategoryId = catId
+                                                                                        popupSelectedSubcategoryId = null
+                                                                                    }
                                                                                 }
                                                                             }
                                                                         },
