@@ -9,10 +9,10 @@ import eu.kanade.tachiyomi.data.ai.SuperResolutionEngine
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.storage.DiskUtil
-import eu.kanade.tachiyomi.util.storage.archiveReader
 import eu.kanade.translation.model.Translation
-import tachiyomi.core.common.util.lang.compareToCaseInsensitiveNaturalOrder
+import mihon.core.archive.archiveReader
 import tachiyomi.core.common.util.system.ImageUtil
 import java.io.InputStream
 import kotlinx.coroutines.CancellationException
