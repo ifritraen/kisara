@@ -10,7 +10,11 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.storage.DiskUtil
+import eu.kanade.tachiyomi.util.storage.archiveReader
 import eu.kanade.translation.model.Translation
+import tachiyomi.core.common.util.lang.compareToCaseInsensitiveNaturalOrder
+import tachiyomi.core.common.util.system.ImageUtil
+import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -130,7 +134,7 @@ class ColorizerManager(
                 val intensity = translationPreferences.colorizerIntensity().get().coerceIn(0.3f, 2.0f)
                 val useNnapi = translationPreferences.colorizerUseNnapi().get()
 
-                // Locate downloaded chapter directory
+                // Locate downloaded chapter directory / archive
                 val chapterDir = downloadProvider.findChapterDir(
                     chapterName = next.chapter.name,
                     chapterScanlator = next.chapter.scanlator,
@@ -149,21 +153,18 @@ class ColorizerManager(
                 val outChapterDir = mangaDir.findFile(chapterDirName) ?: mangaDir.createDirectory(chapterDirName)
                     ?: throw IllegalStateException("Failed to create colorizer output directory")
 
-                val imageFiles = chapterDir.listFiles()?.filter { file ->
-                    val name = file.name.orEmpty().lowercase()
-                    name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".webp")
-                } ?: emptyList()
+                val pages = getChapterPages(chapterDir)
 
-                if (imageFiles.isEmpty()) {
+                if (pages.isEmpty()) {
                     throw IllegalStateException("No image files in downloaded chapter.")
                 }
 
-                for ((idx, file) in imageFiles.withIndex()) {
+                for ((idx, pagePair) in pages.withIndex()) {
                     ensureActive()
-                    val pageName = file.name ?: "page_$idx.jpg"
-                    val outFile = outChapterDir.createFile(pageName) ?: continue
+                    val pageName = pagePair.first.substringAfterLast("/")
+                    val outFile = outChapterDir.findFile(pageName) ?: outChapterDir.createFile(pageName) ?: continue
 
-                    file.openInputStream()?.use { inputStream ->
+                    pagePair.second().use { inputStream ->
                         val inputBitmap = BitmapFactory.decodeStream(inputStream)
                         if (inputBitmap != null) {
                             val colorizedBitmap = colorizeEngine.colorize(
@@ -287,6 +288,39 @@ class ColorizerManager(
     private fun getChapterDirName(chapterName: String, scanlator: String?): String {
         val name = if (scanlator.isNullOrBlank()) chapterName else "$chapterName - $scanlator"
         return DiskUtil.buildValidFilename(name)
+    }
+
+    private fun getChapterPages(chapterPath: UniFile): List<Pair<String, () -> InputStream>> {
+        if (chapterPath.isFile) {
+            val entryNames = chapterPath.archiveReader(context).use { reader ->
+                reader.useEntries { entries ->
+                    entries.filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
+                        .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
+                        .map { it.name }
+                        .toList()
+                }
+            }
+            return entryNames.map { name ->
+                Pair(name) {
+                    val r = chapterPath.archiveReader(context)
+                    val stream = r.getInputStream(name)
+                        ?: throw java.io.FileNotFoundException("Entry $name not found in archive")
+                    object : java.io.FilterInputStream(stream) {
+                        override fun close() {
+                            try {
+                                super.close()
+                            } finally {
+                                r.close()
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            return chapterPath.listFiles()?.filter { ImageUtil.isImage(it.name) }?.map { entry ->
+                Pair(entry.name ?: "page.jpg") { entry.openInputStream()!! }
+            } ?: emptyList()
+        }
     }
 
     fun statusFlow(): Flow<Translation> = queueState
