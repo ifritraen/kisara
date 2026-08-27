@@ -465,7 +465,7 @@ internal object AnimeExtensionLoader {
                     }
                 } catch (e: LinkageError) {
                     try {
-                        val fallBackClassLoader = PathClassLoader(appInfo.sourceDir, null, context.classLoader)
+                        val fallBackClassLoader = PathClassLoader(loadPath, null, context.classLoader)
                         when (
                             val obj = Class.forName(
                                 it,

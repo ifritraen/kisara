@@ -446,6 +446,24 @@ internal object ExtensionLoader {
                         is SourceFactory -> obj.createSources()
                         else -> throw Exception("Unknown source class type: ${obj.javaClass}")
                     }
+                } catch (e: LinkageError) {
+                    try {
+                        val fallBackClassLoader = dalvik.system.PathClassLoader(loadPath, null, context.classLoader)
+                        when (
+                            val obj = Class.forName(
+                                it,
+                                false,
+                                fallBackClassLoader,
+                            ).getDeclaredConstructor().newInstance()
+                        ) {
+                            is Source -> listOf(obj)
+                            is SourceFactory -> obj.createSources()
+                            else -> throw Exception("Unknown source class type: ${obj.javaClass}")
+                        }
+                    } catch (e: Throwable) {
+                        logcat(LogPriority.ERROR, e) { "Extension load error: $extName ($it)" }
+                        return LoadResult.Error
+                    }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Extension load error: $extName ($it)" }
                     return LoadResult.Error

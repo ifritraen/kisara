@@ -1,34 +1,68 @@
 -dontobfuscate
 
-# KMK --> ponytail: allowoptimization lets R8 inline/devirtualize/remove dead code
--keep,allowoptimization class eu.kanade.** { *; }
--keep,allowoptimization class tachiyomi.** { *; }
--keep,allowoptimization class mihon.** { *; }
-# KMK <--
+# Host classes must preserve their public/protected ABI for external extension APKs
+-keep class eu.kanade.** { *; }
+-keep class tachiyomi.** { *; }
+-keep class mihon.** { *; }
 
-# Keep extension-facing API contracts & coroutines intact
+# Extension API Contracts for Manga, Anime, and Novel
 -keep class eu.kanade.tachiyomi.source.** { *; }
+-keep class eu.kanade.tachiyomi.animesource.** { *; }
+-keep class eu.kanade.tachiyomi.novelsource.** { *; }
+-keep class eu.kanade.tachiyomi.source.novel.** { *; }
 -keep class tachiyomi.domain.source.** { *; }
 -keep class tachiyomi.domain.chapter.** { *; }
 -keep class tachiyomi.domain.manga.** { *; }
+-keep class tachiyomi.domain.entries.anime.** { *; }
+-keep class tachiyomi.domain.entries.novel.** { *; }
+-keep class tachiyomi.domain.history.novel.** { *; }
+-keep class tachiyomi.domain.updates.novel.** { *; }
+-keep class tachiyomi.domain.category.novel.** { *; }
+-keep class tachiyomi.domain.category.anime.** { *; }
 
 # Keep Kotatsu Parsers package intact for sideloaded jars
 -keep class org.koitharu.kotatsu.parsers.** { *; }
 
 # Keep common dependencies used in extensions
--keep,allowoptimization class androidx.preference.** { public protected *; }
--keep,allowoptimization class kotlin.** { public protected *; }
--keep,allowoptimization class kotlinx.coroutines.** { public protected *; }
--keepclassmembers class kotlinx.coroutines.** { *; }
--keepclassmembers class kotlinx.coroutines.BuildersKt { *; }
--keep,allowoptimization class kotlinx.serialization.** { public protected *; }
--keep,allowoptimization class kotlin.time.** { public protected *; }
--keep,allowoptimization class okhttp3.** { public protected *; }
--keep,allowoptimization class okio.** { public protected *; }
--keep,allowoptimization class org.jsoup.** { public protected *; }
--keep,allowoptimization class rx.** { public protected *; }
--keep,allowoptimization class app.cash.quickjs.** { public protected *; }
--keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
+-keep class androidx.preference.** { public protected *; }
+-keep class kotlin.** { public protected *; }
+-keep class kotlinx.coroutines.** { public protected *; }
+-keep class kotlinx.serialization.** { public protected *; }
+-keep class kotlin.time.** { public protected *; }
+-keep class okhttp3.** { public protected *; }
+-keep class okio.** { public protected *; }
+-keep class org.jsoup.** { public protected *; }
+-keep class rx.** { public protected *; }
+-keep class uy.kohesive.injekt.** { public protected *; }
+
+# Coroutines Extension ABI & Synthetic Bridges
+-keep class kotlinx.coroutines.BuildersKt { *; }
+-keep class kotlinx.coroutines.BuildersKt__* { *; }
+-keep class kotlinx.coroutines.CoroutineScopeKt { *; }
+-keep class kotlinx.coroutines.DelayKt { *; }
+-keep class kotlinx.coroutines.Dispatchers { *; }
+-keep class kotlinx.coroutines.YieldKt { *; }
+-keep class kotlinx.coroutines.flow.FlowKt { *; }
+-keep class kotlinx.coroutines.flow.FlowKt__* { *; }
+-keep class kotlinx.coroutines.sync.MutexKt { *; }
+-keep class kotlinx.coroutines.sync.SemaphoreKt { *; }
+-keep class kotlin.coroutines.jvm.internal.** { *; }
+-keep class tachiyomi.core.common.util.lang.RxCoroutineBridgeKt { *; }
+
+# QuickJS & Novel JS Runtime (CRITICAL: Do NOT allow optimization on JNI classes!)
+-keep class app.cash.quickjs.** { *; }
+-keep class eu.kanade.tachiyomi.extension.novel.runtime.** { *; }
+-keep class eu.kanade.tachiyomi.network.JavaScriptEngine { *; }
+
+# Zstd Content-Encoding for Extensions
+-keep class com.squareup.zstd.** { *; }
+-keep class okhttp3.zstd.** { *; }
+-dontwarn com.squareup.zstd.**
+
+# Extension Loaders & ClassLoader
+-keep class eu.kanade.tachiyomi.extension.util.ExtensionLoader { *; }
+-keep class eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionLoader { *; }
+-keep class eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader { *; }
 
 # From extensions-lib
 -keep class eu.kanade.tachiyomi.network.interceptor.RateLimitInterceptorKt { *; }
@@ -38,8 +72,13 @@
 -keep class eu.kanade.tachiyomi.network.RequestsKt { *; }
 -keep class eu.kanade.tachiyomi.AppInfo { *; }
 
+# Torrent utilities
+-keep class eu.kanade.tachiyomi.torrentutils.** { *; }
+-keep class aniyomi.core.common.torrent.** { *; }
+-dontwarn xyz.secozzi.torrserver.**
+
 # Debug functions
--keep,allowoptimization class exh.debug.DebugFunctions { public *; }
+-keep class exh.debug.DebugFunctions { public *; }
 
 ##---------------Begin: proguard configuration for RxJava 1.x  ----------
 -dontwarn sun.misc.**
