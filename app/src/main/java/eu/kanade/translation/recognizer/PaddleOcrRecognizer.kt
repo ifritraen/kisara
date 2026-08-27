@@ -37,21 +37,40 @@ class PaddleOcrRecognizer(
             "https://huggingface.co/ilaylow/PP_OCRv5_mobile_onnx/resolve/main/ppocrv5_rec.onnx" to modelFile,
             "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/ppocr_keys_v1.txt" to dictFile,
         )
+        val networkHelper = try {
+            uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        } catch (_: Exception) {
+            null
+        }
+        val client = networkHelper?.client ?: okhttp3.OkHttpClient()
 
         try {
             for ((url, dest) in files) {
-                if (dest.exists()) continue
+                if (dest.exists() && dest.length() > 1000) continue
                 val name = dest.name
                 onProgress("Downloading $name…")
-                URL(url).openStream().use { input ->
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    response.close()
+                    throw java.io.IOException("HTTP ${response.code} downloading $name")
+                }
+
+                val body = response.body ?: throw java.io.IOException("Empty response body for $name")
+                body.byteStream().use { input ->
                     dest.outputStream().use { output ->
-                        val buffer = ByteArray(8 * 1024)
+                        val buffer = ByteArray(32 * 1024)
                         var bytes = input.read(buffer)
                         while (bytes >= 0) {
                             ensureActive()
                             output.write(buffer, 0, bytes)
                             bytes = input.read(buffer)
                         }
+                        output.flush()
                     }
                 }
             }
