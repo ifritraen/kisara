@@ -19,6 +19,7 @@ import eu.kanade.translation.recognizer.MangaOcrTextRecognizer
 import eu.kanade.translation.recognizer.PaddleOcrTextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import eu.kanade.translation.translator.GeminiVisionTranslator
 import eu.kanade.translation.translator.TextTranslator
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators

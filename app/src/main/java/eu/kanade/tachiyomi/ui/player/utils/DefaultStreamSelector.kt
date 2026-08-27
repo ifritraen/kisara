@@ -511,7 +511,7 @@ object DefaultStreamSelector {
     fun videosEqual(a: Video, b: Video): Boolean =
         a.videoTitle == b.videoTitle &&
             a.videoUrl == b.videoUrl &&
-            a.videoPageUrl == b.videoPageUrl
+            a.pageUrl == b.pageUrl
 
     private fun formatSize(bytes: Long): String = when {
         bytes >= 1024 * 1024 * 1024 -> String.format(Locale.ENGLISH, "%.2f GB", bytes / (1024.0 * 1024 * 1024))

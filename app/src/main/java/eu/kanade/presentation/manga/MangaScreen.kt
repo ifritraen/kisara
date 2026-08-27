@@ -1934,7 +1934,7 @@ private fun SharedMangaBottomActionMenu(
             onMultiMarkAsReadClicked(selected.fastMap { it.chapter }, true)
         }.takeIf { selected.fastAny { !it.chapter.read } },
         onMarkAsUnreadClicked = {
-            onMultiMarkAsUnreadClicked(selected.fastMap { it.chapter }, false)
+            onMultiMarkAsReadClicked(selected.fastMap { it.chapter }, false)
         }.takeIf { selected.fastAny { it.chapter.read || it.chapter.lastPageRead > 0L } },
         onMarkPreviousAsReadClicked = {
             onMarkPreviousAsReadClicked(selected[0].chapter)

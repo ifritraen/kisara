@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.track.anilist
 
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.track.anime.model.toDbTrack
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
@@ -161,13 +162,14 @@ class Anilist(id: Long) : BaseTracker(id, "AniList"), DeletableTracker, AnimeTra
         return api.updateLibAnime(track)
     }
 
-    override suspend fun delete(track: AnimeTrack) {
-        if (track.library_id == null || track.library_id == 0L) {
-            val libAnime = api.findLibAnime(track, getUsername().toInt()) ?: return
-            track.library_id = libAnime.libraryId
+    override suspend fun delete(track: DomainAnimeTrack) {
+        val dbTrack = track.toDbTrack()
+        if (dbTrack.library_id == null || dbTrack.library_id == 0L) {
+            val libAnime = api.findLibAnime(dbTrack, getUsername().toInt()) ?: return
+            dbTrack.library_id = libAnime.libraryId
         }
 
-        api.deleteLibAnime(track)
+        api.deleteLibAnime(dbTrack)
     }
 
     override suspend fun bind(track: AnimeTrack, hasSeenEpisodes: Boolean): AnimeTrack {

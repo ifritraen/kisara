@@ -144,7 +144,7 @@ class PlayerActivity : BaseActivity() {
     private var lastThermalStatus: Int = -1
     private val thermalListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         PowerManager.OnThermalStatusChangedListener { status ->
-            if (status >= PowerManager.THERMAL_STATUS_THROTTLING && status != lastThermalStatus) {
+            if (status >= PowerManager.THERMAL_STATUS_SEVERE && status != lastThermalStatus) {
                 lastThermalStatus = status
                 player.checkAdaptiveScaling(Long.MAX_VALUE)
             }
@@ -390,11 +390,6 @@ class PlayerActivity : BaseActivity() {
         player.shrinkCache()
     }
 
-    override fun onResume() {
-        super.onResume()
-        player.restoreCache()
-    }
-
     override fun onUserLeaveHint() {
         if (isPipSupportedAndEnabled && player.paused == false && playerPreferences.pipOnExit().get()) {
             enterPictureInPictureMode(createPipParams())
@@ -635,13 +630,13 @@ class PlayerActivity : BaseActivity() {
     }
 
     override fun onResume() {
+        super.onResume()
+        player.restoreCache()
         if (!player.isExiting) {
-            super.onResume()
             return
         }
 
         player.isExiting = false
-        super.onResume()
 
         viewModel.currentVolume.update {
             audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).also {

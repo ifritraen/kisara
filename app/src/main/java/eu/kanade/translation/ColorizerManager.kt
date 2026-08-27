@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.data.ai.MangaColorizeEngine
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.translation.model.Translation
 import kotlinx.coroutines.CancellationException
@@ -64,7 +65,7 @@ class ColorizerManager(
     }
 
     fun colorizeChapter(manga: Manga, chapter: Chapter) {
-        val source = sourceManager.get(manga.source) ?: return
+        val source = (sourceManager.get(manga.source) as? HttpSource) ?: return
         val translation = Translation(source, manga, chapter)
 
         synchronized(_queueState) {
@@ -247,7 +248,7 @@ class ColorizerManager(
         return chapterDir?.findFile(pageName)
     }
 
-    private fun findChapterDir(chapterName: String, scanlator: String?, mangaTitle: String, source: Source): UniFile? {
+    internal fun findChapterDir(chapterName: String, scanlator: String?, mangaTitle: String, source: Source): UniFile? {
         val mangaDir = getMangaDir(mangaTitle, source)
         return mangaDir?.findFile(getChapterDirName(chapterName, scanlator))
     }

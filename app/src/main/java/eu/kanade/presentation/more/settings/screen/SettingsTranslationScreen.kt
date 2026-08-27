@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -131,7 +133,7 @@ object SettingsTranslationScreen : SearchableSettings {
             "OpenRouter" to ("https://openrouter.ai/api/v1/chat/completions" to "google/gemini-2.0-flash-001"),
         )
 
-        val items = mutableListOf<Preference.PreferenceItem>()
+        val items = mutableListOf<Preference.PreferenceItem<out Any, out Any>>()
 
         items.add(
             Preference.PreferenceItem.ListPreference(
@@ -344,7 +346,7 @@ object SettingsTranslationScreen : SearchableSettings {
             "ddcolor_tiny" to "DDColor Tiny (INT8)",
         )
 
-        val items = mutableListOf<Preference.PreferenceItem>()
+        val items = mutableListOf<Preference.PreferenceItem<out Any, out Any>>()
 
         items.add(
             Preference.PreferenceItem.SwitchPreference(

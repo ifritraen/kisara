@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.data.ai.SuperResolutionEngine
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.translation.model.Translation
 import kotlinx.coroutines.CancellationException
@@ -62,7 +63,7 @@ class SuperResolutionManager(
     }
 
     fun superResolveChapter(manga: Manga, chapter: Chapter) {
-        val source = sourceManager.get(manga.source) ?: return
+        val source = (sourceManager.get(manga.source) as? HttpSource) ?: return
         val translation = Translation(source, manga, chapter)
 
         synchronized(_queueState) {
@@ -114,13 +115,12 @@ class SuperResolutionManager(
                 val useNnapi = translationPreferences.superResolutionUseNnapi().get()
 
                 // Locate source chapter directory (prioritizing Colorized directory if already colorized)
-                val colorizedChapterDir = colorizerManager.getColorizedPageFile(
+                val colorizedChapterDir = colorizerManager.findChapterDir(
                     chapterName = next.chapter.name,
                     scanlator = next.chapter.scanlator,
                     mangaTitle = next.manga.ogTitle,
                     source = next.source,
-                    pageName = "",
-                )?.parent
+                )
 
                 val rawChapterDir = downloadProvider.findChapterDir(
                     chapterName = next.chapter.name,

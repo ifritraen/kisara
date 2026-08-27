@@ -112,7 +112,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import eu.kanade.tachiyomi.network.NetworkHelper
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -680,7 +684,7 @@ private fun AniListGenresSection(screenModel: TrackScreenModel) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    state.animeGenres.forEach { genre ->
+                    for (genre in state.animeGenres) {
                         AssistChip(
                             onClick = {
                                 screenModel.searchAnime(genre)
@@ -1572,6 +1576,17 @@ private fun MangaUpdatesGroupsSection(screenModel: TrackScreenModel) {
 
 @Composable
 private fun MangaUpdatesAuthorsSection(screenModel: TrackScreenModel) {
+    val state by screenModel.state.collectAsState()
+    var query by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        screenModel.loadAuthors("")
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedTextField(
                 value = query,
@@ -2023,6 +2038,200 @@ class TrackScreenModel(
         }
     }
 
+    fun selectSeries(item: TrackSeriesItem?) {
+        _state.update { it.copy(selectedSeries = item) }
+    }
+
+    fun dismissDetails() {
+        _state.update { it.copy(selectedSeries = null) }
+    }
+
+    fun loadNovelRecommended() {
+        if (_state.value.novelRecommendedSeries.isNotEmpty()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingNovelRecommended = true) }
+            try {
+                val results = trackerManager.mangaUpdates.api.search("a", type = "Novel")
+                _state.update { it.copy(novelRecommendedSeries = results, isLoadingNovelRecommended = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates novel recommendations" }
+                _state.update { it.copy(isLoadingNovelRecommended = false) }
+            }
+        }
+    }
+
+    fun searchNovels(query: String) {
+        val q = query.trim().ifBlank { "a" }
+        screenModelScope.launch {
+            _state.update { it.copy(isSearchingNovels = true) }
+            try {
+                val results = trackerManager.mangaUpdates.api.search(q, type = "Novel")
+                _state.update { it.copy(novelSearchResults = results, isSearchingNovels = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to search MangaUpdates novels" }
+                _state.update { it.copy(isSearchingNovels = false) }
+            }
+        }
+    }
+
+    fun isAniListLoggedIn(): Boolean = trackerManager.aniList.isLoggedIn
+
+    fun loginAniList(token: String, onDone: () -> Unit = {}) {
+        screenModelScope.launch {
+            try {
+                trackerManager.aniList.login(token)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to log in to AniList" }
+            }
+            onDone()
+        }
+    }
+
+    fun logoutAniList(onDone: () -> Unit = {}) {
+        screenModelScope.launch {
+            try {
+                trackerManager.aniList.logout()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to log out of AniList" }
+            }
+            onDone()
+        }
+    }
+
+    fun loadTrendingAnime() {
+        if (_state.value.trendingAnime.isNotEmpty()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingTrendingAnime = true) }
+            try {
+                val results = trackerManager.aniList.api.getTrendingAnime()
+                _state.update { it.copy(trendingAnime = results, isLoadingTrendingAnime = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load trending anime" }
+                _state.update { it.copy(isLoadingTrendingAnime = false) }
+            }
+        }
+    }
+
+    fun loadSeasonalAnime() {
+        if (_state.value.seasonalAnime.isNotEmpty()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingSeasonalAnime = true) }
+            try {
+                val results = trackerManager.aniList.api.getSeasonalAnime("SUMMER", 2024)
+                _state.update { it.copy(seasonalAnime = results, isLoadingSeasonalAnime = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load seasonal anime" }
+                _state.update { it.copy(isLoadingSeasonalAnime = false) }
+            }
+        }
+    }
+
+    fun loadTopRatedAnime() {
+        if (_state.value.topAnime.isNotEmpty()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingTopAnime = true) }
+            try {
+                val results = trackerManager.aniList.api.getTopRatedAnime()
+                _state.update { it.copy(topAnime = results, isLoadingTopAnime = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load top rated anime" }
+                _state.update { it.copy(isLoadingTopAnime = false) }
+            }
+        }
+    }
+
+    fun searchAnime(query: String) {
+        val q = query.trim().ifBlank { "a" }
+        screenModelScope.launch {
+            _state.update { it.copy(isSearchingAnime = true) }
+            try {
+                val results = trackerManager.aniList.api.searchAnime(q).map {
+                    ALAnime(
+                        remoteId = it.remote_id,
+                        title = it.title,
+                        imageUrl = it.cover_url,
+                        description = it.summary,
+                        format = it.publishing_type,
+                        publishingStatus = it.publishing_status,
+                        startDateFuzzy = 0L,
+                        totalEpisodes = it.total_episodes,
+                        averageScore = it.score.toInt(),
+                        genres = it.genres,
+                    )
+                }
+                _state.update { it.copy(animeSearchResults = results, isSearchingAnime = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to search anime" }
+                _state.update { it.copy(isSearchingAnime = false) }
+            }
+        }
+    }
+
+    fun loadAnimeGenres() {
+        if (_state.value.animeGenres.isNotEmpty()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingAnimeGenres = true) }
+            try {
+                val results = trackerManager.aniList.api.getAnimeGenres()
+                _state.update { it.copy(animeGenres = results, isLoadingAnimeGenres = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load anime genres" }
+                _state.update { it.copy(isLoadingAnimeGenres = false) }
+            }
+        }
+    }
+
+    fun loadAnimeStudios(query: String) {
+        val q = query.trim().ifBlank { "a" }
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingAnimeStudios = true) }
+            try {
+                val results = trackerManager.aniList.api.searchStudios(q)
+                _state.update { it.copy(animeStudios = results, isLoadingAnimeStudios = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load anime studios" }
+                _state.update { it.copy(isLoadingAnimeStudios = false) }
+            }
+        }
+    }
+
+    fun loadUserAnimeList(status: String? = null) {
+        if (!isAniListLoggedIn()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingUserAnimeList = true) }
+            try {
+                val (userId, _) = trackerManager.aniList.api.getCurrentUser()
+                val results = trackerManager.aniList.api.getUserAnimeList(userId, status)
+                _state.update { it.copy(userAnimeList = results, isLoadingUserAnimeList = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load user anime list" }
+                _state.update { it.copy(isLoadingUserAnimeList = false) }
+            }
+        }
+    }
+
+    fun loadNovelReleases() {
+        if (_state.value.novelReleases.isNotEmpty()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingNovelReleases = true) }
+            try {
+                val results = trackerManager.mangaUpdates.api.getRecentReleases()
+                val mapped = results.map {
+                    MUReleaseItem(
+                        title = it.title,
+                        chapter = it.chapter,
+                        groups = it.groups?.mapNotNull { g -> g.name }?.joinToString(", "),
+                        releaseDate = it.releaseDate,
+                    )
+                }
+                _state.update { it.copy(novelReleases = mapped, isLoadingNovelReleases = false) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load novel releases" }
+                _state.update { it.copy(isLoadingNovelReleases = false) }
+            }
+        }
+    }
+
     fun loadAuthors(query: String) {
         screenModelScope.launch {
             _state.update { it.copy(isLoadingAuthors = true) }
@@ -2064,12 +2273,33 @@ class TrackScreenModel(
 }
 
 data class TrackState(
+    val selectedSeries: TrackSeriesItem? = null,
     val isLoadingReleases: Boolean = false,
     val newReleases: List<MUReleaseItem> = emptyList(),
     val isLoadingRecommended: Boolean = false,
     val recommendedSeries: List<MURecord> = emptyList(),
+    val isLoadingNovelRecommended: Boolean = false,
+    val novelRecommendedSeries: List<MURecord> = emptyList(),
     val isSearching: Boolean = false,
     val searchResults: List<MURecord> = emptyList(),
+    val isSearchingNovels: Boolean = false,
+    val novelSearchResults: List<MURecord> = emptyList(),
+    val isLoadingTrendingAnime: Boolean = false,
+    val trendingAnime: List<ALAnime> = emptyList(),
+    val isLoadingSeasonalAnime: Boolean = false,
+    val seasonalAnime: List<ALAnime> = emptyList(),
+    val isLoadingTopAnime: Boolean = false,
+    val topAnime: List<ALAnime> = emptyList(),
+    val isSearchingAnime: Boolean = false,
+    val animeSearchResults: List<ALAnime> = emptyList(),
+    val isLoadingAnimeGenres: Boolean = false,
+    val animeGenres: List<String> = emptyList(),
+    val isLoadingAnimeStudios: Boolean = false,
+    val animeStudios: List<ALStudioNode> = emptyList(),
+    val isLoadingUserAnimeList: Boolean = false,
+    val userAnimeList: List<ALUserAnime> = emptyList(),
+    val isLoadingNovelReleases: Boolean = false,
+    val novelReleases: List<MUReleaseItem> = emptyList(),
     val isLoadingGenres: Boolean = false,
     val genres: List<MUGenreItem> = emptyList(),
     val isLoadingGroups: Boolean = false,
