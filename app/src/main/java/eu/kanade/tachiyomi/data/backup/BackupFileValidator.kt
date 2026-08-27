@@ -11,6 +11,8 @@ class BackupFileValidator(
     private val context: Context,
 
     private val sourceManager: SourceManager = Injekt.get(),
+    private val animeSourceManager: tachiyomi.domain.source.anime.service.AnimeSourceManager = Injekt.get(),
+    private val novelSourceManager: tachiyomi.domain.source.novel.service.NovelSourceManager = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
 ) {
 
@@ -26,25 +28,28 @@ class BackupFileValidator(
             throw IllegalStateException(e)
         }
 
-        val sources = backup.backupSources.associate { it.sourceId to it.name }
-        val missingSources = sources
-            .filter { sourceManager.get(it.key) == null }
-            .values.map {
-                val id = it.toLongOrNull()
-                if (id == null) {
-                    it
-                } else {
-                    sourceManager.getOrStub(id).toString()
-                }
-            }
+        val missingMangaSources = backup.backupSources
+            .filter { sourceManager.get(it.sourceId) == null }
+            .map { it.name.ifEmpty { sourceManager.getOrStub(it.sourceId).toString() } }
+
+        val missingAnimeSources = backup.backupAnimeSources
+            .filter { animeSourceManager.get(it.sourceId) == null }
+            .map { it.name.ifEmpty { animeSourceManager.getOrStub(it.sourceId).toString() } }
+
+        val missingNovelSources = backup.backupNovelSources
+            .filter { novelSourceManager.get(it.sourceId) == null }
+            .map { it.name.ifEmpty { novelSourceManager.getOrStub(it.sourceId).toString() } }
+
+        val missingSources = (missingMangaSources + missingAnimeSources + missingNovelSources)
             .distinct()
             .sorted()
 
-        val trackers = backup.backupManga
-            .flatMap { it.tracking }
+        val allTrackers = (backup.backupManga.flatMap { it.tracking } +
+            backup.backupAnime.flatMap { it.tracking } +
+            backup.backupNovel.flatMap { it.tracking })
             .map { it.syncId }
             .distinct()
-        val missingTrackers = trackers
+        val missingTrackers = allTrackers
             .mapNotNull { trackerManager.get(it.toLong()) }
             .filter { !it.isLoggedIn }
             .map { it.name }

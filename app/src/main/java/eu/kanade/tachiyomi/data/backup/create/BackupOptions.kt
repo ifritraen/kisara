@@ -24,6 +24,8 @@ data class BackupOptions(
     // KMK -->
     val sideloadedExtensions: Boolean = true,
     val vpnSettings: Boolean = true,
+    val animeEntries: Boolean = true,
+    val novelEntries: Boolean = true,
     // KMK <--
 ) {
 
@@ -45,11 +47,13 @@ data class BackupOptions(
         // KMK -->
         sideloadedExtensions,
         vpnSettings,
+        animeEntries,
+        novelEntries,
         // KMK <--
     )
 
     fun canCreate() =
-        libraryEntries || categories || appSettings || extensionRepoSettings || sourceSettings || savedSearchesFeeds || sideloadedExtensions || vpnSettings
+        libraryEntries || animeEntries || novelEntries || categories || appSettings || extensionRepoSettings || sourceSettings || savedSearchesFeeds || sideloadedExtensions || vpnSettings
 
     companion object {
         val libraryOptions = persistentListOf(
@@ -59,22 +63,32 @@ data class BackupOptions(
                 setter = { options, enabled -> options.copy(libraryEntries = enabled) },
             ),
             Entry(
-                label = MR.strings.chapters,
+                label = KMR.strings.label_anime,
+                getter = BackupOptions::animeEntries,
+                setter = { options, enabled -> options.copy(animeEntries = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.label_novel,
+                getter = BackupOptions::novelEntries,
+                setter = { options, enabled -> options.copy(novelEntries = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.chapters_episodes,
                 getter = BackupOptions::chapters,
                 setter = { options, enabled -> options.copy(chapters = enabled) },
-                enabled = { it.libraryEntries },
+                enabled = { it.libraryEntries || it.animeEntries || it.novelEntries },
             ),
             Entry(
                 label = MR.strings.track,
                 getter = BackupOptions::tracking,
                 setter = { options, enabled -> options.copy(tracking = enabled) },
-                enabled = { it.libraryEntries },
+                enabled = { it.libraryEntries || it.animeEntries || it.novelEntries },
             ),
             Entry(
                 label = MR.strings.history,
                 getter = BackupOptions::history,
                 setter = { options, enabled -> options.copy(history = enabled) },
-                enabled = { it.libraryEntries },
+                enabled = { it.libraryEntries || it.animeEntries || it.novelEntries },
             ),
             Entry(
                 label = MR.strings.categories,
@@ -85,14 +99,14 @@ data class BackupOptions(
                 label = MR.strings.non_library_settings,
                 getter = BackupOptions::readEntries,
                 setter = { options, enabled -> options.copy(readEntries = enabled) },
-                enabled = { it.libraryEntries },
+                enabled = { it.libraryEntries || it.animeEntries || it.novelEntries },
             ),
             // SY -->
             Entry(
                 label = SYMR.strings.custom_entry_info,
                 getter = BackupOptions::customInfo,
                 setter = { options, enabled -> options.copy(customInfo = enabled) },
-                enabled = { it.libraryEntries },
+                enabled = { it.libraryEntries || it.animeEntries || it.novelEntries },
             ),
             Entry(
                 // KMK-->
@@ -158,6 +172,8 @@ data class BackupOptions(
             // KMK -->
             sideloadedExtensions = array.getOrElse(12) { true },
             vpnSettings = array.getOrElse(13) { true },
+            animeEntries = array.getOrElse(14) { true },
+            novelEntries = array.getOrElse(15) { true },
             // KMK <--
         )
     }

@@ -60,6 +60,11 @@ class BackupRestorer(
     // KMK -->
     private val feedRestorer: FeedRestorer = FeedRestorer(),
     // KMK <--
+    // Anime & Novel
+    private val animeCategoriesRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeCategoriesRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeCategoriesRestorer(),
+    private val novelCategoriesRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.NovelCategoriesRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.NovelCategoriesRestorer(),
+    private val animeRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeRestorer(isSync),
+    private val novelRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer(isSync),
 ) {
 
     private var restoreAmount = 0
@@ -103,14 +108,22 @@ class BackupRestorer(
         val backup = BackupDecoder(context).decode(uri)
 
         // Store source mapping for error messages
-        val backupMaps = backup.backupSources
+        val backupMaps = backup.backupSources + backup.backupAnimeSources + backup.backupNovelSources
         sourceMapping = backupMaps.associate { it.sourceId to it.name }
 
         if (options.libraryEntries) {
             restoreAmount += backup.backupManga.size
         }
+        if (options.animeEntries) {
+            restoreAmount += backup.backupAnime.size
+        }
+        if (options.novelEntries) {
+            restoreAmount += backup.backupNovel.size
+        }
         if (options.categories) {
-            restoreAmount += 1
+            if (backup.backupCategories.isNotEmpty()) restoreAmount += 1
+            if (backup.backupAnimeCategories.isNotEmpty()) restoreAmount += 1
+            if (backup.backupNovelCategories.isNotEmpty()) restoreAmount += 1
         }
         // SY -->
         if (options.savedSearchesFeeds) {
@@ -136,6 +149,8 @@ class BackupRestorer(
         coroutineScope {
             if (options.categories) {
                 restoreCategories(backup.backupCategories)
+                restoreAnimeCategories(backup.backupAnimeCategories)
+                restoreNovelCategories(backup.backupNovelCategories)
             }
             // SY -->
             if (options.savedSearchesFeeds) {
@@ -151,10 +166,16 @@ class BackupRestorer(
                 restoreAppPreferences(backup.backupPreferences, backup.backupCategories.takeIf { options.categories })
             }
             if (options.sourceSettings) {
-                restoreSourcePreferences(backup.backupSourcePreferences)
+                restoreSourcePreferences(backup.backupSourcePreferences + backup.backupAnimeSourcePreferences + backup.backupNovelSourcePreferences)
             }
             if (options.libraryEntries) {
                 restoreManga(backup.backupManga, if (options.categories) backup.backupCategories else emptyList())
+            }
+            if (options.animeEntries && backup.backupAnime.isNotEmpty()) {
+                restoreAnime(backup.backupAnime, if (options.categories) backup.backupAnimeCategories else emptyList())
+            }
+            if (options.novelEntries && backup.backupNovel.isNotEmpty()) {
+                restoreNovel(backup.backupNovel, if (options.categories) backup.backupNovelCategories else emptyList())
             }
             if (options.extensionRepoSettings) {
                 restoreExtensionStores(backup.backupExtensionStores)
@@ -172,6 +193,7 @@ class BackupRestorer(
 
     context(scope: CoroutineScope)
     private /* KMK --> */suspend /* KMK <-- */ fun restoreCategories(backupCategories: List<BackupCategory>) = withContext(dispatcher) {
+        if (backupCategories.isEmpty()) return@withContext
         scope.ensureActive()
         categoriesRestorer(backupCategories)
 
@@ -186,6 +208,42 @@ class BackupRestorer(
                 // KMK -->
                 .show(Notifications.ID_RESTORE_PROGRESS)
             // KMK <--
+        }
+    }
+
+    context(scope: CoroutineScope)
+    private suspend fun restoreAnimeCategories(backupCategories: List<BackupCategory>) = withContext(dispatcher) {
+        if (backupCategories.isEmpty()) return@withContext
+        scope.ensureActive()
+        animeCategoriesRestorer(backupCategories)
+
+        restoreProgress.incrementAndGet()
+        with(notifier) {
+            showRestoreProgress(
+                context.stringResource(KMR.strings.label_anime),
+                restoreProgress.get(),
+                restoreAmount,
+                isSync,
+            )
+                .show(Notifications.ID_RESTORE_PROGRESS)
+        }
+    }
+
+    context(scope: CoroutineScope)
+    private suspend fun restoreNovelCategories(backupCategories: List<BackupCategory>) = withContext(dispatcher) {
+        if (backupCategories.isEmpty()) return@withContext
+        scope.ensureActive()
+        novelCategoriesRestorer(backupCategories)
+
+        restoreProgress.incrementAndGet()
+        with(notifier) {
+            showRestoreProgress(
+                context.stringResource(KMR.strings.label_novel),
+                restoreProgress.get(),
+                restoreAmount,
+                isSync,
+            )
+                .show(Notifications.ID_RESTORE_PROGRESS)
         }
     }
 
@@ -230,6 +288,68 @@ class BackupRestorer(
                 } catch (e: Exception) {
                     val sourceName = sourceMapping[manga.source] ?: manga.source.toString()
                     errors.add(Date() to "${manga.title} [$sourceName]: ${e.message}")
+                }
+            }
+            val currentProgress = restoreProgress.addAndGet(chunk.size)
+            with(notifier) {
+                showRestoreProgress(chunk.last().title, currentProgress, restoreAmount, isSync)
+                    .show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        }
+
+        val finalProgress = restoreProgress.get()
+        if (finalProgress < restoreAmount) {
+            with(notifier) {
+                showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
+                    .show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        }
+    }
+
+    private fun CoroutineScope.restoreAnime(
+        backupAnimes: List<eu.kanade.tachiyomi.data.backup.models.BackupAnime>,
+        backupCategories: List<BackupCategory>,
+    ) = launch(dispatcher) {
+        val sortedAnimes = animeRestorer.sortByNew(backupAnimes)
+        sortedAnimes.chunked(100).forEach { chunk ->
+            ensureActive()
+            chunk.forEach { anime ->
+                try {
+                    animeRestorer.restore(anime, backupCategories)
+                } catch (e: Exception) {
+                    val sourceName = sourceMapping[anime.source] ?: anime.source.toString()
+                    errors.add(Date() to "${anime.title} [$sourceName]: ${e.message}")
+                }
+            }
+            val currentProgress = restoreProgress.addAndGet(chunk.size)
+            with(notifier) {
+                showRestoreProgress(chunk.last().title, currentProgress, restoreAmount, isSync)
+                    .show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        }
+
+        val finalProgress = restoreProgress.get()
+        if (finalProgress < restoreAmount) {
+            with(notifier) {
+                showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
+                    .show(Notifications.ID_RESTORE_PROGRESS)
+            }
+        }
+    }
+
+    private fun CoroutineScope.restoreNovel(
+        backupNovels: List<eu.kanade.tachiyomi.data.backup.models.BackupNovel>,
+        backupCategories: List<BackupCategory>,
+    ) = launch(dispatcher) {
+        val sortedNovels = novelRestorer.sortByNew(backupNovels)
+        sortedNovels.chunked(100).forEach { chunk ->
+            ensureActive()
+            chunk.forEach { novel ->
+                try {
+                    novelRestorer.restore(novel, backupCategories)
+                } catch (e: Exception) {
+                    val sourceName = sourceMapping[novel.source] ?: novel.source.toString()
+                    errors.add(Date() to "${novel.title} [$sourceName]: ${e.message}")
                 }
             }
             val currentProgress = restoreProgress.addAndGet(chunk.size)

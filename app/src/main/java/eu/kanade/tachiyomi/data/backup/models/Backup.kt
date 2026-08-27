@@ -22,4 +22,18 @@ data class Backup(
     @ProtoNumber(620) var backupJarExtensions: List<BackupJarExtension> = emptyList(),
     @ProtoNumber(630) var backupWireguardConfigs: List<BackupWireguardConfig> = emptyList(),
     @ProtoNumber(631) var backupWireguardPrefs: BackupWireguardPreferences? = null,
+    // Anime (Standard Aniyomi & Kisara)
+    @ProtoNumber(102) var backupAnime: List<BackupAnime> = emptyList(),
+    @ProtoNumber(103) var backupAnimeCategories: List<BackupCategory> = emptyList(),
+    @ProtoNumber(107) var backupAnimeSources: List<BackupSource> = emptyList(),
+    @ProtoNumber(503) var backupAnimeSourcePreferences: List<BackupSourcePreferences> = emptyList(),
+    @ProtoNumber(504) var backupAnimeFeeds: List<BackupFeed> = emptyList(),
+    @ProtoNumber(505) var backupAnimeSavedSearches: List<BackupSavedSearch> = emptyList(),
+    // Novel (Kisara)
+    @ProtoNumber(700) var backupNovel: List<BackupNovel> = emptyList(),
+    @ProtoNumber(701) var backupNovelCategories: List<BackupCategory> = emptyList(),
+    @ProtoNumber(702) var backupNovelSources: List<BackupSource> = emptyList(),
+    @ProtoNumber(703) var backupNovelSourcePreferences: List<BackupSourcePreferences> = emptyList(),
+    @ProtoNumber(704) var backupNovelFeeds: List<BackupFeed> = emptyList(),
+    @ProtoNumber(705) var backupNovelSavedSearches: List<BackupSavedSearch> = emptyList(),
 )

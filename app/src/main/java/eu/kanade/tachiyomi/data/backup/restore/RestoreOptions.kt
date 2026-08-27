@@ -17,6 +17,8 @@ data class RestoreOptions(
     // KMK -->
     val sideloadedExtensions: Boolean = true,
     val vpnSettings: Boolean = true,
+    val animeEntries: Boolean = true,
+    val novelEntries: Boolean = true,
     // KMK <--
 ) {
 
@@ -32,11 +34,15 @@ data class RestoreOptions(
         // KMK -->
         sideloadedExtensions,
         vpnSettings,
+        animeEntries,
+        novelEntries,
         // KMK <--
     )
 
     fun canRestore() =
         libraryEntries ||
+            animeEntries ||
+            novelEntries ||
             categories ||
             appSettings ||
             extensionRepoSettings ||
@@ -48,9 +54,19 @@ data class RestoreOptions(
     companion object {
         val options = persistentListOf(
             Entry(
-                label = MR.strings.label_library,
+                label = MR.strings.manga,
                 getter = RestoreOptions::libraryEntries,
                 setter = { options, enabled -> options.copy(libraryEntries = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.label_anime,
+                getter = RestoreOptions::animeEntries,
+                setter = { options, enabled -> options.copy(animeEntries = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.label_novel,
+                getter = RestoreOptions::novelEntries,
+                setter = { options, enabled -> options.copy(novelEntries = enabled) },
             ),
             Entry(
                 label = MR.strings.categories,
@@ -107,6 +123,8 @@ data class RestoreOptions(
             // KMK -->
             sideloadedExtensions = array.getOrElse(6) { true },
             vpnSettings = array.getOrElse(7) { true },
+            animeEntries = array.getOrElse(8) { true },
+            novelEntries = array.getOrElse(9) { true },
             // KMK <--
         )
     }

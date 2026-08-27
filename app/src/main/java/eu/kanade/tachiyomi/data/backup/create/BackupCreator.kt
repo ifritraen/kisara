@@ -68,6 +68,18 @@ class BackupCreator(
     private val savedSearchBackupCreator: SavedSearchBackupCreator = SavedSearchBackupCreator(),
     private val getMergedManga: GetMergedManga = Injekt.get(),
     // SY <--
+    // Anime & Novel
+    private val getAnimeFavorites: tachiyomi.domain.entries.anime.interactor.GetAnimeFavorites = Injekt.get(),
+    private val animeRepository: tachiyomi.domain.entries.anime.repository.AnimeRepository = Injekt.get(),
+    private val animeBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.AnimeBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.AnimeBackupCreator(),
+    private val animeCategoriesBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.AnimeCategoriesBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.AnimeCategoriesBackupCreator(),
+    private val animeSourcesBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.AnimeSourcesBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.AnimeSourcesBackupCreator(),
+
+    private val getNovelFavorites: tachiyomi.domain.entries.novel.interactor.GetNovelFavorites = Injekt.get(),
+    private val novelRepository: tachiyomi.domain.entries.novel.repository.NovelRepository = Injekt.get(),
+    private val novelBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.NovelBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.NovelBackupCreator(),
+    private val novelCategoriesBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.NovelCategoriesBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.NovelCategoriesBackupCreator(),
+    private val novelSourcesBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator(),
 ) {
 
     suspend fun backup(uri: Uri, options: BackupOptions): String {
@@ -94,12 +106,29 @@ class BackupCreator(
                 throw IllegalStateException(context.stringResource(MR.strings.create_backup_file_error))
             }
 
-            val nonFavoriteManga = if (options.readEntries) mangaRepository.getReadMangaNotInLibrary() else emptyList()
+            val nonFavoriteManga = if (options.readEntries && options.libraryEntries) mangaRepository.getReadMangaNotInLibrary() else emptyList()
             // SY -->
-            val mergedManga = getMergedManga.await()
+            val mergedManga = if (options.libraryEntries) getMergedManga.await() else emptyList()
             // SY <--
-            val backupManga =
+            val backupManga = if (options.libraryEntries) {
                 backupMangas(getFavorites.await() + nonFavoriteManga /* SY --> */ + mergedManga /* SY <-- */, options)
+            } else {
+                emptyList()
+            }
+
+            val nonFavoriteAnime = if (options.readEntries && options.animeEntries) animeRepository.getWatchedAnimeNotInLibrary() else emptyList()
+            val backupAnime = if (options.animeEntries) {
+                backupAnimes(getAnimeFavorites.await() + nonFavoriteAnime, options)
+            } else {
+                emptyList()
+            }
+
+            val nonFavoriteNovel = if (options.readEntries && options.novelEntries) novelRepository.getReadNovelNotInLibrary() else emptyList()
+            val backupNovel = if (options.novelEntries) {
+                backupNovels(getNovelFavorites.await() + nonFavoriteNovel, options)
+            } else {
+                emptyList()
+            }
 
             val backup = Backup(
                 backupManga = backupManga,
@@ -118,6 +147,17 @@ class BackupCreator(
                 backupJarExtensions = backupJarExtensions(options),
                 backupWireguardConfigs = backupWireguardConfigs(options),
                 backupWireguardPrefs = backupWireguardPrefs(options),
+
+                // Anime & Novel
+                backupAnime = backupAnime,
+                backupAnimeCategories = backupAnimeCategories(options),
+                backupAnimeSources = backupAnimeSources(backupAnime),
+                backupAnimeSourcePreferences = backupAnimeSourcePreferences(options),
+
+                backupNovel = backupNovel,
+                backupNovelCategories = backupNovelCategories(options),
+                backupNovelSources = backupNovelSources(backupNovel),
+                backupNovelSourcePreferences = backupNovelSourcePreferences(options),
                 // KMK <--
             )
 
@@ -165,6 +205,50 @@ class BackupCreator(
 
     fun backupSources(mangas: List<BackupManga>): List<BackupSource> {
         return sourcesBackupCreator(mangas)
+    }
+
+    suspend fun backupAnimes(animes: List<tachiyomi.domain.entries.anime.model.Anime>, options: BackupOptions): List<eu.kanade.tachiyomi.data.backup.models.BackupAnime> {
+        if (!options.animeEntries) return emptyList()
+
+        return animeBackupCreator(animes, options)
+    }
+
+    suspend fun backupAnimeCategories(options: BackupOptions): List<BackupCategory> {
+        if (!options.categories) return emptyList()
+
+        return animeCategoriesBackupCreator()
+    }
+
+    fun backupAnimeSources(animes: List<eu.kanade.tachiyomi.data.backup.models.BackupAnime>): List<BackupSource> {
+        return animeSourcesBackupCreator(animes)
+    }
+
+    fun backupAnimeSourcePreferences(options: BackupOptions): List<BackupSourcePreferences> {
+        if (!options.sourceSettings) return emptyList()
+
+        return preferenceBackupCreator.createAnimeSource(includePrivatePreferences = options.privateSettings)
+    }
+
+    suspend fun backupNovels(novels: List<tachiyomi.domain.entries.novel.model.Novel>, options: BackupOptions): List<eu.kanade.tachiyomi.data.backup.models.BackupNovel> {
+        if (!options.novelEntries) return emptyList()
+
+        return novelBackupCreator(novels, options)
+    }
+
+    suspend fun backupNovelCategories(options: BackupOptions): List<BackupCategory> {
+        if (!options.categories) return emptyList()
+
+        return novelCategoriesBackupCreator()
+    }
+
+    fun backupNovelSources(novels: List<eu.kanade.tachiyomi.data.backup.models.BackupNovel>): List<BackupSource> {
+        return novelSourcesBackupCreator(novels)
+    }
+
+    fun backupNovelSourcePreferences(options: BackupOptions): List<BackupSourcePreferences> {
+        if (!options.sourceSettings) return emptyList()
+
+        return preferenceBackupCreator.createNovelSource(includePrivatePreferences = options.privateSettings)
     }
 
     /* KMK --> */ suspend /* KMK <-- */ fun backupAppPreferences(options: BackupOptions): List<BackupPreference> {

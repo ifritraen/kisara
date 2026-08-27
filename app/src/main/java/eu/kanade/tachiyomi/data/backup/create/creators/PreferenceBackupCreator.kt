@@ -40,6 +40,34 @@ class PreferenceBackupCreator(
             .filter { it.prefs.isNotEmpty() }
     }
 
+    fun createAnimeSource(includePrivatePreferences: Boolean): List<BackupSourcePreferences> {
+        val animeSourceManager = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>()
+        return animeSourceManager.getCatalogueSources()
+            .filterIsInstance<eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource>()
+            .map {
+                BackupSourcePreferences(
+                    it.preferenceKey(),
+                    it.sourcePreferences().all.toBackupPreferences()
+                        .withPrivatePreferences(includePrivatePreferences),
+                )
+            }
+            .filter { it.prefs.isNotEmpty() }
+    }
+
+    fun createNovelSource(includePrivatePreferences: Boolean): List<BackupSourcePreferences> {
+        val novelSourceManager = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>()
+        return novelSourceManager.getCatalogueSources()
+            .filterIsInstance<eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource>()
+            .map {
+                BackupSourcePreferences(
+                    it.preferenceKey(),
+                    it.sourcePreferences().all.toBackupPreferences()
+                        .withPrivatePreferences(includePrivatePreferences),
+                )
+            }
+            .filter { it.prefs.isNotEmpty() }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, *>.toBackupPreferences(): List<BackupPreference> {
         return this
