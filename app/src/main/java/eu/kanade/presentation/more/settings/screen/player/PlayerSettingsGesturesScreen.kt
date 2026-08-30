@@ -257,6 +257,10 @@ object PlayerSettingsGesturesScreen : SearchableSettings {
     @Composable
     private fun getLongPressGroup(gesturePreferences: GesturePreferences): Preference.PreferenceGroup {
         val longPress = gesturePreferences.longPressGesture()
+        val customSpeed = gesturePreferences.longPressCustomSpeed()
+        val speedEntries = remember {
+            (5..40).map { it / 10f }.associateWith { "${it}x" }.toPersistentMap()
+        }
 
         return Preference.PreferenceGroup(
             title = stringResource(KMR.strings.pref_category_long_press),
@@ -269,6 +273,11 @@ object PlayerSettingsGesturesScreen : SearchableSettings {
                         LongPressGesture.PlaybackSpeed,
                     ).associateWith { stringResource(it.stringRes) }.toPersistentMap(),
                     title = stringResource(KMR.strings.pref_long_press_action),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = customSpeed,
+                    entries = speedEntries,
+                    title = stringResource(KMR.strings.pref_player_long_press_speed),
                 ),
             ),
         )

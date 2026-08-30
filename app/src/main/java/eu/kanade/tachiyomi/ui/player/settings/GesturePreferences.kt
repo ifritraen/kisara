@@ -32,6 +32,7 @@ class GesturePreferences(
     // Long press
 
     fun longPressGesture() = preferenceStore.getEnum("pref_long_press_gesture", LongPressGesture.Screenshot)
+    fun longPressCustomSpeed() = preferenceStore.getFloat("pref_long_press_custom_speed", 2.0f)
 
     // Media controls
 

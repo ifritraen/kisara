@@ -3423,4 +3423,8 @@
     <string name="gesture_zone_bottom">Bottom</string>
     <string name="gesture_reset_defaults">Reset to Defaults</string>
     <string name="gesture_zones_swipe_hint">Swipe Up/Down: Left columns = Brightness, Right columns = Volume • Horizontal Swipe: Top half = Speed (±0.1x), Bottom half = Seek</string>
+    <string name="pref_player_long_press_speed">Long Press Initial Speed</string>
+    <string name="pref_player_long_press_speed_summary">Initial speed when long pressing the player (%1$.1fx)</string>
+    <string name="player_speed_locked">Locked at %1$.1fx</string>
+    <string name="player_drag_to_lock">Pull left to lock</string>
 </resources>

@@ -86,6 +86,16 @@ import androidx.compose.material3.Surface
 import eu.kanade.tachiyomi.ui.player.settings.PlayerGestureZoneConfig
 import eu.kanade.tachiyomi.ui.player.settings.PlayerZoneAction
 import tachiyomi.presentation.core.i18n.stringResource
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun GestureHandler(
@@ -117,6 +127,7 @@ fun GestureHandler(
 
     var activeTappedZone by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var hudActionText by remember { mutableStateOf<String?>(null) }
+    var isSpeedLocked by remember { mutableStateOf(false) }
 
     LaunchedEffect(activeTappedZone) {
         if (activeTappedZone == null) return@LaunchedEffect
@@ -183,32 +194,50 @@ fun GestureHandler(
                 if (areControlsLocked || longPressAction != LongPressGesture.PlaybackSpeed) return@pointerInput
                 awaitPointerEventScope {
                     var startingX = 0f
-                    var hasDragged = false
-                    val presets = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 3.0f, 3.5f, 4.0f)
-                    val baseIndex = presets.indexOf(2.0f).coerceAtLeast(0)
+                    var startingY = 0f
+                    var initialSpeed = 2.0f
+                    var hasLocked = false
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val changes = event.changes
                         val downChange = changes.firstOrNull { it.pressed && !it.previousPressed }
                         if (downChange != null) {
                             startingX = downChange.position.x
-                            hasDragged = false
+                            startingY = downChange.position.y
+                            hasLocked = false
+                            isSpeedLocked = false
+                            initialSpeed = gesturePreferences.longPressCustomSpeed().get()
                         }
                         if (viewModel.isDynamicSpeedActive.value) {
                             val activeChange = changes.firstOrNull { it.pressed }
                             if (activeChange != null) {
                                 val currentX = activeChange.position.x
-                                val deltaX = currentX - startingX
-                                val presetStep = 36.dp.toPx()
-                                val stepsShifted = (deltaX / presetStep).toInt()
-                                val newIndex = (baseIndex + stepsShifted).coerceIn(0, presets.size - 1)
-                                val targetSpeed = presets[newIndex]
+                                val currentY = activeChange.position.y
+
+                                // Vertical Drag for Speed (Pull UP = faster, Pull DOWN = slower)
+                                val deltaY = startingY - currentY
+                                val stepPx = 24.dp.toPx()
+                                val stepsShifted = (deltaY / stepPx).toInt()
+                                val targetSpeed = (initialSpeed + stepsShifted * 0.1f)
+                                    .coerceIn(0.2f, 6.0f)
+                                    .let { Math.round(it * 10f) / 10f }
+
                                 if (viewModel.gesturePlaybackSpeed.value != targetSpeed) {
-                                    hasDragged = true
                                     viewModel.gesturePlaybackSpeed.update { targetSpeed }
                                     MPVLib.setPropertyDouble("speed", targetSpeed.toDouble())
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
+
+                                // Horizontal Drag to Left to Lock
+                                val deltaX = currentX - startingX
+                                val lockThreshold = 60.dp.toPx()
+                                val shouldLock = deltaX < -lockThreshold || currentX < size.width * 0.2f
+                                if (shouldLock != hasLocked) {
+                                    hasLocked = shouldLock
+                                    isSpeedLocked = shouldLock
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+
                                 activeChange.consume()
                             }
                             val upChange = changes.firstOrNull { !it.pressed && it.previousPressed }
@@ -218,14 +247,17 @@ fun GestureHandler(
                                 viewModel.isDynamicSpeedActive.update { false }
                                 isLongPressing = false
                                 viewModel.playerUpdate.update { PlayerUpdates.None }
-                                if (hasDragged) {
-                                    // User slid to a chosen speed - keep it
+                                if (hasLocked) {
+                                    // User locked speed! Keep it active permanently.
                                     viewModel.playbackSpeed.update { chosenSpeed }
                                     playerPreferences.playerSpeed().set(chosenSpeed)
+                                    MPVLib.setPropertyDouble("speed", chosenSpeed.toDouble())
+                                    hudActionText = "Locked at ${chosenSpeed}x"
                                 } else {
-                                    // User just released without sliding - ramp back smoothly to original speed
+                                    // User released without locking - ramp back smoothly to original speed
                                     viewModel.rampPlaybackSpeed(originalSpeed)
                                 }
+                                isSpeedLocked = false
                             }
                         }
                     }
@@ -325,14 +357,14 @@ fun GestureHandler(
                                 viewModel.pause()
                                 viewModel.sheetShown.update { Sheets.Screenshot }
                             } else if (longPressAction == LongPressGesture.PlaybackSpeed) {
+                                val customInitialSpeed = gesturePreferences.longPressCustomSpeed().get()
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 isLongPressing = true
                                 viewModel.preGesturePlaybackSpeed.update { viewModel.playbackSpeed.value }
-                                viewModel.gesturePlaybackSpeed.update { 2.0f }
+                                viewModel.gesturePlaybackSpeed.update { customInitialSpeed }
                                 viewModel.isDynamicSpeedActive.update { true }
                                 viewModel.hideControls()
-                                // Smooth playback speed ramping (±0.1f step every 16ms) to prevent audio pops
-                                viewModel.rampPlaybackSpeed(2.0f)
+                                viewModel.rampPlaybackSpeed(customInitialSpeed)
                             }
                         }
                     },
@@ -550,6 +582,98 @@ fun GestureHandler(
                         fontSize = 16.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
+                }
+            }
+        }
+
+        // Lock Speed Target Pill (Left Edge)
+        AnimatedVisibility(
+            visible = isDynamicSpeedActive,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 24.dp),
+        ) {
+            val pillColor = if (isSpeedLocked) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                Color.Black.copy(alpha = 0.65f)
+            }
+            val pillBorder = if (isSpeedLocked) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                Color.White.copy(alpha = 0.3f)
+            }
+            Surface(
+                color = pillColor,
+                shape = RoundedCornerShape(24.dp),
+                border = BorderStroke(1.5.dp, pillBorder),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isSpeedLocked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = if (isSpeedLocked) {
+                            stringResource(KMR.strings.player_speed_locked, viewModel.gesturePlaybackSpeed.value)
+                        } else {
+                            stringResource(KMR.strings.player_drag_to_lock)
+                        },
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+
+        // Live Dynamic Speed Top Banner
+        AnimatedVisibility(
+            visible = isDynamicSpeedActive,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 32.dp),
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "▶▶",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "${viewModel.gesturePlaybackSpeed.value}x",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (isSpeedLocked) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
         }
