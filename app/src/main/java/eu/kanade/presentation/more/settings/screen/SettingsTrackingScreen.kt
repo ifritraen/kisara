@@ -91,6 +91,7 @@ object SettingsTrackingScreen : SearchableSettings {
     override fun getPreferences(): List<Preference> {
         val context = LocalContext.current
         val trackPreferences = remember { Injekt.get<TrackPreferences>() }
+        val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
         val trackerManager = remember { Injekt.get<TrackerManager>() }
         val sourceManager = remember { Injekt.get<SourceManager>() }
 
@@ -205,6 +206,56 @@ object SettingsTrackingScreen : SearchableSettings {
                         logout = { dialog = LogoutDialog(trackerManager.bangumi) },
                     ),
                     Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.tracking_info)),
+                ),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.pref_category_track_tab),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.trackTabMangaService(),
+                        title = stringResource(KMR.strings.pref_track_tab_manga_service),
+                        subtitle = "%s",
+                        entries = persistentMapOf(
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.ANILIST to stringResource(KMR.strings.track_service_anilist),
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.MAL to stringResource(KMR.strings.track_service_mal),
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.MANGA_UPDATES to stringResource(KMR.strings.track_service_mangaupdates),
+                        ),
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.trackTabAnimeService(),
+                        title = stringResource(KMR.strings.pref_track_tab_anime_service),
+                        subtitle = "%s",
+                        entries = persistentMapOf(
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.ANILIST to stringResource(KMR.strings.track_service_anilist),
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.MAL to stringResource(KMR.strings.track_service_mal),
+                        ),
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.trackTabNovelService(),
+                        title = stringResource(KMR.strings.pref_track_tab_novel_service),
+                        subtitle = "%s",
+                        entries = persistentMapOf(
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.ANILIST to stringResource(KMR.strings.track_service_anilist),
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.MAL to stringResource(KMR.strings.track_service_mal),
+                            eu.kanade.domain.ui.UiPreferences.TrackTabService.MANGA_UPDATES to stringResource(KMR.strings.track_service_mangaupdates),
+                        ),
+                    ),
+                    Preference.PreferenceItem.SliderPreference(
+                        value = uiPreferences.trackTabPreviousSeasons().get(),
+                        min = 1,
+                        max = 8,
+                        title = stringResource(KMR.strings.pref_track_tab_previous_seasons),
+                        subtitle = stringResource(KMR.strings.pref_track_tab_previous_seasons_summary, uiPreferences.trackTabPreviousSeasons().get()),
+                        onValueChanged = {
+                            uiPreferences.trackTabPreviousSeasons().set(it)
+                            true
+                        },
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.trackTabHideAdult(),
+                        title = stringResource(KMR.strings.pref_track_tab_hide_adult),
+                        subtitle = stringResource(KMR.strings.pref_track_tab_hide_adult_summary),
+                    ),
                 ),
             ),
             Preference.PreferenceGroup(

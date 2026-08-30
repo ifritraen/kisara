@@ -96,11 +96,50 @@ object SettingsLibraryScreen : SearchableSettings {
             getCategoriesGroup(navigator, allCategories, libraryPreferences),
             getGlobalUpdateGroup(allCategories, libraryPreferences),
             getBehaviorGroup(libraryPreferences),
+            // KMK -->
+            getGranularScoringGroup(navigator),
+            getSmartFeedsGroup(navigator),
+            // KMK <--
             // SY -->
             getSortingCategory(LocalNavigator.currentOrThrow, libraryPreferences),
             // SY <--
         )
     }
+
+    // KMK -->
+    @Composable
+    private fun getGranularScoringGroup(navigator: Navigator): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.pref_category_granular_scoring),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_granular_scoring_templates),
+                    subtitle = stringResource(KMR.strings.pref_granular_scoring_templates_summary),
+                    onClick = { navigator.push(SettingsGranularScoringScreen()) },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getSmartFeedsGroup(navigator: Navigator): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.pref_category_suggestions),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_category_suggestions),
+                    subtitle = stringResource(KMR.strings.pref_suggestions_summary),
+                    onClick = { navigator.push(SettingsSuggestionsScreen) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_category_blocked_tags),
+                    subtitle = stringResource(KMR.strings.pref_blocked_tags_summary),
+                    onClick = { navigator.push(SettingsBlockedTagsScreen) },
+                ),
+            ),
+        )
+    }
+    // KMK <--
 
     @Composable
     private fun getCategoriesGroup(

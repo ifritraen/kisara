@@ -3561,4 +3561,7 @@
     <string name="track_score">Score: %1$s</string>
     <string name="track_progress">%1$d / %2$d</string>
     <string name="track_progress_unknown">%1$d / ?</string>
+    <!-- AI Tools Settings -->
+    <string name="pref_category_ai_tools">AI &amp; Smart Tools</string>
+    <string name="pref_ai_tools_summary">AI Manga Colorizer, Super-Resolution Upscaler, OCR &amp; Translation</string>
 </resources>

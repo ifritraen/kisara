@@ -188,6 +188,13 @@ object SettingsBrowseScreen : SearchableSettings {
                             )
                         },
                     ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Custom NSFW Tags",
+                        subtitle = "Manage custom tags treated as NSFW across sources",
+                        onClick = {
+                            navigator.push(SettingsCustomNsfwTagsScreen())
+                        },
+                    ),
                     Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.parental_controls_info)),
                 ),
             ),

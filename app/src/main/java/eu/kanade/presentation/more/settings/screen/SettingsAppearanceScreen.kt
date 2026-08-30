@@ -28,6 +28,7 @@ import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
@@ -54,6 +55,9 @@ object SettingsAppearanceScreen : SearchableSettings {
             getThemeGroup(uiPreferences = uiPreferences),
             // KMK -->
             getMangaInfoThemeGroup(uiPreferences = uiPreferences),
+            getFrostedGlassGroup(uiPreferences = uiPreferences),
+            getDockAndNavigationGroup(uiPreferences = uiPreferences),
+            getGesturesGroup(uiPreferences = uiPreferences),
             // KMK <--
             getDisplayGroup(uiPreferences = uiPreferences),
             // SY -->
@@ -344,6 +348,173 @@ object SettingsAppearanceScreen : SearchableSettings {
             ),
         )
     }
+
+    // KMK -->
+    @Composable
+    private fun getFrostedGlassGroup(uiPreferences: UiPreferences): Preference.PreferenceGroup {
+        val frostedGlass by uiPreferences.kisaraFrostedGlass().collectAsState()
+        val glassOpacity by uiPreferences.bottomBarOpacity().collectAsState()
+        val glassBlur by uiPreferences.bottomBarBlur().collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = "Frosted Glass & Blur Effects",
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.kisaraFrostedGlass(),
+                        title = "Enable Frosted Glass & Blur",
+                        subtitle = "Applies real-time Gaussian blur and frosted glass surfaces across docks and headers",
+                    ),
+                )
+                if (frostedGlass) {
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = glassBlur,
+                            min = 0,
+                            max = 24,
+                            title = "Blur Radius",
+                            subtitle = "${glassBlur}dp",
+                            onValueChanged = {
+                                uiPreferences.bottomBarBlur().set(it)
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = glassOpacity,
+                            min = 10,
+                            max = 100,
+                            title = "Glass Surface Opacity",
+                            subtitle = "$glassOpacity%",
+                            onValueChanged = {
+                                uiPreferences.bottomBarOpacity().set(it)
+                                true
+                            },
+                        ),
+                    )
+                }
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    private fun getDockAndNavigationGroup(uiPreferences: UiPreferences): Preference.PreferenceGroup {
+        val floatingDock by uiPreferences.floatingBottomBar().collectAsState()
+        val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
+        val bottomBarCornerRadius by uiPreferences.bottomBarCornerRadius().collectAsState()
+        val bottomBarGap by uiPreferences.bottomBarGap().collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = "Dock & Bottom Bar Navigation",
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.floatingBottomBar(),
+                        title = "Floating Bottom Dock",
+                        subtitle = "Display modern floating capsule dock with rounded corners and elevated actions",
+                    ),
+                )
+                if (floatingDock) {
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = bottomBarHeight,
+                            min = 36,
+                            max = 64,
+                            title = "Dock Height",
+                            subtitle = "${bottomBarHeight}dp",
+                            onValueChanged = {
+                                uiPreferences.bottomBarHeight().set(it)
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = bottomBarCornerRadius,
+                            min = 4,
+                            max = 32,
+                            title = "Dock Corner Radius",
+                            subtitle = "${bottomBarCornerRadius}dp",
+                            onValueChanged = {
+                                uiPreferences.bottomBarCornerRadius().set(it)
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = bottomBarGap,
+                            min = 0,
+                            max = 16,
+                            title = "Dock Button Gap",
+                            subtitle = "${bottomBarGap}dp",
+                            onValueChanged = {
+                                uiPreferences.bottomBarGap().set(it)
+                                true
+                            },
+                        ),
+                    )
+                }
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showFloatingMediaModeButton(),
+                        title = "Floating Media Mode Switcher",
+                        subtitle = "Show quick Manga / Anime / Novel mode toggle button on the dock",
+                    ),
+                )
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    private fun getGesturesGroup(uiPreferences: UiPreferences): Preference.PreferenceGroup {
+        val tabSwipeGesturesEnabled by uiPreferences.tabSwipeGesturesEnabled().collectAsState()
+        val tabSwipeBottomZoneHeight by uiPreferences.tabSwipeBottomZoneHeight().collectAsState()
+        val tabSwipeMiddleZoneHeight by uiPreferences.tabSwipeMiddleZoneHeight().collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.pref_category_tab_swipe_gestures),
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.tabSwipeGesturesEnabled(),
+                        title = stringResource(KMR.strings.pref_tab_swipe_gestures_enabled),
+                        subtitle = stringResource(KMR.strings.pref_tab_swipe_gestures_summary),
+                    ),
+                )
+                if (tabSwipeGesturesEnabled) {
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = tabSwipeBottomZoneHeight,
+                            min = 5,
+                            max = 30,
+                            title = stringResource(KMR.strings.pref_tab_swipe_bottom_zone),
+                            subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeBottomZoneHeight),
+                            onValueChanged = {
+                                uiPreferences.tabSwipeBottomZoneHeight().set(it)
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = tabSwipeMiddleZoneHeight,
+                            min = 30,
+                            max = 70,
+                            title = stringResource(KMR.strings.pref_tab_swipe_middle_zone),
+                            subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeMiddleZoneHeight),
+                            onValueChanged = {
+                                uiPreferences.tabSwipeMiddleZoneHeight().set(it)
+                                true
+                            },
+                        ),
+                    )
+                }
+            }.toPersistentList(),
+        )
+    }
+    // KMK <--
 
     @Composable
     fun getNavbarGroup(uiPreferences: UiPreferences): Preference.PreferenceGroup {
