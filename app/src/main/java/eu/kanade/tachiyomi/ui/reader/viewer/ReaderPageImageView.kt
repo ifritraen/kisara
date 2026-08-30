@@ -345,7 +345,37 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
 
                 override fun onImageLoadError(e: Exception) {
-                    this@ReaderPageImageView.onImageLoadError(e)
+                    if (data is BufferedSource) {
+                        ImageRequest.Builder(context)
+                            .data(data)
+                            .memoryCachePolicy(CachePolicy.DISABLED)
+                            .diskCachePolicy(CachePolicy.DISABLED)
+                            .target(
+                                onSuccess = { result ->
+                                    val image = result as? BitmapImage
+                                    if (image != null) {
+                                        setImage(ImageSource.bitmap(image.bitmap))
+                                        isVisible = true
+                                    } else {
+                                        this@ReaderPageImageView.onImageLoadError(e)
+                                    }
+                                },
+                            )
+                            .listener(
+                                onError = { _, result ->
+                                    this@ReaderPageImageView.onImageLoadError(result.throwable)
+                                },
+                            )
+                            .size(ViewSizeResolver(this@ReaderPageImageView))
+                            .precision(Precision.INEXACT)
+                            .cropBorders(config.cropBorders)
+                            .customDecoder(true)
+                            .crossfade(false)
+                            .build()
+                            .let(context.imageLoader::enqueue)
+                    } else {
+                        this@ReaderPageImageView.onImageLoadError(e)
+                    }
                 }
             },
         )

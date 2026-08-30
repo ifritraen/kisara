@@ -173,16 +173,22 @@ class ChapterCache(
      */
     @Throws(IOException::class)
     fun putImageToCache(imageUrl: String, response: Response) {
-        // Initialize editor (edits the values for an entry).
+        if (!response.isSuccessful) {
+            response.close()
+            throw IOException("HTTP error ${response.code}")
+        }
+        val source = response.body.source()
+        if (!ImageUtil.isImage(source.peek().inputStream())) {
+            response.close()
+            throw IOException("Response is not a valid image")
+        }
         var editor: DiskLruCache.Editor? = null
 
         try {
-            // Get editor from md5 key.
             val key = DiskUtil.hashKeyForDisk(imageUrl)
             editor = diskCache.edit(key) ?: return
 
-            // Get OutputStream and write image with Okio.
-            response.body.source().saveTo(editor.newOutputStream(0))
+            source.saveTo(editor.newOutputStream(0))
 
             diskCache.flush()
             editor.commit()
