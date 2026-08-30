@@ -12,6 +12,7 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.presentation.library.anime.AnimeLibraryItem
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
+import eu.kanade.tachiyomi.ui.browse.bulk.parseQueries
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
@@ -92,7 +93,8 @@ class AnimeLibraryScreenModel(
                     }
                     if (!inCategory) return@filter false
 
-                    val matchesQuery = searchQuery.isNullOrEmpty() || item.matches(searchQuery, sourceManager)
+                    val subQueries = if (!searchQuery.isNullOrBlank()) parseQueries(searchQuery) else emptyList()
+                    val matchesQuery = subQueries.isEmpty() || subQueries.any { item.matches(it, sourceManager) }
                     val matchesUnseen = when (state.value.unseenFilter) {
                         TriState.DISABLED -> true
                         TriState.ENABLED_IS -> item.unseenCount > 0

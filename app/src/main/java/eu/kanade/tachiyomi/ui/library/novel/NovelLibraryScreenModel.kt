@@ -19,6 +19,7 @@ import eu.kanade.domain.track.novel.MapNovelTrackStatusToLibrary
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
 import eu.kanade.presentation.library.novel.NovelLibraryItem
+import eu.kanade.tachiyomi.ui.browse.bulk.parseQueries
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
@@ -239,8 +240,13 @@ class NovelLibraryScreenModel(
                             val filteredMap = baseLibrary.library
                                 .mapValues { (_, value) ->
                                     if (query != null) {
-                                        value.filter {
-                                            it.matches(query, sourceManager)
+                                        val subQueries = parseQueries(query)
+                                        value.filter { item ->
+                                            if (subQueries.isNotEmpty()) {
+                                                subQueries.any { sub -> item.matches(sub, sourceManager) }
+                                            } else {
+                                                item.matches(query, sourceManager)
+                                            }
                                         }.toPersistentList()
                                     } else {
                                         value

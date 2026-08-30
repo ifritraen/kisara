@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FolderSpecial
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.components.SearchBottomSheet
 import eu.kanade.presentation.components.SearchToolbar
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SourceFilter
 import kotlinx.collections.immutable.persistentListOf
@@ -87,6 +89,43 @@ fun GlobalSearchToolbar(
     onOpenGroupManager: () -> Unit = {},
     // KMK <--
 ) {
+    var showSearchSheet by remember { mutableStateOf(false) }
+
+    val filterChipsRow: @Composable () -> Unit = {
+        GlobalSearchFilterChipsContent(
+            hideSourceFilter = hideSourceFilter,
+            sourceFilter = sourceFilter,
+            onChangeSearchFilter = onChangeSearchFilter,
+            onlyShowHasResults = onlyShowHasResults,
+            onToggleResults = onToggleResults,
+            hasPinnedSources = hasPinnedSources,
+            customGroups = customGroups,
+            activeCustomGroupId = activeCustomGroupId,
+            onSelectCustomGroup = onSelectCustomGroup,
+            onOpenGroupManager = onOpenGroupManager,
+            searchQuery = searchQuery,
+            onChangeSearchQuery = onChangeSearchQuery,
+        )
+    }
+
+    if (showSearchSheet) {
+        SearchBottomSheet(
+            searchQuery = searchQuery,
+            onChangeSearchQuery = onChangeSearchQuery,
+            onSearch = onSearch,
+            onDismissRequest = { showSearchSheet = false },
+            title = "Global Search",
+            placeholderText = stringResource(MR.strings.action_global_search_hint),
+            searchClean = searchClean,
+            onToggleClean = onToggleClean,
+            searchFormat = searchFormat,
+            onToggleFormat = onToggleFormat,
+            searchFuzzy = searchFuzzy,
+            onToggleFuzzy = onToggleFuzzy,
+            filterContent = filterChipsRow,
+        )
+    }
+
     Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
         Box {
             SearchToolbar(
@@ -100,6 +139,12 @@ fun GlobalSearchToolbar(
                 actions = {
                     AppBarActions(
                         actions = persistentListOf(
+                            AppBar.Action(
+                                title = "Search Sheet",
+                                icon = Icons.Outlined.Layers,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = { showSearchSheet = true },
+                            ),
                             AppBar.Action(
                                 title = if (searchClean) "Clean (ON)" else "Clean",
                                 icon = Icons.Outlined.CleaningServices,
@@ -132,104 +177,141 @@ fun GlobalSearchToolbar(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = MaterialTheme.padding.small),
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-        ) {
-            // TODO: make this UX better; it only applies when triggering a new search
-            if (!hideSourceFilter) {
-                // KMK -->
-                if (hasPinnedSources) {
-                    // KMK <--
-                    FilterChip(
-                        selected = sourceFilter == SourceFilter.PinnedOnly,
-                        onClick = { onChangeSearchFilter(SourceFilter.PinnedOnly) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.PushPin,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(FilterChipDefaults.IconSize),
-                            )
-                        },
-                        label = {
-                            Text(text = stringResource(MR.strings.pinned_sources))
-                        },
-                    )
-                }
+        filterChipsRow()
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun GlobalSearchFilterChipsContent(
+    hideSourceFilter: Boolean,
+    sourceFilter: SourceFilter,
+    onChangeSearchFilter: (SourceFilter) -> Unit,
+    onlyShowHasResults: Boolean,
+    onToggleResults: () -> Unit,
+    hasPinnedSources: Boolean,
+    customGroups: List<tachiyomi.domain.source.model.CustomSearchGroup>,
+    activeCustomGroupId: String,
+    onSelectCustomGroup: (String) -> Unit,
+    onOpenGroupManager: () -> Unit,
+    searchQuery: String?,
+    onChangeSearchQuery: (String?) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = MaterialTheme.padding.small),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+    ) {
+        if (!hideSourceFilter) {
+            if (hasPinnedSources) {
                 FilterChip(
-                    selected = sourceFilter == SourceFilter.All,
-                    onClick = { onChangeSearchFilter(SourceFilter.All) },
+                    selected = sourceFilter == SourceFilter.PinnedOnly,
+                    onClick = { onChangeSearchFilter(SourceFilter.PinnedOnly) },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Outlined.DoneAll,
+                            imageVector = Icons.Outlined.PushPin,
                             contentDescription = null,
-                            modifier = Modifier
-                                .size(FilterChipDefaults.IconSize),
+                            modifier = Modifier.size(FilterChipDefaults.IconSize),
                         )
                     },
                     label = {
-                        Text(text = stringResource(MR.strings.all))
+                        Text(text = stringResource(MR.strings.pinned_sources))
                     },
                 )
-
-                // KMK -->
-                var customGroupsExpanded by remember { mutableStateOf(false) }
-                val sourcePreferences = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.source.service.SourcePreferences>() }
-                val allSourceTags = remember { sourcePreferences.customSourceTags().get() }
-                val activeGroup = remember(customGroups, activeCustomGroupId) {
-                    customGroups.firstOrNull { it.id == activeCustomGroupId }
-                }
-                val activeTagName = remember(activeCustomGroupId) {
-                    if (activeCustomGroupId.startsWith("tag_")) activeCustomGroupId.removePrefix("tag_") else null
-                }
-                Box {
-                    FilterChip(
-                        selected = sourceFilter == SourceFilter.Custom,
-                        onClick = {
-                            if (customGroups.isEmpty() && allSourceTags.isEmpty()) {
-                                onOpenGroupManager()
-                            } else {
-                                customGroupsExpanded = true
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = if (activeTagName != null) Icons.Outlined.FilterList else Icons.Outlined.FolderSpecial,
-                                contentDescription = null,
-                                modifier = Modifier.size(FilterChipDefaults.IconSize),
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = if (sourceFilter == SourceFilter.Custom) {
-                                    activeGroup?.name ?: (if (activeTagName != null) "Tag: $activeTagName" else stringResource(KMR.strings.custom_groups))
-                                } else {
-                                    stringResource(KMR.strings.custom_groups)
-                                },
-                            )
-                        },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(FilterChipDefaults.IconSize),
-                            )
-                        },
+            }
+            FilterChip(
+                selected = sourceFilter == SourceFilter.All,
+                onClick = { onChangeSearchFilter(SourceFilter.All) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.DoneAll,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
                     )
-                    DropdownMenu(
-                        expanded = customGroupsExpanded,
-                        onDismissRequest = { customGroupsExpanded = false },
-                        modifier = Modifier.heightIn(max = 280.dp),
-                    ) {
-                        customGroups.forEach { group ->
+                },
+                label = {
+                    Text(text = stringResource(MR.strings.all))
+                },
+            )
+
+            var customGroupsExpanded by remember { mutableStateOf(false) }
+            val sourcePreferences = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.domain.source.service.SourcePreferences>() }
+            val allSourceTags = remember { sourcePreferences.customSourceTags().get() }
+            val activeGroup = remember(customGroups, activeCustomGroupId) {
+                customGroups.firstOrNull { it.id == activeCustomGroupId }
+            }
+            val activeTagName = remember(activeCustomGroupId) {
+                if (activeCustomGroupId.startsWith("tag_")) activeCustomGroupId.removePrefix("tag_") else null
+            }
+            Box {
+                FilterChip(
+                    selected = sourceFilter == SourceFilter.Custom,
+                    onClick = {
+                        if (customGroups.isEmpty() && allSourceTags.isEmpty()) {
+                            onOpenGroupManager()
+                        } else {
+                            customGroupsExpanded = true
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (activeTagName != null) Icons.Outlined.FilterList else Icons.Outlined.FolderSpecial,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = if (sourceFilter == SourceFilter.Custom) {
+                                activeGroup?.name ?: (if (activeTagName != null) "Tag: $activeTagName" else stringResource(KMR.strings.custom_groups))
+                            } else {
+                                stringResource(KMR.strings.custom_groups)
+                            },
+                        )
+                    },
+                    trailingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                        )
+                    },
+                )
+                DropdownMenu(
+                    expanded = customGroupsExpanded,
+                    onDismissRequest = { customGroupsExpanded = false },
+                    modifier = Modifier.heightIn(max = 280.dp),
+                ) {
+                    customGroups.forEach { group ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = group.name,
+                                    fontWeight = if (sourceFilter == SourceFilter.Custom && group.id == activeCustomGroupId) {
+                                        FontWeight.Bold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                                )
+                            },
+                            onClick = {
+                                onSelectCustomGroup(group.id)
+                                customGroupsExpanded = false
+                            },
+                        )
+                    }
+                    if (customGroups.isNotEmpty()) {
+                        HorizontalDivider()
+                    }
+                    if (allSourceTags.isNotEmpty()) {
+                        allSourceTags.forEach { tag ->
+                            val tagId = "tag_$tag"
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        text = group.name,
-                                        fontWeight = if (sourceFilter == SourceFilter.Custom && group.id == activeCustomGroupId) {
+                                        text = "🏷️ $tag",
+                                        fontWeight = if (sourceFilter == SourceFilter.Custom && activeCustomGroupId == tagId) {
                                             FontWeight.Bold
                                         } else {
                                             FontWeight.Normal
@@ -237,195 +319,91 @@ fun GlobalSearchToolbar(
                                     )
                                 },
                                 onClick = {
-                                    onSelectCustomGroup(group.id)
+                                    onSelectCustomGroup(tagId)
                                     customGroupsExpanded = false
                                 },
                             )
                         }
-                        if (customGroups.isNotEmpty()) {
-                            HorizontalDivider()
-                        }
-                        if (allSourceTags.isNotEmpty()) {
-                            allSourceTags.forEach { tag ->
-                                val tagId = "tag_$tag"
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "🏷️ $tag",
-                                            fontWeight = if (sourceFilter == SourceFilter.Custom && activeCustomGroupId == tagId) {
-                                                FontWeight.Bold
-                                            } else {
-                                                FontWeight.Normal
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        onSelectCustomGroup(tagId)
-                                        customGroupsExpanded = false
-                                    },
-                                )
-                            }
-                            HorizontalDivider()
-                        }
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = stringResource(KMR.strings.action_manage_custom_groups),
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            },
-                            onClick = {
-                                customGroupsExpanded = false
-                                onOpenGroupManager()
-                            },
-                        )
+                        HorizontalDivider()
                     }
-                }
-                // KMK <--
-
-                VerticalDivider()
-            }
-
-            FilterChip(
-                selected = onlyShowHasResults,
-                onClick = { onToggleResults() },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.FilterList,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(FilterChipDefaults.IconSize),
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(KMR.strings.action_manage_custom_groups),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        onClick = {
+                            customGroupsExpanded = false
+                            onOpenGroupManager()
+                        },
                     )
-                },
-                label = {
-                    Text(text = stringResource(MR.strings.has_results))
-                },
-            )
+                }
+            }
 
             VerticalDivider()
+        }
 
-            val favoriteManager = remember { Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>() }
-            val appendToQuery: (String) -> Unit = { term ->
-                val current = searchQuery ?: ""
-                val newQuery = if (current.isEmpty()) term else "$current $term"
-                onChangeSearchQuery(newQuery)
-            }
-
-            // Author & Artist Favorite Chip
-            val authors = remember { favoriteManager.getAuthors() }
-            val artists = remember { favoriteManager.getArtists() }
-            val combinedAuthorsArtists = remember(authors, artists) { (authors + artists).distinct() }
-            var authorsArtistsExpanded by remember { mutableStateOf(false) }
-            Box {
-                FilterChip(
-                    selected = false,
-                    onClick = { authorsArtistsExpanded = true },
-                    label = { Text("Author & Artist") },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(FilterChipDefaults.IconSize),
-                        )
-                    },
+        FilterChip(
+            selected = onlyShowHasResults,
+            onClick = { onToggleResults() },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.FilterList,
+                    contentDescription = null,
+                    modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )
-                DropdownMenu(
-                    expanded = authorsArtistsExpanded,
-                    onDismissRequest = { authorsArtistsExpanded = false },
-                    modifier = Modifier.heightIn(max = 240.dp),
-                ) {
-                    if (combinedAuthorsArtists.isEmpty()) {
+            },
+            label = {
+                Text(text = stringResource(MR.strings.has_results))
+            },
+        )
+
+        VerticalDivider()
+
+        val favoriteManager = remember { Injekt.get<eu.kanade.tachiyomi.data.favorite.FavoriteManager>() }
+        val appendToQuery: (String) -> Unit = { term ->
+            val current = searchQuery ?: ""
+            val newQuery = if (current.isEmpty()) term else "$current $term"
+            onChangeSearchQuery(newQuery)
+        }
+
+        // Author & Artist Favorite Chip
+        val authors = remember { favoriteManager.getAuthors() }
+        val artists = remember { favoriteManager.getArtists() }
+        val combinedAuthorsArtists = remember(authors, artists) { (authors + artists).distinct() }
+        var authorsArtistsExpanded by remember { mutableStateOf(false) }
+        Box {
+            FilterChip(
+                selected = false,
+                onClick = { authorsArtistsExpanded = true },
+                label = { Text("Author & Artist") },
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+            )
+            DropdownMenu(
+                expanded = authorsArtistsExpanded,
+                onDismissRequest = { authorsArtistsExpanded = false },
+                modifier = Modifier.heightIn(max = 240.dp),
+            ) {
+                if (combinedAuthorsArtists.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No favorite author/artist") },
+                        onClick = { authorsArtistsExpanded = false },
+                        enabled = false,
+                    )
+                } else {
+                    combinedAuthorsArtists.forEach { name ->
                         DropdownMenuItem(
-                            text = { Text("No favorite author/artist") },
-                            onClick = { authorsArtistsExpanded = false },
-                            enabled = false,
-                        )
-                    } else {
-                        combinedAuthorsArtists.forEach { name ->
-                            DropdownMenuItem(
-                                text = { Text(name) },
-                                onClick = {
-                                    appendToQuery(name)
-                                    authorsArtistsExpanded = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Tags Favorite Chip
-            val favTags = remember { favoriteManager.getTags() }
-            var tagsExpanded by remember { mutableStateOf(false) }
-            Box {
-                FilterChip(
-                    selected = false,
-                    onClick = { tagsExpanded = true },
-                    label = { Text("Tags") },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(FilterChipDefaults.IconSize),
-                        )
-                    },
-                )
-                DropdownMenu(
-                    expanded = tagsExpanded,
-                    onDismissRequest = { tagsExpanded = false },
-                    modifier = Modifier.heightIn(max = 240.dp),
-                ) {
-                    if (favTags.isEmpty()) {
-                        DropdownMenuItem(
-                            text = { Text("No favorite tags") },
-                            onClick = { tagsExpanded = false },
-                            enabled = false,
-                        )
-                    } else {
-                        favTags.forEach { tag ->
-                            DropdownMenuItem(
-                                text = { Text(tag) },
-                                onClick = {
-                                    appendToQuery(tag)
-                                    tagsExpanded = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Language Chip
-            val languagesList = remember {
-                listOf(
-                    "english", "spanish", "korean", "japanese", "chinese", "french", "german", "italian", "russian", "vietnamese", "portuguese",
-                )
-            }
-            var languagesExpanded by remember { mutableStateOf(false) }
-            Box {
-                FilterChip(
-                    selected = false,
-                    onClick = { languagesExpanded = true },
-                    label = { Text("Language") },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(FilterChipDefaults.IconSize),
-                        )
-                    },
-                )
-                DropdownMenu(
-                    expanded = languagesExpanded,
-                    onDismissRequest = { languagesExpanded = false },
-                    modifier = Modifier.heightIn(max = 240.dp),
-                ) {
-                    languagesList.forEach { lang ->
-                        DropdownMenuItem(
-                            text = { Text(lang) },
+                            text = { Text(name) },
                             onClick = {
-                                appendToQuery(lang)
-                                languagesExpanded = false
+                                appendToQuery(name)
+                                authorsArtistsExpanded = false
                             },
                         )
                     }
@@ -433,6 +411,82 @@ fun GlobalSearchToolbar(
             }
         }
 
-        HorizontalDivider()
+        // Tags Favorite Chip
+        val favTags = remember { favoriteManager.getTags() }
+        var tagsExpanded by remember { mutableStateOf(false) }
+        Box {
+            FilterChip(
+                selected = false,
+                onClick = { tagsExpanded = true },
+                label = { Text("Tags") },
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+            )
+            DropdownMenu(
+                expanded = tagsExpanded,
+                onDismissRequest = { tagsExpanded = false },
+                modifier = Modifier.heightIn(max = 240.dp),
+            ) {
+                if (favTags.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No favorite tags") },
+                        onClick = { tagsExpanded = false },
+                        enabled = false,
+                    )
+                } else {
+                    favTags.forEach { tag ->
+                        DropdownMenuItem(
+                            text = { Text(tag) },
+                            onClick = {
+                                appendToQuery(tag)
+                                tagsExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        // Language Chip
+        val languagesList = remember {
+            listOf(
+                "english", "spanish", "korean", "japanese", "chinese", "french", "german", "italian", "russian", "vietnamese", "portuguese",
+            )
+        }
+        var languagesExpanded by remember { mutableStateOf(false) }
+        Box {
+            FilterChip(
+                selected = false,
+                onClick = { languagesExpanded = true },
+                label = { Text("Language") },
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+            )
+            DropdownMenu(
+                expanded = languagesExpanded,
+                onDismissRequest = { languagesExpanded = false },
+                modifier = Modifier.heightIn(max = 240.dp),
+            ) {
+                languagesList.forEach { lang ->
+                    DropdownMenuItem(
+                        text = { Text(lang) },
+                        onClick = {
+                            appendToQuery(lang)
+                            languagesExpanded = false
+                        },
+                    )
+                }
+            }
+        }
     }
 }

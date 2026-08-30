@@ -23,6 +23,7 @@ import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
+import eu.kanade.tachiyomi.ui.browse.bulk.parseQueries
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
@@ -1270,7 +1271,28 @@ class LibraryScreenModel(
     }
 
     private suspend fun filterLibrary(unfiltered: List<LibraryItem>, query: String?, loggedInTrackServices: Map<Long, TriState>): List<LibraryItem> {
-        return if (unfiltered.isNotEmpty() && !query.isNullOrBlank()) {
+        if (unfiltered.isEmpty() || query.isNullOrBlank()) return unfiltered
+
+        val subQueries = parseQueries(query)
+        if (subQueries.size > 1) {
+            val matchedIds = mutableSetOf<Long>()
+            val result = mutableListOf<LibraryItem>()
+            for (subQuery in subQueries) {
+                val singleFiltered = filterLibrarySingle(unfiltered, subQuery, loggedInTrackServices)
+                for (item in singleFiltered) {
+                    if (matchedIds.add(item.libraryManga.manga.id)) {
+                        result.add(item)
+                    }
+                }
+            }
+            return result
+        }
+
+        return filterLibrarySingle(unfiltered, query, loggedInTrackServices)
+    }
+
+    private suspend fun filterLibrarySingle(unfiltered: List<LibraryItem>, query: String, loggedInTrackServices: Map<Long, TriState>): List<LibraryItem> {
+        return if (unfiltered.isNotEmpty() && query.isNotBlank()) {
             // KMK -->
             val cleanOn = sourcePreferences.searchClean().get()
             val formatOn = sourcePreferences.searchFormat().get()

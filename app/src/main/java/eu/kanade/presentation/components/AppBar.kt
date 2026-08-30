@@ -350,6 +350,18 @@ fun SearchToolbar(
                 focusManager.moveFocus(FocusDirection.Next)
             }
 
+            var showSearchBottomSheet by remember { mutableStateOf(false) }
+
+            if (showSearchBottomSheet) {
+                SearchBottomSheet(
+                    searchQuery = searchQuery,
+                    onChangeSearchQuery = onChangeSearchQuery,
+                    onSearch = onSearch,
+                    onDismissRequest = { showSearchBottomSheet = false },
+                    placeholderText = placeholderText ?: stringResource(MR.strings.action_search_hint),
+                )
+            }
+
             Column(modifier = Modifier.fillMaxWidth()) {
                 BasicTextField(
                     value = searchQuery,
@@ -367,7 +379,9 @@ fun SearchToolbar(
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { searchAndClearFocus() }),
-                    singleLine = true,
+                    singleLine = false,
+                    maxLines = 3,
+                    minLines = 1,
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
                     visualTransformation = visualTransformation,
                     interactionSource = interactionSource,
@@ -376,7 +390,7 @@ fun SearchToolbar(
                             value = searchQuery,
                             innerTextField = innerTextField,
                             enabled = true,
-                            singleLine = true,
+                            singleLine = false,
                             visualTransformation = visualTransformation,
                             interactionSource = interactionSource,
                             placeholder = {
