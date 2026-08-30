@@ -222,17 +222,12 @@ class BackupRestorer(
         categoriesRestorer(backupCategories)
 
         restoreProgress.incrementAndGet()
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(MR.strings.categories),
-                restoreProgress.get(),
-                restoreAmount,
-                isSync,
-            )
-                // KMK -->
-                .show(Notifications.ID_RESTORE_PROGRESS)
-            // KMK <--
-        }
+        notifier.showRestoreProgress(
+            context.stringResource(MR.strings.categories),
+            restoreProgress.get(),
+            restoreAmount,
+            isSync,
+        )
     }
 
     context(scope: CoroutineScope)
@@ -242,15 +237,12 @@ class BackupRestorer(
         animeCategoriesRestorer(backupCategories)
 
         restoreProgress.incrementAndGet()
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(KMR.strings.label_anime),
-                restoreProgress.get(),
-                restoreAmount,
-                isSync,
-            )
-                .show(Notifications.ID_RESTORE_PROGRESS)
-        }
+        notifier.showRestoreProgress(
+            context.stringResource(KMR.strings.label_anime),
+            restoreProgress.get(),
+            restoreAmount,
+            isSync,
+        )
     }
 
     context(scope: CoroutineScope)
@@ -260,15 +252,12 @@ class BackupRestorer(
         novelCategoriesRestorer(backupCategories)
 
         restoreProgress.incrementAndGet()
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(KMR.strings.label_novel),
-                restoreProgress.get(),
-                restoreAmount,
-                isSync,
-            )
-                .show(Notifications.ID_RESTORE_PROGRESS)
-        }
+        notifier.showRestoreProgress(
+            context.stringResource(KMR.strings.label_novel),
+            restoreProgress.get(),
+            restoreAmount,
+            isSync,
+        )
     }
 
     // SY -->
@@ -285,17 +274,12 @@ class BackupRestorer(
         // KMK <--
 
         restoreProgress.incrementAndGet()
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(KMR.strings.saved_searches_feeds),
-                restoreProgress.get(),
-                restoreAmount,
-                isSync,
-            )
-                // KMK -->
-                .show(Notifications.ID_RESTORE_PROGRESS)
-            // KMK <--
-        }
+        notifier.showRestoreProgress(
+            context.stringResource(KMR.strings.saved_searches_feeds),
+            restoreProgress.get(),
+            restoreAmount,
+            isSync,
+        )
     }
     // SY <--
 
@@ -304,29 +288,26 @@ class BackupRestorer(
         backupCategories: List<BackupCategory>,
     ) = launch(dispatcher) {
         val sortedMangas = mangaRestorer.sortByNew(backupMangas)
-        sortedMangas.chunked(100).forEach { chunk ->
-            ensureActive()
-            chunk.forEach { manga ->
+        sortedMangas.map {
+            async {
+                ensureActive()
                 try {
-                    mangaRestorer.restore(manga, backupCategories)
+                    mangaRestorer.restore(it, backupCategories)
                 } catch (e: Exception) {
-                    val sourceName = sourceMapping[manga.source] ?: manga.source.toString()
-                    errors.add(Date() to "${manga.title} [$sourceName]: ${e.message}")
+                    val sourceName = sourceMapping[it.source] ?: it.source.toString()
+                    errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
+                } finally {
+                    val currentProgress = restoreProgress.incrementAndGet()
+                    if (currentProgress == restoreAmount || currentProgress % mangaProgressBatch == 0) {
+                        notifier.showRestoreProgress(it.title, currentProgress, restoreAmount, isSync)
+                    }
                 }
             }
-            val currentProgress = restoreProgress.addAndGet(chunk.size)
-            with(notifier) {
-                showRestoreProgress(chunk.last().title, currentProgress, restoreAmount, isSync)
-                    .show(Notifications.ID_RESTORE_PROGRESS)
-            }
-        }
+        }.awaitAll()
 
         val finalProgress = restoreProgress.get()
         if (finalProgress < restoreAmount) {
-            with(notifier) {
-                showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
-                    .show(Notifications.ID_RESTORE_PROGRESS)
-            }
+            notifier.showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
         }
     }
 
@@ -335,29 +316,26 @@ class BackupRestorer(
         backupCategories: List<BackupCategory>,
     ) = launch(dispatcher) {
         val sortedAnimes = animeRestorer.sortByNew(backupAnimes)
-        sortedAnimes.chunked(100).forEach { chunk ->
-            ensureActive()
-            chunk.forEach { anime ->
+        sortedAnimes.map {
+            async {
+                ensureActive()
                 try {
-                    animeRestorer.restore(anime, backupCategories)
+                    animeRestorer.restore(it, backupCategories)
                 } catch (e: Exception) {
-                    val sourceName = sourceMapping[anime.source] ?: anime.source.toString()
-                    errors.add(Date() to "${anime.title} [$sourceName]: ${e.message}")
+                    val sourceName = sourceMapping[it.source] ?: it.source.toString()
+                    errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
+                } finally {
+                    val currentProgress = restoreProgress.incrementAndGet()
+                    if (currentProgress == restoreAmount || currentProgress % mangaProgressBatch == 0) {
+                        notifier.showRestoreProgress(it.title, currentProgress, restoreAmount, isSync)
+                    }
                 }
             }
-            val currentProgress = restoreProgress.addAndGet(chunk.size)
-            with(notifier) {
-                showRestoreProgress(chunk.last().title, currentProgress, restoreAmount, isSync)
-                    .show(Notifications.ID_RESTORE_PROGRESS)
-            }
-        }
+        }.awaitAll()
 
         val finalProgress = restoreProgress.get()
         if (finalProgress < restoreAmount) {
-            with(notifier) {
-                showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
-                    .show(Notifications.ID_RESTORE_PROGRESS)
-            }
+            notifier.showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
         }
     }
 
@@ -366,29 +344,26 @@ class BackupRestorer(
         backupCategories: List<BackupCategory>,
     ) = launch(dispatcher) {
         val sortedNovels = novelRestorer.sortByNew(backupNovels)
-        sortedNovels.chunked(100).forEach { chunk ->
-            ensureActive()
-            chunk.forEach { novel ->
+        sortedNovels.map {
+            async {
+                ensureActive()
                 try {
-                    novelRestorer.restore(novel, backupCategories)
+                    novelRestorer.restore(it, backupCategories)
                 } catch (e: Exception) {
-                    val sourceName = sourceMapping[novel.source] ?: novel.source.toString()
-                    errors.add(Date() to "${novel.title} [$sourceName]: ${e.message}")
+                    val sourceName = sourceMapping[it.source] ?: it.source.toString()
+                    errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
+                } finally {
+                    val currentProgress = restoreProgress.incrementAndGet()
+                    if (currentProgress == restoreAmount || currentProgress % mangaProgressBatch == 0) {
+                        notifier.showRestoreProgress(it.title, currentProgress, restoreAmount, isSync)
+                    }
                 }
             }
-            val currentProgress = restoreProgress.addAndGet(chunk.size)
-            with(notifier) {
-                showRestoreProgress(chunk.last().title, currentProgress, restoreAmount, isSync)
-                    .show(Notifications.ID_RESTORE_PROGRESS)
-            }
-        }
+        }.awaitAll()
 
         val finalProgress = restoreProgress.get()
         if (finalProgress < restoreAmount) {
-            with(notifier) {
-                showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
-                    .show(Notifications.ID_RESTORE_PROGRESS)
-            }
+            notifier.showRestoreProgress(context.stringResource(MR.strings.restoring_backup), finalProgress, restoreAmount, isSync)
         }
     }
 
@@ -403,17 +378,12 @@ class BackupRestorer(
         )
 
         restoreProgress.incrementAndGet()
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(MR.strings.app_settings),
-                restoreProgress.get(),
-                restoreAmount,
-                isSync,
-            )
-                // KMK -->
-                .show(Notifications.ID_RESTORE_PROGRESS)
-            // KMK <--
-        }
+        notifier.showRestoreProgress(
+            context.stringResource(MR.strings.app_settings),
+            restoreProgress.get(),
+            restoreAmount,
+            isSync,
+        )
     }
 
     private fun CoroutineScope.restoreSourcePreferences(preferences: List<BackupSourcePreferences>) = launch(dispatcher) {
@@ -421,17 +391,12 @@ class BackupRestorer(
         preferenceRestorer.restoreSource(preferences)
 
         restoreProgress.incrementAndGet()
-        with(notifier) {
-            showRestoreProgress(
-                context.stringResource(MR.strings.source_settings),
-                restoreProgress.get(),
-                restoreAmount,
-                isSync,
-            )
-                // KMK -->
-                .show(Notifications.ID_RESTORE_PROGRESS)
-            // KMK <--
-        }
+        notifier.showRestoreProgress(
+            context.stringResource(MR.strings.source_settings),
+            restoreProgress.get(),
+            restoreAmount,
+            isSync,
+        )
     }
 
     private fun CoroutineScope.restoreExtensionStores(
@@ -448,17 +413,12 @@ class BackupRestorer(
                 }
 
                 restoreProgress.incrementAndGet()
-                with(notifier) {
-                    showRestoreProgress(
-                        context.stringResource(MR.strings.extensionStores),
-                        restoreProgress.get(),
-                        restoreAmount,
-                        isSync,
-                    )
-                        // KMK -->
-                        .show(Notifications.ID_RESTORE_PROGRESS)
-                    // KMK <--
-                }
+                notifier.showRestoreProgress(
+                    context.stringResource(MR.strings.extensionStores),
+                    restoreProgress.get(),
+                    restoreAmount,
+                    isSync,
+                )
             }
     }
 
@@ -487,14 +447,12 @@ class BackupRestorer(
             eu.kanade.tachiyomi.extension.JarExtensionManager.initialize(context)
 
             restoreProgress.incrementAndGet()
-            with(notifier) {
-                showRestoreProgress(
-                    context.stringResource(KMR.strings.sideloaded_extensions),
-                    restoreProgress.get(),
-                    restoreAmount,
-                    isSync,
-                ).show(Notifications.ID_RESTORE_PROGRESS)
-            }
+            notifier.showRestoreProgress(
+                context.stringResource(KMR.strings.sideloaded_extensions),
+                restoreProgress.get(),
+                restoreAmount,
+                isSync,
+            )
         } catch (e: Exception) {
             errors.add(Date() to "Failed to restore sideloaded extensions: ${e.message}")
         }
@@ -526,14 +484,12 @@ class BackupRestorer(
             }
 
             restoreProgress.incrementAndGet()
-            with(notifier) {
-                showRestoreProgress(
-                    context.stringResource(KMR.strings.vpn_settings),
-                    restoreProgress.get(),
-                    restoreAmount,
-                    isSync,
-                ).show(Notifications.ID_RESTORE_PROGRESS)
-            }
+            notifier.showRestoreProgress(
+                context.stringResource(KMR.strings.vpn_settings),
+                restoreProgress.get(),
+                restoreAmount,
+                isSync,
+            )
         } catch (e: Exception) {
             errors.add(Date() to "Failed to restore Wireguard settings: ${e.message}")
         }
