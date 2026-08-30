@@ -140,31 +140,31 @@ class StorageManager(
 
     // KMK -->
     fun getTranslationsDirectory(): UniFile? {
-        return baseDir?.createDirectory(TRANSLATION_PATH)
+        return baseDir?.findFile(TRANSLATION_PATH) ?: baseDir?.createDirectory(TRANSLATION_PATH)
     }
 
     fun getColorizerDirectory(): UniFile? {
-        return baseDir?.createDirectory(COLORIZER_PATH)
+        return baseDir?.findFile(COLORIZER_PATH) ?: baseDir?.createDirectory(COLORIZER_PATH)
     }
 
     fun getSuperResolutionDirectory(): UniFile? {
-        return baseDir?.createDirectory(SUPER_RESOLUTION_PATH)
+        return baseDir?.findFile(SUPER_RESOLUTION_PATH) ?: baseDir?.createDirectory(SUPER_RESOLUTION_PATH)
     }
 
     fun getFontsDirectory(): UniFile? {
-        return baseDir?.createDirectory(FONTS_PATH)
+        return baseDir?.findFile(FONTS_PATH) ?: baseDir?.createDirectory(FONTS_PATH)
     }
 
     fun getScriptsDirectory(): UniFile? {
-        return baseDir?.createDirectory(SCRIPTS_PATH)
+        return baseDir?.findFile(SCRIPTS_PATH) ?: baseDir?.createDirectory(SCRIPTS_PATH)
     }
 
     fun getScriptOptsDirectory(): UniFile? {
-        return baseDir?.createDirectory(SCRIPT_OPTS_PATH)
+        return baseDir?.findFile(SCRIPT_OPTS_PATH) ?: baseDir?.createDirectory(SCRIPT_OPTS_PATH)
     }
 
     fun getShadersDirectory(): UniFile? {
-        return baseDir?.createDirectory(SHADERS_PATH)
+        return baseDir?.findFile(SHADERS_PATH) ?: baseDir?.createDirectory(SHADERS_PATH)
     }
     // KMK <--
 

@@ -77,7 +77,7 @@ class MangaColorizeEngine(
                 probeBuffer.put(i, 0.5f)
             }
             probeBuffer.rewind()
-            val inputName = session.inputNames.iterator().next()
+            val inputName = session.inputNames.firstOrNull { it.contains("input", ignoreCase = true) || it.contains("data", ignoreCase = true) } ?: session.inputNames.first()
             val tensor = OnnxTensor.createTensor(
                 env,
                 probeBuffer,
@@ -141,7 +141,7 @@ class MangaColorizeEngine(
             isBgr = isBgr,
         )
 
-        val inputName = session.inputNames.iterator().next()
+        val inputName = session.inputNames.firstOrNull { it.contains("input", ignoreCase = true) || it.contains("data", ignoreCase = true) } ?: session.inputNames.first()
         val inputTensor = OnnxTensor.createTensor(
             env,
             inputBuffer,

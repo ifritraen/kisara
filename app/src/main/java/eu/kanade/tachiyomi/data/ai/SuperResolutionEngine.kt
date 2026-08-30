@@ -140,15 +140,18 @@ class SuperResolutionEngine(
 
         val w = inputBitmap.width
         val h = inputBitmap.height
-        val outW = w * scale
-        val outH = h * scale
 
         val tileIn = 384
         val pad = 16
         val core = tileIn - 2 * pad // Effective step = 352
-
-        val outPixels = IntArray(outW * outH)
         val inputName = session.inputNames.iterator().next()
+
+        // Probe model output shape with a single dummy tile if needed, or dynamically on first tile
+        var modelScale = if (isAcnetLuma) 2 else 4
+        var rawOutW = w * modelScale
+        var rawOutH = h * modelScale
+        var outPixels = IntArray(rawOutW * rawOutH)
+        var initializedScale = false
 
         var y = 0
         while (y < h) {
@@ -210,7 +213,18 @@ class SuperResolutionEngine(
                 val outTensor = results.get(0) as OnnxTensor
                 val outBuffer = outTensor.floatBuffer
 
-                val outTileDim = tileIn * scale
+                val outShape = outTensor.info.shape
+                val outTileDim = outShape[2].toInt()
+                val detectedScale = max(1, outTileDim / tileIn)
+
+                if (!initializedScale) {
+                    modelScale = detectedScale
+                    rawOutW = w * modelScale
+                    rawOutH = h * modelScale
+                    outPixels = IntArray(rawOutW * rawOutH)
+                    initializedScale = true
+                }
+
                 val outPlane = outTileDim * outTileDim
                 val outFloats = FloatArray(outBuffer.remaining())
                 outBuffer.get(outFloats)
@@ -219,30 +233,41 @@ class SuperResolutionEngine(
                 results.close()
 
                 // 5. Crop the effective core region and copy to destination
-                val cropX = pad * scale
-                val cropY = pad * scale
-                val targetCoreW = coreW * scale
-                val targetCoreH = coreH * scale
+                val cropX = pad * modelScale
+                val cropY = pad * modelScale
+                val targetCoreW = coreW * modelScale
+                val targetCoreH = coreH * modelScale
 
                 for (cy in 0 until targetCoreH) {
-                    val dstY = y * scale + cy
-                    if (dstY >= outH) break
+                    val dstY = y * modelScale + cy
+                    if (dstY >= rawOutH) break
 
                     for (cx in 0 until targetCoreW) {
-                        val dstX = x * scale + cx
-                        if (dstX >= outW) break
+                        val dstX = x * modelScale + cx
+                        if (dstX >= rawOutW) break
 
                         val tileIdx = (cropY + cy) * outTileDim + (cropX + cx)
                         val color = if (channels == 1) {
-                            val luma = (outFloats[tileIdx] * 255.0f).roundToInt().coerceIn(0, 255)
-                            (0xFF shl 24) or (luma shl 16) or (luma shl 8) or luma
+                            val srcX = (x + cx / modelScale).coerceIn(0, w - 1)
+                            val srcY = (y + cy / modelScale).coerceIn(0, h - 1)
+                            val origPx = inputBitmap.getPixel(srcX, srcY)
+                            val origR = Color.red(origPx)
+                            val origG = Color.green(origPx)
+                            val origB = Color.blue(origPx)
+                            val origLuma = (0.299f * origR + 0.587f * origG + 0.114f * origB).coerceAtLeast(1.0f)
+                            val newLuma = (outFloats[tileIdx] * 255.0f).coerceIn(0.0f, 255.0f)
+                            val ratio = newLuma / origLuma
+                            val r = (origR * ratio).roundToInt().coerceIn(0, 255)
+                            val g = (origG * ratio).roundToInt().coerceIn(0, 255)
+                            val b = (origB * ratio).roundToInt().coerceIn(0, 255)
+                            (0xFF shl 24) or (r shl 16) or (g shl 8) or b
                         } else {
                             val r = (outFloats[tileIdx] * 255.0f).roundToInt().coerceIn(0, 255)
                             val g = (outFloats[outPlane + tileIdx] * 255.0f).roundToInt().coerceIn(0, 255)
                             val b = (outFloats[2 * outPlane + tileIdx] * 255.0f).roundToInt().coerceIn(0, 255)
                             (0xFF shl 24) or (r shl 16) or (g shl 8) or b
                         }
-                        outPixels[dstY * outW + dstX] = color
+                        outPixels[dstY * rawOutW + dstX] = color
                     }
                 }
 
@@ -251,9 +276,18 @@ class SuperResolutionEngine(
             y += coreH
         }
 
-        val upscaledBitmap = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
-        upscaledBitmap.setPixels(outPixels, 0, outW, 0, 0, outW, outH)
-        upscaledBitmap
+        val rawBitmap = Bitmap.createBitmap(rawOutW, rawOutH, Bitmap.Config.ARGB_8888)
+        rawBitmap.setPixels(outPixels, 0, rawOutW, 0, 0, rawOutW, rawOutH)
+
+        val targetW = w * scale
+        val targetH = h * scale
+        if (rawOutW != targetW || rawOutH != targetH) {
+            val scaled = Bitmap.createScaledBitmap(rawBitmap, targetW, targetH, true)
+            rawBitmap.recycle()
+            scaled
+        } else {
+            rawBitmap
+        }
     }
 
     override fun close() {
