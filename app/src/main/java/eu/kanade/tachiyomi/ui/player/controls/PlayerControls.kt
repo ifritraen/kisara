@@ -179,6 +179,17 @@ fun PlayerControls(
         animationSpec = playerControlsExitAnimationSpec(),
         label = "controls_transparent_overlay",
     )
+
+    // Sub-Zero Extra Dim Scrim Canvas (Anizen-style hardware-black scrim overlay)
+    if (currentBrightness < 0f) {
+        val scrimAlpha = (-currentBrightness).coerceIn(0f, 0.85f)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = scrimAlpha)),
+        )
+    }
+
     GestureHandler(
         viewModel = viewModel,
         interactionSource = interactionSource,
@@ -271,7 +282,7 @@ fun PlayerControls(
                     BrightnessSlider(
                         brightness = brightness,
                         positiveRange = 0f..1f,
-                        negativeRange = 0f..0.75f,
+                        negativeRange = 0f..0.80f,
                     )
                 }
 

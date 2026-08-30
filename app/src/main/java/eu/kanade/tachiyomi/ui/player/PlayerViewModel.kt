@@ -1117,9 +1117,9 @@ class PlayerViewModel @JvmOverloads constructor(
     fun changeBrightnessTo(
         brightness: Float,
     ) {
-        currentBrightness.update { _ -> brightness.coerceIn(-0.75f, 1f) }
+        currentBrightness.update { _ -> brightness.coerceIn(-0.80f, 1f) }
         activity.window.attributes = activity.window.attributes.apply {
-            screenBrightness = brightness.coerceIn(0f, 1f)
+            screenBrightness = brightness.coerceIn(0.01f, 1f)
         }
     }
 
@@ -1448,7 +1448,7 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun changeBrightnessBy(delta: Float) {
-        val newBrightness = (currentBrightness.value + delta).coerceIn(-0.75f, 1f)
+        val newBrightness = (currentBrightness.value + delta).coerceIn(-0.80f, 1f)
         changeBrightnessTo(newBrightness)
         displayBrightnessSlider()
     }

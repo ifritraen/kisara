@@ -120,7 +120,7 @@ private fun VerticalSliderInternal(
                     .fillMaxHeight(targetHeight)
                     .background(MaterialTheme.colorScheme.primary),
             )
-            if (overflowPercentage != null) {
+            if (overflowPercentage != null && overflowPercentage > 0f) {
                 val overflowHeight by animateFloatAsState(
                     targetValue = overflowPercentage,
                     label = "vslideroverflowheight",
@@ -129,7 +129,7 @@ private fun VerticalSliderInternal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(overflowHeight)
-                        .background(MaterialTheme.colorScheme.errorContainer),
+                        .background(Color(0xFF9C27B0)), // Vibrant Boost Purple
                 )
             }
         }
@@ -143,30 +143,37 @@ fun BrightnessSlider(
     negativeRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier,
 ) {
+    val isSubZero = brightness < 0f
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
     ) {
         Text(
-            text = (brightness * 100).toInt().toString(),
+            text = if (isSubZero) {
+                "-${(-brightness * 100).toInt()}%"
+            } else {
+                "${(brightness * 100).toInt()}%"
+            },
             style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (isSubZero) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+            color = if (isSubZero) Color(0xFFBA68C8) else Color.White,
             textAlign = TextAlign.Center,
         )
         VerticalSlider(
             value = brightness.coerceIn(0f, 1f),
             range = positiveRange,
             overflowRange = negativeRange,
-            overflowValue = (-brightness).coerceIn(0f..0.75f),
+            overflowValue = (-brightness).coerceIn(0f..0.80f),
         )
         Icon(
-            imageVector = when (percentage(brightness, positiveRange)) {
-                in -1f..0f -> Icons.Default.ModeNight
-                in 0f..0.3f -> Icons.Default.BrightnessLow
-                in 0.3f..0.6f -> Icons.Default.BrightnessMedium
-                in 0.6f..1f -> Icons.Default.BrightnessHigh
-                else -> Icons.Default.BrightnessMedium
+            imageVector = when {
+                isSubZero -> Icons.Default.ModeNight
+                brightness <= 0.33f -> Icons.Default.BrightnessLow
+                brightness <= 0.66f -> Icons.Default.BrightnessMedium
+                else -> Icons.Default.BrightnessHigh
             },
+            tint = if (isSubZero) Color(0xFFBA68C8) else Color.White,
             contentDescription = null,
         )
     }
@@ -182,12 +189,14 @@ fun VolumeSlider(
     displayAsPercentage: Boolean = false,
 ) {
     val percentage = (percentage(volume, range) * 100).roundToInt()
+    val boostVolume = (mpvVolume - 100).coerceAtLeast(0)
+    val isBoosting = boostVolume > 0
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
     ) {
-        val boostVolume = mpvVolume - 100
         val (deviceVolumeString, boostVolumeString) = getVolumeSliderText(
             volume,
             boostVolume,
@@ -195,40 +204,46 @@ fun VolumeSlider(
             displayAsPercentage,
         )
         Text(
-            text = deviceVolumeString,
+            text = if (isBoosting) boostVolumeString else deviceVolumeString,
             style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (isBoosting) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+            color = if (isBoosting) Color(0xFFE1BEE7) else Color.White,
             textAlign = TextAlign.Center,
         )
         Box {
             VerticalSlider(
                 value = if (displayAsPercentage) percentage else volume,
                 range = if (displayAsPercentage) 0..100 else range,
-                overflowValue = boostVolume,
+                overflowValue = if (isBoosting) boostVolume else null,
                 overflowRange = boostRange,
             )
 
-            Text(
-                text = boostVolumeString,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    shadow = Shadow(
-                        color = Color.Black,
-                        offset = Offset(1f, 1f),
-                        blurRadius = 4f,
+            if (isBoosting) {
+                Text(
+                    text = "BOOST",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        shadow = Shadow(
+                            color = Color.Black,
+                            offset = Offset(1f, 1f),
+                            blurRadius = 4f,
+                        ),
                     ),
-                ),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-            )
+                    color = Color(0xFFE1BEE7),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
+                )
+            }
         }
         Icon(
-            imageVector = when (percentage) {
-                0 -> Icons.AutoMirrored.Default.VolumeOff
-                in 0..30 -> Icons.AutoMirrored.Default.VolumeMute
-                in 30..60 -> Icons.AutoMirrored.Default.VolumeDown
-                in 60..100 -> Icons.AutoMirrored.Default.VolumeUp
-                else -> Icons.AutoMirrored.Default.VolumeOff
+            imageVector = when {
+                isBoosting -> Icons.AutoMirrored.Default.VolumeUp
+                percentage == 0 -> Icons.AutoMirrored.Default.VolumeOff
+                percentage <= 30 -> Icons.AutoMirrored.Default.VolumeMute
+                percentage <= 60 -> Icons.AutoMirrored.Default.VolumeDown
+                else -> Icons.AutoMirrored.Default.VolumeUp
             },
+            tint = if (isBoosting) Color(0xFFBA68C8) else Color.White,
             contentDescription = null,
         )
     }
@@ -248,8 +263,7 @@ val getVolumeSliderText: @Composable (Int, Int, Int, Boolean) -> Pair<String, St
 
         val boostVolumeString = when (boostVolume) {
             0 -> ""
-            in 0..1000 -> "+${integerFormat.format(boostVolume)}"
-            in -100..-1 -> "-${integerFormat.format(-boostVolume)}"
+            in 1..1000 -> "+${integerFormat.format(boostVolume)}% Boost"
             else -> integerFormat.format(boostVolume)
         }
 
