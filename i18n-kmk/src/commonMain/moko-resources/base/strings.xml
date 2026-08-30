@@ -3564,4 +3564,9 @@
     <!-- AI Tools Settings -->
     <string name="pref_category_ai_tools">AI &amp; Smart Tools</string>
     <string name="pref_ai_tools_summary">AI Manga Colorizer, Super-Resolution Upscaler, OCR &amp; Translation</string>
+
+    <!-- Updates Subsubtabs -->
+    <string name="tab_calendar">Calendar</string>
+    <string name="tab_updates">Updates</string>
+    <string name="tab_schedule">Schedule</string>
 </resources>

@@ -271,6 +271,7 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory { TrackerManager() }
         addSingletonFactory { DelayedTrackingStore(app) }
+        addSingletonFactory { eu.kanade.tachiyomi.data.anischedule.AniScheduleApi(get()) }
 
         addSingletonFactory { ImageSaver(app) }
 
