@@ -50,6 +50,9 @@ class MangaRestorer(
     private val insertFlatMetadata: InsertFlatMetadata = Injekt.get(),
     private val getFlatMetadataById: GetFlatMetadataById = Injekt.get(),
     // SY <--
+    // KMK -->
+    private val setGranularScore: tachiyomi.domain.scoring.interactor.SetGranularScore = Injekt.get(),
+    // KMK <--
 ) {
     private var now = ZonedDateTime.now()
     private var currentFetchWindow = fetchInterval.getWindow(now)
@@ -106,6 +109,12 @@ class MangaRestorer(
                 customManga = backupManga.getCustomMangaInfo(),
                 // SY <--
             )
+
+            // KMK -->
+            backupManga.granularScore?.let { score ->
+                restoreGranularScore(restoredManga.id, score)
+            }
+            // KMK <--
 
             if (isSync) {
                 mangasQueries.resetIsSyncing()
@@ -619,4 +628,31 @@ class MangaRestorer(
             }
         }
     }
+
+    // KMK -->
+    private suspend fun restoreGranularScore(
+        mangaId: Long,
+        score: eu.kanade.tachiyomi.data.backup.models.BackupGranularScore,
+    ) {
+        val entry = tachiyomi.domain.scoring.model.GranularScoreEntry(
+            mangaId = mangaId,
+            templateName = score.templateName,
+            criteria = score.criteria.map {
+                tachiyomi.domain.scoring.model.GranularScoreCriterion(
+                    id = it.id,
+                    name = it.name,
+                    score = it.score,
+                    weight = it.weight,
+                    isExcluded = it.isExcluded,
+                )
+            },
+            totalScore = score.totalScore,
+            scale10Score = score.scale10Score,
+            ignoreUnrated = score.ignoreUnrated,
+            autoSyncTracker = score.autoSyncTracker,
+            updatedAt = score.updatedAt,
+        )
+        setGranularScore.await(entry)
+    }
+    // KMK <--
 }

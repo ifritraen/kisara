@@ -600,6 +600,16 @@ object SettingsKisaraScreen : SearchableSettings {
                 }.toPersistentList(),
             ),
             Preference.PreferenceGroup(
+                title = "Granular Scoring (AniScore)",
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Scoring Templates",
+                        subtitle = "Manage criteria, weights, and custom templates for rating entries",
+                        onClick = { navigator.push(SettingsGranularScoringScreen()) },
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
                 title = "Auto-Tracking Options",
                 preferenceItems = kotlinx.collections.immutable.persistentListOf(
                     Preference.PreferenceItem.SwitchPreference(

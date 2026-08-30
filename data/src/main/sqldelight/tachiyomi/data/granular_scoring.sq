@@ -1,0 +1,106 @@
+CREATE TABLE granular_scoring_entry (
+    manga_id INTEGER NOT NULL PRIMARY KEY,
+    template_name TEXT NOT NULL,
+    criteria_json TEXT NOT NULL,
+    total_score REAL NOT NULL,
+    scale_10_score REAL NOT NULL,
+    ignore_unrated INTEGER NOT NULL DEFAULT 1,
+    auto_sync_tracker INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE granular_scoring_template (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    criteria_json TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0
+);
+
+selectByMangaId:
+SELECT *
+FROM granular_scoring_entry
+WHERE manga_id = :mangaId;
+
+selectAllEntries:
+SELECT *
+FROM granular_scoring_entry;
+
+upsertEntry:
+INSERT INTO granular_scoring_entry(
+    manga_id,
+    template_name,
+    criteria_json,
+    total_score,
+    scale_10_score,
+    ignore_unrated,
+    auto_sync_tracker,
+    updated_at
+)
+VALUES (
+    :mangaId,
+    :templateName,
+    :criteriaJson,
+    :totalScore,
+    :scale10Score,
+    :ignoreUnrated,
+    :autoSyncTracker,
+    :updatedAt
+)
+ON CONFLICT(manga_id)
+DO UPDATE
+SET
+    template_name = :templateName,
+    criteria_json = :criteriaJson,
+    total_score = :totalScore,
+    scale_10_score = :scale10Score,
+    ignore_unrated = :ignoreUnrated,
+    auto_sync_tracker = :autoSyncTracker,
+    updated_at = :updatedAt
+WHERE manga_id = :mangaId;
+
+deleteEntryByMangaId:
+DELETE FROM granular_scoring_entry
+WHERE manga_id = :mangaId;
+
+selectAllTemplates:
+SELECT *
+FROM granular_scoring_template;
+
+selectTemplatesByMediaType:
+SELECT *
+FROM granular_scoring_template
+WHERE media_type = :mediaType OR media_type = 'ALL';
+
+selectTemplateById:
+SELECT *
+FROM granular_scoring_template
+WHERE id = :id;
+
+insertTemplate:
+INSERT INTO granular_scoring_template(
+    name,
+    media_type,
+    criteria_json,
+    is_default
+)
+VALUES (
+    :name,
+    :mediaType,
+    :criteriaJson,
+    :isDefault
+);
+
+updateTemplate:
+UPDATE granular_scoring_template
+SET
+    name = :name,
+    media_type = :mediaType,
+    criteria_json = :criteriaJson,
+    is_default = :isDefault
+WHERE id = :id;
+
+deleteTemplateById:
+DELETE FROM granular_scoring_template
+WHERE id = :id;

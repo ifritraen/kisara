@@ -32,6 +32,9 @@ class MangaBackupCreator(
     private val getCustomMangaInfo: GetCustomMangaInfo = Injekt.get(),
     private val getFlatMetadataById: GetFlatMetadataById = Injekt.get(),
     // SY <--
+    // KMK -->
+    private val getGranularScore: tachiyomi.domain.scoring.interactor.GetGranularScore = Injekt.get(),
+    // KMK <--
 ) {
 
     suspend operator fun invoke(mangas: List<Manga>, options: BackupOptions): List<BackupManga> {
@@ -115,6 +118,28 @@ class MangaBackupCreator(
                 }
             }
         }
+
+        // KMK -->
+        getGranularScore.await(manga.id)?.let { scoreEntry ->
+            mangaObject.granularScore = eu.kanade.tachiyomi.data.backup.models.BackupGranularScore(
+                templateName = scoreEntry.templateName,
+                criteria = scoreEntry.criteria.map {
+                    eu.kanade.tachiyomi.data.backup.models.BackupGranularScoreCriterion(
+                        id = it.id,
+                        name = it.name,
+                        score = it.score,
+                        weight = it.weight,
+                        isExcluded = it.isExcluded,
+                    )
+                },
+                totalScore = scoreEntry.totalScore,
+                scale10Score = scoreEntry.scale10Score,
+                ignoreUnrated = scoreEntry.ignoreUnrated,
+                autoSyncTracker = scoreEntry.autoSyncTracker,
+                updatedAt = scoreEntry.updatedAt,
+            )
+        }
+        // KMK <--
 
         return mangaObject
     }

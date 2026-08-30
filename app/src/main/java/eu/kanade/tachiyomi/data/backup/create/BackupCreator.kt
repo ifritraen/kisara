@@ -80,6 +80,9 @@ class BackupCreator(
     private val novelBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.NovelBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.NovelBackupCreator(),
     private val novelCategoriesBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.NovelCategoriesBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.NovelCategoriesBackupCreator(),
     private val novelSourcesBackupCreator: eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator = eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator(),
+    // KMK -->
+    private val getGranularTemplates: tachiyomi.domain.scoring.interactor.GetGranularTemplates = Injekt.get(),
+    // KMK <--
 ) {
 
     suspend fun backup(uri: Uri, options: BackupOptions): String {
@@ -158,6 +161,21 @@ class BackupCreator(
                 backupNovelCategories = backupNovelCategories(options),
                 backupNovelSources = backupNovelSources(backupNovel),
                 backupNovelSourcePreferences = backupNovelSourcePreferences(options),
+
+                backupGranularTemplates = getGranularTemplates.await().filter { it.id > 0 }.map { tmpl ->
+                    eu.kanade.tachiyomi.data.backup.models.BackupGranularTemplate(
+                        name = tmpl.name,
+                        mediaType = tmpl.mediaType,
+                        criteria = tmpl.criteria.map { c ->
+                            eu.kanade.tachiyomi.data.backup.models.BackupGranularTemplateCriterion(
+                                id = c.id,
+                                name = c.name,
+                                weight = c.weight,
+                            )
+                        },
+                        isDefault = tmpl.isDefault,
+                    )
+                },
                 // KMK <--
             )
 

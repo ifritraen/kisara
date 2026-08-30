@@ -38,5 +38,6 @@ enum class MangaScreenItem {
     // KMK -->
     RELATED_MANGAS,
     EXTERNAL_METADATA,
+    GRANULAR_SCORE,
     // KMK <--
 }

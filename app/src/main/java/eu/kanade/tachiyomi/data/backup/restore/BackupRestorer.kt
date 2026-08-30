@@ -65,6 +65,9 @@ class BackupRestorer(
     private val novelCategoriesRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.NovelCategoriesRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.NovelCategoriesRestorer(),
     private val animeRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeRestorer(isSync),
     private val novelRestorer: eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer = eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer(isSync),
+    // KMK -->
+    private val saveGranularTemplate: tachiyomi.domain.scoring.interactor.SaveGranularTemplate = Injekt.get(),
+    // KMK <--
 ) {
 
     private var restoreAmount = 0
@@ -186,6 +189,27 @@ class BackupRestorer(
             if (options.vpnSettings && (backup.backupWireguardConfigs.isNotEmpty() || backup.backupWireguardPrefs != null)) {
                 restoreWireguard(backup.backupWireguardConfigs, backup.backupWireguardPrefs)
             }
+            // KMK -->
+            if (backup.backupGranularTemplates.isNotEmpty()) {
+                backup.backupGranularTemplates.forEach { tmpl ->
+                    saveGranularTemplate.await(
+                        tachiyomi.domain.scoring.model.GranularScoreTemplate(
+                            id = 0L,
+                            name = tmpl.name,
+                            mediaType = tmpl.mediaType,
+                            criteria = tmpl.criteria.map {
+                                tachiyomi.domain.scoring.model.GranularTemplateCriterion(
+                                    id = it.id,
+                                    name = it.name,
+                                    weight = it.weight,
+                                )
+                            },
+                            isDefault = tmpl.isDefault,
+                        ),
+                    )
+                }
+            }
+            // KMK <--
 
             // TODO: optionally trigger online library + tracker update
         }

@@ -118,6 +118,7 @@ import eu.kanade.presentation.manga.components.ChapterTranslationAction
 import eu.kanade.presentation.manga.components.ChapterTranslationIndicator
 import eu.kanade.presentation.manga.components.ExpandableMangaDescription
 import eu.kanade.presentation.manga.components.ExternalMetadataCard
+import eu.kanade.presentation.manga.components.GranularScoreCard
 import eu.kanade.presentation.manga.components.MangaActionRow
 import eu.kanade.presentation.manga.components.MangaBottomActionMenu
 import eu.kanade.presentation.manga.components.MangaChapterListItem
@@ -284,6 +285,8 @@ fun MangaScreen(
     onSelectAllRelatedMangas: (() -> Unit)? = null,
     onReverseRelatedMangasSelection: (() -> Unit)? = null,
     onBulkFavoriteClicked: (() -> Unit)? = null,
+    onSaveGranularScore: ((tachiyomi.domain.scoring.model.GranularScoreEntry) -> Unit)? = null,
+    onSaveGranularTemplate: ((tachiyomi.domain.scoring.model.GranularScoreTemplate) -> Unit)? = null,
     // KMK <--
 ) {
     val context = LocalContext.current
@@ -952,6 +955,22 @@ private fun MangaScreenSmallImpl(
                                 TrackerDetailsCard(trackDetails = state.trackerDetails)
                             }
                         }
+
+                        // KMK -->
+                        if (onSaveGranularScore != null && onSaveGranularTemplate != null) {
+                            item(
+                                key = MangaScreenItem.GRANULAR_SCORE,
+                                contentType = MangaScreenItem.GRANULAR_SCORE,
+                            ) {
+                                GranularScoreCard(
+                                    entry = state.granularScore,
+                                    availableTemplates = state.granularTemplates,
+                                    onSaveScore = onSaveGranularScore,
+                                    onSaveNewTemplate = onSaveGranularTemplate,
+                                )
+                            }
+                        }
+                        // KMK <--
 
                         item(
                             key = MangaScreenItem.DESCRIPTION_WITH_TAG,
@@ -1717,6 +1736,18 @@ private fun MangaScreenLargeImpl(
                                 isMultiSelectMode = isTagMultiSelectMode,
                             )
                         }
+
+                        // KMK -->
+                        if (onSaveGranularScore != null && onSaveGranularTemplate != null) {
+                            GranularScoreCard(
+                                entry = state.granularScore,
+                                availableTemplates = state.granularTemplates,
+                                onSaveScore = onSaveGranularScore,
+                                onSaveNewTemplate = onSaveGranularTemplate,
+                            )
+                        }
+                        // KMK <--
+
                         ExpandableMangaDescription(
                             defaultExpandState = true,
                             description = state.manga.description,

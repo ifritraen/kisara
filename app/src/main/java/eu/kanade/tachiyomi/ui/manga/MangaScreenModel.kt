@@ -253,6 +253,11 @@ class MangaScreenModel(
     private val deleteChaptersFromDb: DeleteChapters = Injekt.get(),
     private val getMangaExternalMetadata: tachiyomi.domain.manga.interactor.GetMangaExternalMetadata = Injekt.get(),
     private val fetchExternalMetadata: eu.kanade.domain.manga.interactor.FetchExternalMetadata = Injekt.get(),
+    private val getGranularScore: tachiyomi.domain.scoring.interactor.GetGranularScore = Injekt.get(),
+    private val setGranularScore: tachiyomi.domain.scoring.interactor.SetGranularScore = Injekt.get(),
+    private val getGranularTemplates: tachiyomi.domain.scoring.interactor.GetGranularTemplates = Injekt.get(),
+    private val saveGranularTemplate: tachiyomi.domain.scoring.interactor.SaveGranularTemplate = Injekt.get(),
+    private val syncGranularScoreWithTrack: eu.kanade.domain.track.interactor.SyncGranularScoreWithTrack = Injekt.get(),
     // KMK <--
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
 
@@ -465,6 +470,28 @@ class MangaScreenModel(
                 .collectLatest { metadata ->
                     updateSuccessState {
                         it.copy(externalMetadata = metadata)
+                    }
+                }
+        }
+
+        screenModelScope.launchIO {
+            getGranularScore.subscribe(mangaId)
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { score ->
+                    updateSuccessState {
+                        it.copy(granularScore = score)
+                    }
+                }
+        }
+
+        screenModelScope.launchIO {
+            getGranularTemplates.subscribe()
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { templates ->
+                    updateSuccessState {
+                        it.copy(granularTemplates = templates)
                     }
                 }
         }
@@ -2452,6 +2479,30 @@ class MangaScreenModel(
     fun showClearMangaDialog() {
         updateSuccessState { it.copy(dialog = Dialog.ClearManga) }
     }
+
+    fun saveGranularScore(entry: tachiyomi.domain.scoring.model.GranularScoreEntry) {
+        screenModelScope.launchIO {
+            try {
+                val fullEntry = entry.copy(mangaId = mangaId)
+                setGranularScore.await(fullEntry)
+                if (entry.autoSyncTracker && (entry.totalScore > 0.0 || !entry.ignoreUnrated)) {
+                    syncGranularScoreWithTrack.await(mangaId, entry.totalScore, entry.scale10Score)
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to save granular score" }
+            }
+        }
+    }
+
+    fun saveGranularTemplate(template: tachiyomi.domain.scoring.model.GranularScoreTemplate) {
+        screenModelScope.launchIO {
+            try {
+                saveGranularTemplate.await(template)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to save granular template" }
+            }
+        }
+    }
     // KMK <--
 
     sealed interface State {
@@ -2504,6 +2555,8 @@ class MangaScreenModel(
             val isFetchingTrackerDetails: Boolean = false,
             val externalMetadata: tachiyomi.domain.manga.model.MangaExternalMetadata? = null,
             val isFetchingExternalMetadata: Boolean = false,
+            val granularScore: tachiyomi.domain.scoring.model.GranularScoreEntry? = null,
+            val granularTemplates: List<tachiyomi.domain.scoring.model.GranularScoreTemplate> = emptyList(),
             // KMK <--
         ) : State {
             // KMK -->

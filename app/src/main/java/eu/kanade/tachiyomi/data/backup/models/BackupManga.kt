@@ -58,6 +58,10 @@ data class BackupManga(
     @ProtoNumber(804) var customDescription: String? = null,
     @ProtoNumber(805) var customGenre: List<String>? = null,
 
+    // KMK -->
+    @ProtoNumber(900) var granularScore: BackupGranularScore? = null,
+    // KMK <--
+
 ) {
     fun getMangaImpl(): Manga {
         return Manga.create().copy(

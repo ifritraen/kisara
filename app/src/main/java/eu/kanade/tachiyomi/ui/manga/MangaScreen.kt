@@ -522,6 +522,8 @@ class MangaScreen(
                 }
             },
             onBulkFavoriteClicked = bulkFavoriteScreenModel::addFavorite,
+            onSaveGranularScore = screenModel::saveGranularScore,
+            onSaveGranularTemplate = screenModel::saveGranularTemplate,
             // KMK <--
         )
 

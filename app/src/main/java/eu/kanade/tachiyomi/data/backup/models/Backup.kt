@@ -36,4 +36,7 @@ data class Backup(
     @ProtoNumber(703) var backupNovelSourcePreferences: List<BackupSourcePreferences> = emptyList(),
     @ProtoNumber(704) var backupNovelFeeds: List<BackupFeed> = emptyList(),
     @ProtoNumber(705) var backupNovelSavedSearches: List<BackupSavedSearch> = emptyList(),
+    // KMK -->
+    @ProtoNumber(901) var backupGranularTemplates: List<BackupGranularTemplate> = emptyList(),
+    // KMK <--
 )

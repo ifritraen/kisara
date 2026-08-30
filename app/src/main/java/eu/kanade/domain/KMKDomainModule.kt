@@ -63,5 +63,17 @@ class KMKDomainModule : InjektModule {
         addFactory { tachiyomi.domain.manga.interactor.GetMangaExternalMetadata(get()) }
         addFactory { eu.kanade.domain.manga.interactor.FetchExternalMetadata(get(), get(), get(), get()) }
         addFactory { eu.kanade.domain.manga.interactor.GetTrackerRecommendations(get(), get(), get(), get()) }
+
+        // Granular Scoring (AniScore)
+        addSingletonFactory<tachiyomi.domain.scoring.repository.GranularScoreRepository> {
+            tachiyomi.data.scoring.GranularScoreRepositoryImpl(get())
+        }
+        addFactory { tachiyomi.domain.scoring.interactor.GetGranularScore(get()) }
+        addFactory { tachiyomi.domain.scoring.interactor.SetGranularScore(get()) }
+        addFactory { tachiyomi.domain.scoring.interactor.DeleteGranularScore(get()) }
+        addFactory { tachiyomi.domain.scoring.interactor.GetGranularTemplates(get()) }
+        addFactory { tachiyomi.domain.scoring.interactor.SaveGranularTemplate(get()) }
+        addFactory { tachiyomi.domain.scoring.interactor.DeleteGranularTemplate(get()) }
+        addFactory { eu.kanade.domain.track.interactor.SyncGranularScoreWithTrack(get(), get(), get()) }
     }
 }
