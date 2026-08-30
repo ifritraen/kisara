@@ -335,7 +335,14 @@ class FetchExternalMetadata(
         val sNorm = normalizeForMatch(searched)
         val cNorm = normalizeForMatch(candidate)
         if (sNorm.isEmpty() || cNorm.isEmpty()) return false
-        return sNorm == cNorm || sNorm.startsWith(cNorm) || cNorm.startsWith(sNorm) || sNorm.contains(cNorm) || cNorm.contains(sNorm)
+        if (sNorm == cNorm) return true
+        val minLen = minOf(sNorm.length, cNorm.length)
+        val maxLen = maxOf(sNorm.length, cNorm.length)
+        if ((sNorm.startsWith(cNorm) || cNorm.startsWith(sNorm)) && (minLen.toDouble() / maxLen) >= 0.75) {
+            return true
+        }
+        val similarity = com.aallam.similarity.NormalizedLevenshtein().similarity(sNorm, cNorm)
+        return similarity >= 0.80
     }
 
     private fun normalizeForMatch(text: String): String {

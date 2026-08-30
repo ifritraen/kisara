@@ -160,13 +160,17 @@ class MangaUpdatesApi(
         }
     }
 
-    suspend fun search(query: String, type: String? = null): List<MURecord> {
+    suspend fun search(query: String, type: String? = null, orderby: String? = null, asc: String? = null): List<MURecord> {
         val q = query.trim().ifBlank { "a" }
         val body = buildJsonObject {
             put("stype", "title")
             put("search", q)
-            put("orderby", "rating")
-            put("asc", "desc")
+            if (!orderby.isNullOrBlank()) {
+                put("orderby", orderby)
+                if (!asc.isNullOrBlank()) {
+                    put("asc", asc)
+                }
+            }
             put("perpage", 25)
             if (!type.isNullOrBlank()) {
                 put("types", buildJsonArray { add(type) })

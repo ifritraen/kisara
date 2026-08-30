@@ -78,7 +78,25 @@ class AutoTrack(
                 }
             }
 
-            val topResult = searchResults.firstOrNull() ?: continue
+            val normalizedLevenshtein = com.aallam.similarity.NormalizedLevenshtein()
+            val targetClean = cleanMangaTitle(rawTitle).lowercase().replace(Regex("""[^a-z0-9\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]"""), "")
+            val topResult = searchResults
+                .map { result ->
+                    val candClean = cleanMangaTitle(result.title).lowercase().replace(Regex("""[^a-z0-9\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]"""), "")
+                    val score = if (targetClean.isNotEmpty() && candClean.isNotEmpty()) {
+                        if (targetClean == candClean) {
+                            1.0
+                        } else {
+                            normalizedLevenshtein.similarity(targetClean, candClean)
+                        }
+                    } else {
+                        0.0
+                    }
+                    result to score
+                }
+                .filter { (_, score) -> score >= 0.70 }
+                .maxByOrNull { (_, score) -> score }
+                ?.first ?: continue
 
             try {
                 topResult.manga_id = manga.id
