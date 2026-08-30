@@ -1670,7 +1670,7 @@ private fun MangaUpdatesSearchSection(screenModel: TrackScreenModel, mode: Strin
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Search MangaUpdates") },
+                label = { Text(if (isNovel) "Search Novels (MangaUpdates)" else "Search MangaUpdates") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
             )
@@ -1685,7 +1685,7 @@ private fun MangaUpdatesSearchSection(screenModel: TrackScreenModel, mode: Strin
         Spacer(modifier = Modifier.height(12.dp))
 
         val isSearching = if (isNovel) state.isSearchingNovels else state.isSearching
-        val results = if (isNovel) state.novelSearchResults else state.searchResults
+        val results = if (isNovel) state.novelSearchResults else state.muSearchResults
 
         if (isSearching) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1707,7 +1707,7 @@ private fun MangaUpdatesSearchSection(screenModel: TrackScreenModel, mode: Strin
                                     TrackSeriesItem(
                                         title = record.title.orEmpty(),
                                         coverUrl = record.image?.url?.original,
-                                        type = record.type ?: "Manga",
+                                        type = record.type ?: if (isNovel) "Novel" else "Manga",
                                         status = record.status,
                                         rating = record.bayesianRating?.let { "$it" },
                                         score = record.bayesianRating,
@@ -1751,6 +1751,7 @@ private fun MangaUpdatesSeriesDirectory(screenModel: TrackScreenModel) {
 private fun MangaUpdatesGroupsSection(screenModel: TrackScreenModel) {
     var query by remember { mutableStateOf("") }
     val state by screenModel.state.collectAsState()
+    val navigator = LocalNavigator.currentOrThrow
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -1785,7 +1786,13 @@ private fun MangaUpdatesGroupsSection(screenModel: TrackScreenModel) {
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                group.name?.ifBlank { null }?.let {
+                                    navigator.push(GlobalSearchScreen(it))
+                                }
+                            },
                     ) {
                         Text(
                             text = group.name.orEmpty(),
@@ -1804,6 +1811,7 @@ private fun MangaUpdatesGroupsSection(screenModel: TrackScreenModel) {
 private fun MangaUpdatesAuthorsSection(screenModel: TrackScreenModel) {
     val state by screenModel.state.collectAsState()
     var query by remember { mutableStateOf("") }
+    val navigator = LocalNavigator.currentOrThrow
 
     LaunchedEffect(Unit) {
         screenModel.loadAuthors("")
@@ -1841,7 +1849,13 @@ private fun MangaUpdatesAuthorsSection(screenModel: TrackScreenModel) {
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                author.name?.ifBlank { null }?.let {
+                                    navigator.push(GlobalSearchScreen(it))
+                                }
+                            },
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -1869,6 +1883,7 @@ private fun MangaUpdatesAuthorsSection(screenModel: TrackScreenModel) {
 private fun MangaUpdatesPublishersSection(screenModel: TrackScreenModel) {
     val state by screenModel.state.collectAsState()
     var query by remember { mutableStateOf("") }
+    val navigator = LocalNavigator.currentOrThrow
 
     LaunchedEffect(Unit) {
         screenModel.loadPublishers("")
@@ -1906,7 +1921,13 @@ private fun MangaUpdatesPublishersSection(screenModel: TrackScreenModel) {
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                publisher.name?.ifBlank { null }?.let {
+                                    navigator.push(GlobalSearchScreen(it))
+                                }
+                            },
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -1934,6 +1955,7 @@ private fun MangaUpdatesPublishersSection(screenModel: TrackScreenModel) {
 private fun MangaUpdatesReviewsSection(screenModel: TrackScreenModel) {
     val state by screenModel.state.collectAsState()
     var query by remember { mutableStateOf("") }
+    val navigator = LocalNavigator.currentOrThrow
 
     LaunchedEffect(Unit) {
         screenModel.loadReviews("")
@@ -1971,7 +1993,13 @@ private fun MangaUpdatesReviewsSection(screenModel: TrackScreenModel) {
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                review.title?.ifBlank { null }?.let {
+                                    navigator.push(GlobalSearchScreen(it))
+                                }
+                            },
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(
@@ -2014,6 +2042,8 @@ private fun MangaUpdatesReviewsSection(screenModel: TrackScreenModel) {
 @Composable
 private fun MangaUpdatesGenresSection(screenModel: TrackScreenModel) {
     val state by screenModel.state.collectAsState()
+    val navigator = LocalNavigator.currentOrThrow
+
     LaunchedEffect(Unit) {
         screenModel.loadGenres()
     }
@@ -2032,7 +2062,13 @@ private fun MangaUpdatesGenresSection(screenModel: TrackScreenModel) {
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            genre.genre?.ifBlank { null }?.let {
+                                navigator.push(GlobalSearchScreen(it))
+                            }
+                        },
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
@@ -2070,24 +2106,84 @@ private fun MangaUpdatesGenresSection(screenModel: TrackScreenModel) {
 
 @Composable
 private fun MangaUpdatesMyLists(screenModel: TrackScreenModel) {
-    val isLoggedIn = screenModel.isLoggedIn()
+    val isLoggedIn = screenModel.isMangaUpdatesLoggedIn()
     if (!isLoggedIn) {
         MangaUpdatesLoginCard(screenModel)
     } else {
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-            Text("MangaUpdates Account Connected", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AccountCircle,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+
+            Text(
+                text = "MangaUpdates Account Connected",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Text(
+                text = "Your reading lists and tracker sync are actively connected to MangaUpdates.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Button(
+                onClick = { screenModel.logoutMangaUpdates() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Log Out")
+            }
         }
     }
 }
 
 @Composable
 private fun MangaUpdatesUserCP(screenModel: TrackScreenModel) {
-    val isLoggedIn = screenModel.isLoggedIn()
+    val isLoggedIn = screenModel.isMangaUpdatesLoggedIn()
     if (!isLoggedIn) {
         MangaUpdatesLoginCard(screenModel)
     } else {
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-            Text("User Control Panel Connected", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AccountCircle,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+
+            Text(
+                text = "User Control Panel",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Text(
+                text = "Connected as MangaUpdates Member.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Button(
+                onClick = { screenModel.logoutMangaUpdates() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Log Out")
+            }
         }
     }
 }
@@ -2145,7 +2241,7 @@ private fun MangaUpdatesLoginCard(screenModel: TrackScreenModel) {
                 Button(
                     onClick = {
                         isLoggingIn = true
-                        screenModel.login(username, password) {
+                        screenModel.loginMangaUpdates(username, password) {
                             isLoggingIn = false
                         }
                     },

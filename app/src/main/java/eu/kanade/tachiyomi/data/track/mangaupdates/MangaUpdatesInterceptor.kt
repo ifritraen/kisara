@@ -14,15 +14,14 @@ class MangaUpdatesInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
-        val token = token ?: throw IOException("Not authenticated with MangaUpdates")
-
-        // Add the authorization header to the original request.
-        val authRequest = originalRequest.newBuilder()
-            .addHeader("Authorization", "Bearer $token")
+        val requestBuilder = originalRequest.newBuilder()
             .header("User-Agent", "Kisara v${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID})")
-            .build()
 
-        return chain.proceed(authRequest)
+        token?.let {
+            requestBuilder.addHeader("Authorization", "Bearer $it")
+        }
+
+        return chain.proceed(requestBuilder.build())
     }
 
     fun newAuth(token: String?) {

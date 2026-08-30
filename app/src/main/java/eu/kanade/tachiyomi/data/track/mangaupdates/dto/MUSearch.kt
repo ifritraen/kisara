@@ -14,13 +14,19 @@ data class MUSearchResultItem(
 )
 
 @Serializable
+data class MUDayRelease(
+    val date: String? = null,
+    val releases: List<MUReleaseRecord> = emptyList(),
+)
+
+@Serializable
 data class MUReleasesDaysResponse(
     val results: List<MUReleaseDayItem> = emptyList(),
 )
 
 @Serializable
 data class MUReleaseDayItem(
-    val record: MUReleaseRecord,
+    val record: MUReleaseRecord? = null,
 )
 
 @Serializable

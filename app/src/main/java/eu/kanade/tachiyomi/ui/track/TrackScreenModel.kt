@@ -449,6 +449,7 @@ class TrackScreenModel(
     // ==========================================
 
     fun isMangaUpdatesLoggedIn(): Boolean = trackerManager.mangaUpdates.isLoggedIn
+    fun isLoggedIn(): Boolean = isMangaUpdatesLoggedIn()
 
     fun loginMangaUpdates(u: String, p: String, onDone: () -> Unit) {
         screenModelScope.launch {
@@ -460,6 +461,19 @@ class TrackScreenModel(
             onDone()
         }
     }
+    fun login(u: String, p: String, onDone: () -> Unit) = loginMangaUpdates(u, p, onDone)
+
+    fun logoutMangaUpdates(onDone: () -> Unit = {}) {
+        screenModelScope.launch {
+            try {
+                trackerManager.mangaUpdates.logout()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to log out of MangaUpdates" }
+            }
+            onDone()
+        }
+    }
+    fun logout(onDone: () -> Unit = {}) = logoutMangaUpdates(onDone)
 
     fun loadNewReleases() {
         if (_state.value.newReleases.isNotEmpty()) return

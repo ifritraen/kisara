@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates.Companion.WISH_L
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorsSearchResponse
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUContext
+import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUDayRelease
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGenreItem
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGroupRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGroupsSearchResponse
@@ -199,13 +200,23 @@ class MangaUpdatesApi(
 
     suspend fun getRecentReleases(): List<MUReleaseRecord> {
         return with(json) {
-            client.newCall(
+            val responseText = client.newCall(
                 GET(url = "$BASE_URL/v1/releases/days"),
             )
                 .awaitSuccess()
-                .parseAs<MUReleasesDaysResponse>()
-                .results
-                .map { it.record }
+                .body.string()
+
+            try {
+                val days = json.decodeFromString<List<MUDayRelease>>(responseText)
+                days.flatMap { it.releases }
+            } catch (e: Exception) {
+                try {
+                    val wrapper = json.decodeFromString<MUReleasesDaysResponse>(responseText)
+                    wrapper.results.mapNotNull { it.record }
+                } catch (e2: Exception) {
+                    emptyList()
+                }
+            }
         }
     }
 
@@ -348,6 +359,6 @@ class MangaUpdatesApi(
     companion object {
         private const val BASE_URL = "https://api.mangaupdates.com"
 
-        private val CONTENT_TYPE = "application/vnd.api+json".toMediaType()
+        private val CONTENT_TYPE = "application/json".toMediaType()
     }
 }
