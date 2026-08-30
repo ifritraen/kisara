@@ -540,6 +540,66 @@ object SettingsKisaraScreen : SearchableSettings {
                 }.toPersistentList(),
             ),
             Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.pref_category_track_tab),
+                preferenceItems = buildList {
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = uiPreferences.trackTabMangaService(),
+                            title = stringResource(KMR.strings.pref_track_tab_manga_service),
+                            subtitle = "%s",
+                            entries = persistentMapOf(
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.ANILIST to stringResource(KMR.strings.track_service_anilist),
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.MAL to stringResource(KMR.strings.track_service_mal),
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.MANGA_UPDATES to stringResource(KMR.strings.track_service_mangaupdates),
+                            ),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = uiPreferences.trackTabAnimeService(),
+                            title = stringResource(KMR.strings.pref_track_tab_anime_service),
+                            subtitle = "%s",
+                            entries = persistentMapOf(
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.ANILIST to stringResource(KMR.strings.track_service_anilist),
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.MAL to stringResource(KMR.strings.track_service_mal),
+                            ),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = uiPreferences.trackTabNovelService(),
+                            title = stringResource(KMR.strings.pref_track_tab_novel_service),
+                            subtitle = "%s",
+                            entries = persistentMapOf(
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.ANILIST to stringResource(KMR.strings.track_service_anilist),
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.MAL to stringResource(KMR.strings.track_service_mal),
+                                eu.kanade.domain.ui.UiPreferences.TrackTabService.MANGA_UPDATES to stringResource(KMR.strings.track_service_mangaupdates),
+                            ),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            value = uiPreferences.trackTabPreviousSeasons().get(),
+                            min = 1,
+                            max = 8,
+                            title = stringResource(KMR.strings.pref_track_tab_previous_seasons),
+                            subtitle = stringResource(KMR.strings.pref_track_tab_previous_seasons_summary, uiPreferences.trackTabPreviousSeasons().get()),
+                            onValueChanged = {
+                                uiPreferences.trackTabPreviousSeasons().set(it)
+                                true
+                            },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.trackTabHideAdult(),
+                            title = stringResource(KMR.strings.pref_track_tab_hide_adult),
+                            subtitle = stringResource(KMR.strings.pref_track_tab_hide_adult_summary),
+                        ),
+                    )
+                }.toPersistentList(),
+            ),
+            Preference.PreferenceGroup(
                 title = "Auto-Tracking Options",
                 preferenceItems = kotlinx.collections.immutable.persistentListOf(
                     Preference.PreferenceItem.SwitchPreference(

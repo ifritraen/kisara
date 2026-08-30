@@ -3454,4 +3454,92 @@
     <string name="pref_tab_swipe_bottom_zone">Bottom Zone Height (Main Tabs)</string>
     <string name="pref_tab_swipe_middle_zone">Middle Zone Height (Sub-Tabs)</string>
     <string name="pref_tab_swipe_zone_summary">%1$d%% from bottom</string>
+
+    <!-- Track Tab Settings -->
+    <string name="pref_category_track_tab">Track Tab</string>
+    <string name="pref_track_tab_manga_service">Manga Tracker</string>
+    <string name="pref_track_tab_anime_service">Anime Tracker</string>
+    <string name="pref_track_tab_novel_service">Novel Tracker</string>
+    <string name="pref_track_tab_previous_seasons">Previous Seasons Count</string>
+    <string name="pref_track_tab_previous_seasons_summary">Show top rated and popular from %1$d previous seasons</string>
+    <string name="pref_track_tab_hide_adult">Hide Adult Content in Track Tab</string>
+    <string name="pref_track_tab_hide_adult_summary">Filter out 18+ content from discovery sections</string>
+
+    <!-- Track Tab Subtabs -->
+    <string name="track_subtab_home">Home</string>
+    <string name="track_subtab_my_list">My List</string>
+    <string name="track_subtab_search">Search</string>
+    <string name="track_subtab_profile">Profile</string>
+
+    <!-- Track Tab Home Sections -->
+    <string name="track_section_landing">Landing</string>
+    <string name="track_section_continue">Continue</string>
+    <string name="track_section_recent">Recent</string>
+    <string name="track_section_trending">Trending</string>
+    <string name="track_section_top_rated">Top Rated</string>
+    <string name="track_section_popular">Popular</string>
+    <string name="track_section_recently_completed">Recently Completed</string>
+    <string name="track_section_upcoming">Upcoming</string>
+    <string name="track_section_top_rated_this_season">Top This Season</string>
+    <string name="track_section_popular_this_season">Popular This Season</string>
+    <string name="track_section_top_rated_prev_season">Top %1$s %2$d</string>
+    <string name="track_section_popular_prev_season">Popular %1$s %2$d</string>
+    <string name="track_section_recommended">Recommended</string>
+    <string name="track_section_community_recs">Community Picks</string>
+
+    <!-- Track Tab My List Status Chips -->
+    <string name="track_status_all">All</string>
+    <string name="track_status_watching">Watching</string>
+    <string name="track_status_reading">Reading</string>
+    <string name="track_status_completed">Completed</string>
+    <string name="track_status_paused">Paused</string>
+    <string name="track_status_dropped">Dropped</string>
+    <string name="track_status_planning">Planning</string>
+    <string name="track_status_rewatching">Rewatching</string>
+    <string name="track_status_rereading">Rereading</string>
+
+    <!-- Track Tab Search Filters -->
+    <string name="track_search_genres">Genres</string>
+    <string name="track_search_tags">Tags</string>
+    <string name="track_search_format">Format</string>
+    <string name="track_search_status">Status</string>
+    <string name="track_search_sort">Sort By</string>
+    <string name="track_search_year">Year</string>
+    <string name="track_sort_trending">Trending</string>
+    <string name="track_sort_popularity">Popularity</string>
+    <string name="track_sort_score">Score</string>
+    <string name="track_sort_newest">Newest</string>
+    <string name="track_sort_favourites">Favourites</string>
+
+    <!-- Track Tab Profile/Stats -->
+    <string name="track_profile_connect">Connect to %1$s</string>
+    <string name="track_profile_disconnect">Disconnect</string>
+    <string name="track_profile_login_required">Login required to view your list and statistics</string>
+    <string name="track_stats_total_anime">Total Anime</string>
+    <string name="track_stats_total_manga">Total Manga</string>
+    <string name="track_stats_episodes_watched">Episodes Watched</string>
+    <string name="track_stats_chapters_read">Chapters Read</string>
+    <string name="track_stats_mean_score">Mean Score</string>
+    <string name="track_stats_days_watched">Days Watched</string>
+    <string name="track_stats_days_read">Days Read</string>
+    <string name="track_stats_score_distribution">Score Distribution</string>
+    <string name="track_stats_genre_breakdown">Genre Breakdown</string>
+    <string name="track_stats_format_distribution">Format Distribution</string>
+    <string name="track_stats_favourites">Favourites</string>
+
+    <!-- Track Tab Service Names -->
+    <string name="track_service_anilist">AniList</string>
+    <string name="track_service_mal">MyAnimeList</string>
+    <string name="track_service_mangaupdates">MangaUpdates</string>
+
+    <!-- Track Tab Misc -->
+    <string name="track_search_in_sources">Search in Sources</string>
+    <string name="track_open_in_browser">Open in Browser</string>
+    <string name="track_no_results">No results found</string>
+    <string name="track_load_more">Load more</string>
+    <string name="track_episodes">%1$d episodes</string>
+    <string name="track_chapters">%1$d chapters</string>
+    <string name="track_score">Score: %1$s</string>
+    <string name="track_progress">%1$d / %2$d</string>
+    <string name="track_progress_unknown">%1$d / ?</string>
 </resources>

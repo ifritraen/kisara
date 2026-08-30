@@ -13,10 +13,16 @@ import eu.kanade.tachiyomi.data.track.anilist.dto.ALIdSearchResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaMetadata
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALFilterMetadataResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALHomeSection
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALPaginatedSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchItem
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALStudioNode
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALStudioSearchResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListMangaQueryResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserStatsResult
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
 import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
@@ -29,8 +35,15 @@ import eu.kanade.tachiyomi.util.lang.htmlDecode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -969,6 +982,281 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
         }
     }
     // Anime Tracking & Feeds <--
+
+    suspend fun getHomePage(
+        type: String,
+        format: String?,
+        isAdult: Boolean?,
+        season: String,
+        seasonYear: Int,
+        prevSeasons: List<Pair<String, Int>>
+    ): List<ALHomeSection> {
+        return withIOContext {
+            val mediaFragment = """
+                id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
+            """.trimIndent()
+
+            val typeFilter = "type: $type"
+            val formatFilter = format?.let { ", format: $it" } ?: ""
+            val adultFilter = isAdult?.let { ", isAdult: $it" } ?: ""
+            val baseFilter = "$typeFilter$formatFilter$adultFilter"
+
+            val sb = StringBuilder("query {\n")
+
+            fun addSection(alias: String, filters: String) {
+                sb.append("""
+                    $alias: Page(page: 1, perPage: 15) {
+                        media($filters) {
+                            $mediaFragment
+                        }
+                    }
+                """.trimIndent()).append("\n")
+            }
+
+            addSection("trendingMedia", "$baseFilter, sort: TRENDING_DESC")
+            addSection("popularMedia", "$baseFilter, sort: POPULARITY_DESC")
+            addSection("recentMedia", "$baseFilter, sort: ID_DESC")
+            addSection("topRatedMedia", "$baseFilter, sort: SCORE_DESC")
+            addSection("recentlyCompletedMedia", "$baseFilter, status: FINISHED, sort: END_DATE_DESC")
+            addSection("upcomingMedia", "$baseFilter, status: NOT_YET_RELEASED, sort: POPULARITY_DESC")
+            addSection("popularThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC")
+            addSection("topRatedThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: SCORE_DESC")
+
+            prevSeasons.forEachIndexed { i, (s, y) ->
+                addSection("prev${i}Popular", "$baseFilter, season: $s, seasonYear: $y, sort: POPULARITY_DESC")
+                addSection("prev${i}TopRated", "$baseFilter, season: $s, seasonYear: $y, sort: SCORE_DESC")
+            }
+
+            sb.append("}")
+
+            val payload = buildJsonObject {
+                put("query", sb.toString())
+            }
+
+            val responseText = client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                .awaitSuccess()
+                .also { it.parseALError() }
+                .body.string()
+
+            val data = json.parseToJsonElement(responseText).jsonObject["data"]?.jsonObject ?: return@withIOContext emptyList()
+
+            val sections = mutableListOf<ALHomeSection>()
+
+            fun extract(key: String, title: String) {
+                val mediaList = data[key]?.jsonObject?.get("media")?.jsonArray
+                if (mediaList != null && mediaList.isNotEmpty()) {
+                    val items = mediaList.map { json.decodeFromJsonElement<ALSearchItem>(it) }
+                    sections.add(ALHomeSection(key, title, items))
+                }
+            }
+
+            extract("trendingMedia", "Trending Now")
+            extract("popularMedia", "All Time Popular")
+            extract("recentMedia", "Recently Added")
+            extract("topRatedMedia", "Highest Rated")
+            extract("recentlyCompletedMedia", "Recently Completed")
+            extract("upcomingMedia", "Upcoming")
+
+            val seasonTitle = "${season.lowercase().replaceFirstChar { it.uppercase() }} $seasonYear"
+            extract("popularThisSeason", "Popular $seasonTitle")
+            extract("topRatedThisSeason", "Highest Rated $seasonTitle")
+
+            prevSeasons.forEachIndexed { i, (s, y) ->
+                val prevTitle = "${s.lowercase().replaceFirstChar { it.uppercase() }} $y"
+                extract("prev${i}Popular", "Popular $prevTitle")
+                extract("prev${i}TopRated", "Highest Rated $prevTitle")
+            }
+
+            sections
+        }
+    }
+
+    suspend fun getFilterMetadata(): ALFilterMetadataResult {
+        return withIOContext {
+            val query = """
+                query {
+                    GenreCollection
+                    MediaTagCollection {
+                        name
+                        description
+                        category
+                        isAdult
+                    }
+                }
+            """.trimIndent()
+            
+            val payload = buildJsonObject { put("query", query) }
+            
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALFilterMetadataResult>()
+            }
+        }
+    }
+
+    suspend fun getUserStats(): ALUserStatsResult {
+        return withIOContext {
+            val query = """
+                query {
+                  Viewer {
+                    id
+                    name
+                    avatar { large medium }
+                    bannerImage
+                    options { displayAdultContent }
+                    mediaListOptions {
+                      scoreFormat
+                      animeList { sectionOrder splitCompletedSectionByFormat }
+                      mangaList { sectionOrder splitCompletedSectionByFormat }
+                    }
+                    statistics {
+                      anime { count episodesWatched meanScore minutesWatched scores { score count } genres { genre count meanScore minutesWatched } tags { tag { name isAdult } count meanScore } formats { format count } }
+                      manga { count chaptersRead volumesRead meanScore scores { score count } genres { genre count meanScore chaptersRead } tags { tag { name isAdult } count meanScore } formats { format count } }
+                    }
+                    favourites {
+                      anime { nodes { id title { userPreferred } coverImage { large } } }
+                      manga { nodes { id title { userPreferred } coverImage { large } } }
+                      characters { nodes { id name { userPreferred } image { large } } }
+                      staff { nodes { id name { userPreferred } image { large } } }
+                    }
+                  }
+                }
+            """.trimIndent()
+            
+            val payload = buildJsonObject { put("query", query) }
+            
+            with(json) {
+                authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALUserStatsResult>()
+            }
+        }
+    }
+
+    suspend fun searchMediaPaginated(
+        type: String,
+        format: String?,
+        search: String?,
+        genres: List<String>?,
+        tags: List<String>?,
+        status: String?,
+        sort: String?,
+        year: Int?,
+        isAdult: Boolean?,
+        page: Int,
+        perPage: Int
+    ): ALPaginatedSearchResult {
+        return withIOContext {
+            val query = ""${'"'}
+            |query(
+                |${'$'}page: Int, ${'$'}perPage: Int, ${'$'}type: MediaType, ${'$'}format: MediaFormat,
+                |${'$'}search: String, ${'$'}genres: [String], ${'$'}tags: [String], ${'$'}status: MediaStatus,
+                |${'$'}sort: [MediaSort], ${'$'}year: Int, ${'$'}isAdult: Boolean
+            |) {
+                |Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                    |pageInfo {
+                        |total
+                        |perPage
+                        |currentPage
+                        |lastPage
+                        |hasNextPage
+                    |}
+                    |media(
+                        |type: ${'$'}type, format: ${'$'}format, search: ${'$'}search, genre_in: ${'$'}genres,
+                        |tag_in: ${'$'}tags, status: ${'$'}status, sort: ${'$'}sort, seasonYear: ${'$'}year, isAdult: ${'$'}isAdult
+                    |) {
+                        |id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
+                    |}
+                |}
+            |}
+            ""${'"'}.trimMargin()
+            
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("page", page)
+                    put("perPage", perPage)
+                    put("type", type)
+                    if (format != null) put("format", format)
+                    if (search != null) put("search", search)
+                    if (genres != null && genres.isNotEmpty()) {
+                        putJsonArray("genres") { genres.forEach { add(it) } }
+                    }
+                    if (tags != null && tags.isNotEmpty()) {
+                        putJsonArray("tags") { tags.forEach { add(it) } }
+                    }
+                    if (status != null) put("status", status)
+                    if (sort != null) {
+                        putJsonArray("sort") { add(sort) }
+                    }
+                    if (year != null) put("year", year)
+                    if (isAdult != null) put("isAdult", isAdult)
+                }
+            }
+            
+            with(json) {
+                client.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALPaginatedSearchResult>()
+            }
+        }
+    }
+
+    suspend fun getUserMediaList(userId: Int, type: String): ALUserListResult {
+        return withIOContext {
+            val query = ""${'"'}
+            |query (${'$'}id: Int, ${'$'}type: MediaType) {
+                |MediaListCollection(userId: ${'$'}id, type: ${'$'}type) {
+                    |lists {
+                        |name
+                        |isCustomList
+                        |isSplitCompletedList
+                        |status
+                        |entries {
+                            |id
+                            |status
+                            |score
+                            |progress
+                            |progressVolumes
+                            |repeat
+                            |priority
+                            |private
+                            |hiddenFromStatusLists
+                            |customLists
+                            |advancedScores
+                            |notes
+                            |updatedAt
+                            |startedAt { year month day }
+                            |completedAt { year month day }
+                            |media {
+                                |id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            ""${'"'}.trimMargin()
+            
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("id", userId)
+                    put("type", type)
+                }
+            }
+            
+            with(json) {
+                authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                    .awaitSuccess()
+                    .also { it.parseALError() }
+                    .parseAs<ALUserListResult>()
+            }
+        }
+    }
 
     private fun createDate(dateValue: Long): JsonObject {
         if (dateValue == 0L) {

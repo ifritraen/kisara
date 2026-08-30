@@ -94,7 +94,9 @@ import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.components.KisaraBottomSheet
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.track.anilist.AnilistApi
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchItem
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALStudioNode
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserAnime
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUAuthorRecord
@@ -104,6 +106,10 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUPublisherRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReviewRecord
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
+import eu.kanade.tachiyomi.ui.track.anilist.AnilistHomeScreen
+import eu.kanade.tachiyomi.ui.track.anilist.AnilistMyListScreen
+import eu.kanade.tachiyomi.ui.track.anilist.AnilistProfileScreen
+import eu.kanade.tachiyomi.ui.track.anilist.AnilistSearchScreen
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -115,8 +121,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import eu.kanade.tachiyomi.network.NetworkHelper
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -164,43 +168,70 @@ object TrackTab : Tab {
         val activeMediaType by uiPreferences.activeMediaType().collectAsState()
         val showTrackSubBarAtTop by uiPreferences.showTrackSubBarAtTop().collectAsState()
 
-        val subTabs = remember(activeMediaType) {
-            when (activeMediaType) {
-                MediaType.ANIME -> persistentListOf(
-                    SubTabItem("Trending", Icons.Outlined.AutoAwesome),
-                    SubTabItem("This Season", Icons.Outlined.NewReleases),
-                    SubTabItem("Top 100", Icons.Outlined.Visibility),
+        val mangaService by uiPreferences.trackTabMangaService().collectAsState()
+        val animeService by uiPreferences.trackTabAnimeService().collectAsState()
+        val novelService by uiPreferences.trackTabNovelService().collectAsState()
+
+        val activeTrackerService = when (activeMediaType) {
+            MediaType.ANIME -> animeService
+            MediaType.NOVEL -> novelService
+            MediaType.MANGA -> mangaService
+        }
+
+        LaunchedEffect(activeMediaType, activeTrackerService) {
+            if (activeTrackerService == UiPreferences.TrackTabService.ANILIST) {
+                screenModel.loadAnilistHome(activeMediaType)
+                screenModel.loadAnilistUserList(activeMediaType)
+                screenModel.loadAnilistStats()
+            }
+        }
+
+        val subTabs = remember(activeMediaType, activeTrackerService) {
+            if (activeTrackerService == UiPreferences.TrackTabService.ANILIST) {
+                persistentListOf(
+                    SubTabItem("Home", Icons.Outlined.AutoAwesome),
+                    SubTabItem("My List", Icons.AutoMirrored.Outlined.List),
                     SubTabItem("Search", Icons.Outlined.Search),
-                    SubTabItem("Genres & Tags", Icons.Outlined.Category),
-                    SubTabItem("Studios", Icons.Outlined.Domain),
-                    SubTabItem("My Anime List", Icons.AutoMirrored.Outlined.List),
                     SubTabItem("Profile", Icons.Outlined.AccountCircle),
                 )
-                MediaType.NOVEL -> persistentListOf(
-                    SubTabItem("Novel Releases", Icons.Outlined.NewReleases),
-                    SubTabItem("Top Novels", Icons.Outlined.AutoAwesome),
-                    SubTabItem("Novel Directory", Icons.Outlined.Info),
-                    SubTabItem("Novel Search", Icons.Outlined.Search),
-                    SubTabItem("Novel Genres", Icons.Outlined.Category),
-                    SubTabItem("Publishers", Icons.Outlined.Domain),
-                    SubTabItem("Novel Reviews", Icons.Outlined.RateReview),
-                    SubTabItem("My Novel Lists", Icons.AutoMirrored.Outlined.List),
-                    SubTabItem("User CP", Icons.Outlined.AccountCircle),
-                )
-                else -> persistentListOf(
-                    SubTabItem("New Releases", Icons.Outlined.NewReleases),
-                    SubTabItem("Recommended", Icons.Outlined.AutoAwesome),
-                    SubTabItem("Releases", Icons.Outlined.Visibility),
-                    SubTabItem("Series Info", Icons.Outlined.Info),
-                    SubTabItem("Scanlators", Icons.Outlined.Group),
-                    SubTabItem("Mangaka", Icons.Outlined.Person),
-                    SubTabItem("Publishers", Icons.Outlined.Domain),
-                    SubTabItem("Reviews", Icons.Outlined.RateReview),
-                    SubTabItem("Genres", Icons.Outlined.Category),
-                    SubTabItem("Search", Icons.Outlined.Search),
-                    SubTabItem("My Lists", Icons.AutoMirrored.Outlined.List),
-                    SubTabItem("User CP", Icons.Outlined.AccountCircle),
-                )
+            } else {
+                when (activeMediaType) {
+                    MediaType.ANIME -> persistentListOf(
+                        SubTabItem("Trending", Icons.Outlined.AutoAwesome),
+                        SubTabItem("This Season", Icons.Outlined.NewReleases),
+                        SubTabItem("Top 100", Icons.Outlined.Visibility),
+                        SubTabItem("Search", Icons.Outlined.Search),
+                        SubTabItem("Genres & Tags", Icons.Outlined.Category),
+                        SubTabItem("Studios", Icons.Outlined.Domain),
+                        SubTabItem("My Anime List", Icons.AutoMirrored.Outlined.List),
+                        SubTabItem("Profile", Icons.Outlined.AccountCircle),
+                    )
+                    MediaType.NOVEL -> persistentListOf(
+                        SubTabItem("Novel Releases", Icons.Outlined.NewReleases),
+                        SubTabItem("Top Novels", Icons.Outlined.AutoAwesome),
+                        SubTabItem("Novel Directory", Icons.Outlined.Info),
+                        SubTabItem("Novel Search", Icons.Outlined.Search),
+                        SubTabItem("Novel Genres", Icons.Outlined.Category),
+                        SubTabItem("Publishers", Icons.Outlined.Domain),
+                        SubTabItem("Novel Reviews", Icons.Outlined.RateReview),
+                        SubTabItem("My Novel Lists", Icons.AutoMirrored.Outlined.List),
+                        SubTabItem("User CP", Icons.Outlined.AccountCircle),
+                    )
+                    else -> persistentListOf(
+                        SubTabItem("New Releases", Icons.Outlined.NewReleases),
+                        SubTabItem("Recommended", Icons.Outlined.AutoAwesome),
+                        SubTabItem("Releases", Icons.Outlined.Visibility),
+                        SubTabItem("Series Info", Icons.Outlined.Info),
+                        SubTabItem("Scanlators", Icons.Outlined.Group),
+                        SubTabItem("Mangaka", Icons.Outlined.Person),
+                        SubTabItem("Publishers", Icons.Outlined.Domain),
+                        SubTabItem("Reviews", Icons.Outlined.RateReview),
+                        SubTabItem("Genres", Icons.Outlined.Category),
+                        SubTabItem("Search", Icons.Outlined.Search),
+                        SubTabItem("My Lists", Icons.AutoMirrored.Outlined.List),
+                        SubTabItem("User CP", Icons.Outlined.AccountCircle),
+                    )
+                }
             }
         }
 
@@ -298,44 +329,111 @@ object TrackTab : Tab {
                         .fillMaxWidth()
                         .weight(1f),
                 ) { page ->
-                    when (activeMediaType) {
-                        MediaType.ANIME -> when (page) {
-                            0 -> AniListTrendingFeed(screenModel)
-                            1 -> AniListSeasonalFeed(screenModel)
-                            2 -> AniListTopRatedFeed(screenModel)
-                            3 -> AniListSearchSection(screenModel)
-                            4 -> AniListGenresSection(screenModel)
-                            5 -> AniListStudiosSection(screenModel)
-                            6 -> AniListMyListSection(screenModel)
-                            7 -> AniListProfileSection(screenModel)
-                            else -> AniListTrendingFeed(screenModel)
+                    if (activeTrackerService == UiPreferences.TrackTabService.ANILIST) {
+                        when (page) {
+                            0 -> AnilistHomeScreen(
+                                sections = state.homeSections,
+                                isLoading = state.isLoadingHome,
+                                onItemClick = { item ->
+                                    screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                },
+                            )
+                            1 -> AnilistMyListScreen(
+                                isLoggedIn = screenModel.isAniListLoggedIn(),
+                                entries = state.userList,
+                                isLoading = state.isLoadingUserList,
+                                selectedStatus = state.userListStatus,
+                                activeMediaType = activeMediaType,
+                                onStatusSelected = { status ->
+                                    screenModel.setAnilistStatusFilter(status)
+                                },
+                                onLoginClick = {
+                                    scope.launch { pagerState.animateScrollToPage(3) }
+                                },
+                                onItemClick = { item ->
+                                    screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                },
+                            )
+                            2 -> AnilistSearchScreen(
+                                query = state.searchQuery,
+                                onQueryChange = { q ->
+                                    screenModel.searchAnilist(q, activeMediaType)
+                                },
+                                onSearch = {
+                                    screenModel.searchAnilist(state.searchQuery, activeMediaType)
+                                },
+                                results = state.searchResults,
+                                isSearching = state.isSearching,
+                                genres = state.filterGenres,
+                                selectedGenre = state.selectedGenre,
+                                onGenreSelected = { genre ->
+                                    screenModel.setAnilistGenre(genre)
+                                },
+                                selectedSort = state.selectedSort,
+                                onSortSelected = { sort ->
+                                    screenModel.setAnilistSort(sort)
+                                },
+                                activeMediaType = activeMediaType,
+                                onItemClick = { item ->
+                                    screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                },
+                            )
+                            3 -> AnilistProfileScreen(
+                                isLoggedIn = screenModel.isAniListLoggedIn(),
+                                userStats = state.userStats,
+                                isLoading = state.isLoadingStats,
+                                onLoginToken = { token ->
+                                    screenModel.loginAniList(token)
+                                },
+                                onLogout = {
+                                    screenModel.logoutAniList()
+                                },
+                                onRefresh = {
+                                    screenModel.loadAnilistStats()
+                                },
+                            )
+                            else -> Box(Modifier.fillMaxSize())
                         }
-                        MediaType.NOVEL -> when (page) {
-                            0 -> MangaUpdatesNovelReleaseFeed(screenModel)
-                            1 -> MangaUpdatesNovelRecommended(screenModel)
-                            2 -> MangaUpdatesSearchSection(screenModel, "releases", isNovel = true)
-                            3 -> MangaUpdatesNovelSearchSection(screenModel)
-                            4 -> MangaUpdatesGenresSection(screenModel)
-                            5 -> MangaUpdatesPublishersSection(screenModel)
-                            6 -> MangaUpdatesReviewsSection(screenModel)
-                            7 -> MangaUpdatesMyLists(screenModel)
-                            8 -> MangaUpdatesUserCP(screenModel)
-                            else -> MangaUpdatesNovelReleaseFeed(screenModel)
-                        }
-                        else -> when (page) {
-                            0 -> MangaUpdatesReleaseFeed(screenModel)
-                            1 -> MangaUpdatesRecommended(screenModel)
-                            2 -> MangaUpdatesSearchSection(screenModel, "releases")
-                            3 -> MangaUpdatesSeriesDirectory(screenModel)
-                            4 -> MangaUpdatesGroupsSection(screenModel)
-                            5 -> MangaUpdatesAuthorsSection(screenModel)
-                            6 -> MangaUpdatesPublishersSection(screenModel)
-                            7 -> MangaUpdatesReviewsSection(screenModel)
-                            8 -> MangaUpdatesGenresSection(screenModel)
-                            9 -> MangaUpdatesSearchSection(screenModel, "search")
-                            10 -> MangaUpdatesMyLists(screenModel)
-                            11 -> MangaUpdatesUserCP(screenModel)
-                            else -> MangaUpdatesReleaseFeed(screenModel)
+                    } else {
+                        when (activeMediaType) {
+                            MediaType.ANIME -> when (page) {
+                                0 -> AniListTrendingFeed(screenModel)
+                                1 -> AniListSeasonalFeed(screenModel)
+                                2 -> AniListTopRatedFeed(screenModel)
+                                3 -> AniListSearchSection(screenModel)
+                                4 -> AniListGenresSection(screenModel)
+                                5 -> AniListStudiosSection(screenModel)
+                                6 -> AniListMyListSection(screenModel)
+                                7 -> AniListProfileSection(screenModel)
+                                else -> AniListTrendingFeed(screenModel)
+                            }
+                            MediaType.NOVEL -> when (page) {
+                                0 -> MangaUpdatesNovelReleaseFeed(screenModel)
+                                1 -> MangaUpdatesNovelRecommended(screenModel)
+                                2 -> MangaUpdatesSearchSection(screenModel, "releases", isNovel = true)
+                                3 -> MangaUpdatesNovelSearchSection(screenModel)
+                                4 -> MangaUpdatesGenresSection(screenModel)
+                                5 -> MangaUpdatesPublishersSection(screenModel)
+                                6 -> MangaUpdatesReviewsSection(screenModel)
+                                7 -> MangaUpdatesMyLists(screenModel)
+                                8 -> MangaUpdatesUserCP(screenModel)
+                                else -> MangaUpdatesNovelReleaseFeed(screenModel)
+                            }
+                            else -> when (page) {
+                                0 -> MangaUpdatesReleaseFeed(screenModel)
+                                1 -> MangaUpdatesRecommended(screenModel)
+                                2 -> MangaUpdatesSearchSection(screenModel, "releases")
+                                3 -> MangaUpdatesSeriesDirectory(screenModel)
+                                4 -> MangaUpdatesGroupsSection(screenModel)
+                                5 -> MangaUpdatesAuthorsSection(screenModel)
+                                6 -> MangaUpdatesPublishersSection(screenModel)
+                                7 -> MangaUpdatesReviewsSection(screenModel)
+                                8 -> MangaUpdatesGenresSection(screenModel)
+                                9 -> MangaUpdatesSearchSection(screenModel, "search")
+                                10 -> MangaUpdatesMyLists(screenModel)
+                                11 -> MangaUpdatesUserCP(screenModel)
+                                else -> MangaUpdatesReleaseFeed(screenModel)
+                            }
                         }
                     }
                 }
@@ -375,6 +473,23 @@ data class TrackSeriesItem(
     val authors: String? = null,
     val genres: List<String> = emptyList(),
 )
+
+fun ALSearchItem.toTrackSeriesItem(activeMediaType: MediaType): TrackSeriesItem {
+    return TrackSeriesItem(
+        title = title.userPreferred,
+        coverUrl = coverImage.large,
+        type = format ?: if (activeMediaType == MediaType.ANIME) "ANIME" else "MANGA",
+        status = status,
+        rating = averageScore?.let { "$it%" },
+        score = averageScore?.toDouble(),
+        description = description,
+        trackingUrl = if (activeMediaType == MediaType.ANIME) AnilistApi.animeUrl(id) else AnilistApi.mangaUrl(id),
+        year = startDate?.year?.toString(),
+        authors = staff?.edges?.mapNotNull { it.node.name() }?.joinToString(", ")
+            ?: studios?.edges?.filter { it.isMain }?.map { it.node.name }?.joinToString(", "),
+        genres = genres ?: emptyList(),
+    )
+}
 
 // ==========================================
 // SERIES DETAILS BOTTOM SHEET
@@ -1958,385 +2073,3 @@ private fun MangaUpdatesLoginCard(screenModel: TrackScreenModel) {
         }
     }
 }
-
-class TrackScreenModel(
-    private val trackerManager: TrackerManager = Injekt.get(),
-    private val networkHelper: NetworkHelper = Injekt.get(),
-    private val json: Json = Injekt.get(),
-) : ScreenModel {
-
-    private val _state = MutableStateFlow(TrackState())
-    val state = _state.asStateFlow()
-
-    fun isLoggedIn(): Boolean {
-        return trackerManager.mangaUpdates.isLoggedIn
-    }
-
-    fun login(u: String, p: String, onDone: () -> Unit) {
-        screenModelScope.launch {
-            try {
-                trackerManager.mangaUpdates.login(u, p)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to log in to MangaUpdates" }
-            }
-            onDone()
-        }
-    }
-
-    fun loadNewReleases() {
-        if (_state.value.newReleases.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingReleases = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.getRecentReleases()
-                val mapped = results.map {
-                    MUReleaseItem(
-                        title = it.title,
-                        chapter = it.chapter,
-                        groups = it.groups?.mapNotNull { g -> g.name }?.joinToString(", "),
-                        releaseDate = it.releaseDate,
-                    )
-                }
-                _state.update { it.copy(newReleases = mapped, isLoadingReleases = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates new releases" }
-                _state.update { it.copy(isLoadingReleases = false) }
-            }
-        }
-    }
-
-    fun loadRecommended() {
-        if (_state.value.recommendedSeries.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingRecommended = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.search("a")
-                _state.update { it.copy(recommendedSeries = results, isLoadingRecommended = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates recommendations" }
-                _state.update { it.copy(isLoadingRecommended = false) }
-            }
-        }
-    }
-
-    fun searchSeries(query: String) {
-        val q = query.trim().ifBlank { "a" }
-        screenModelScope.launch {
-            _state.update { it.copy(isSearching = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.search(q)
-                _state.update { it.copy(searchResults = results, isSearching = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to search MangaUpdates series" }
-                _state.update { it.copy(isSearching = false) }
-            }
-        }
-    }
-
-    fun loadGenres() {
-        if (_state.value.genres.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingGenres = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.getGenres()
-                _state.update { it.copy(genres = results, isLoadingGenres = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates genres" }
-                _state.update { it.copy(isLoadingGenres = false) }
-            }
-        }
-    }
-
-    fun loadGroups(query: String) {
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingGroups = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.searchGroups(query)
-                _state.update { it.copy(groups = results, isLoadingGroups = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates groups" }
-                _state.update { it.copy(isLoadingGroups = false) }
-            }
-        }
-    }
-
-    fun selectSeries(item: TrackSeriesItem?) {
-        _state.update { it.copy(selectedSeries = item) }
-    }
-
-    fun dismissDetails() {
-        _state.update { it.copy(selectedSeries = null) }
-    }
-
-    fun loadNovelRecommended() {
-        if (_state.value.novelRecommendedSeries.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingNovelRecommended = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.search("a", type = "Novel")
-                _state.update { it.copy(novelRecommendedSeries = results, isLoadingNovelRecommended = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates novel recommendations" }
-                _state.update { it.copy(isLoadingNovelRecommended = false) }
-            }
-        }
-    }
-
-    fun searchNovels(query: String) {
-        val q = query.trim().ifBlank { "a" }
-        screenModelScope.launch {
-            _state.update { it.copy(isSearchingNovels = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.search(q, type = "Novel")
-                _state.update { it.copy(novelSearchResults = results, isSearchingNovels = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to search MangaUpdates novels" }
-                _state.update { it.copy(isSearchingNovels = false) }
-            }
-        }
-    }
-
-    fun isAniListLoggedIn(): Boolean = trackerManager.aniList.isLoggedIn
-
-    fun loginAniList(token: String, onDone: () -> Unit = {}) {
-        screenModelScope.launch {
-            try {
-                trackerManager.aniList.login(token)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to log in to AniList" }
-            }
-            onDone()
-        }
-    }
-
-    fun logoutAniList(onDone: () -> Unit = {}) {
-        screenModelScope.launch {
-            try {
-                trackerManager.aniList.logout()
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to log out of AniList" }
-            }
-            onDone()
-        }
-    }
-
-    fun loadTrendingAnime() {
-        if (_state.value.trendingAnime.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingTrendingAnime = true) }
-            try {
-                val results = trackerManager.aniList.api.getTrendingAnime()
-                _state.update { it.copy(trendingAnime = results, isLoadingTrendingAnime = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load trending anime" }
-                _state.update { it.copy(isLoadingTrendingAnime = false) }
-            }
-        }
-    }
-
-    fun loadSeasonalAnime() {
-        if (_state.value.seasonalAnime.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingSeasonalAnime = true) }
-            try {
-                val results = trackerManager.aniList.api.getSeasonalAnime("SUMMER", 2024)
-                _state.update { it.copy(seasonalAnime = results, isLoadingSeasonalAnime = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load seasonal anime" }
-                _state.update { it.copy(isLoadingSeasonalAnime = false) }
-            }
-        }
-    }
-
-    fun loadTopRatedAnime() {
-        if (_state.value.topAnime.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingTopAnime = true) }
-            try {
-                val results = trackerManager.aniList.api.getTopRatedAnime()
-                _state.update { it.copy(topAnime = results, isLoadingTopAnime = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load top rated anime" }
-                _state.update { it.copy(isLoadingTopAnime = false) }
-            }
-        }
-    }
-
-    fun searchAnime(query: String) {
-        val q = query.trim().ifBlank { "a" }
-        screenModelScope.launch {
-            _state.update { it.copy(isSearchingAnime = true) }
-            try {
-                val results = trackerManager.aniList.api.searchAnime(q).map {
-                    ALAnime(
-                        remoteId = it.remote_id,
-                        title = it.title,
-                        imageUrl = it.cover_url,
-                        description = it.summary,
-                        format = it.publishing_type,
-                        publishingStatus = it.publishing_status,
-                        startDateFuzzy = 0L,
-                        totalEpisodes = it.total_episodes,
-                        averageScore = it.score.toInt(),
-                        genres = it.genres,
-                    )
-                }
-                _state.update { it.copy(animeSearchResults = results, isSearchingAnime = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to search anime" }
-                _state.update { it.copy(isSearchingAnime = false) }
-            }
-        }
-    }
-
-    fun loadAnimeGenres() {
-        if (_state.value.animeGenres.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingAnimeGenres = true) }
-            try {
-                val results = trackerManager.aniList.api.getAnimeGenres()
-                _state.update { it.copy(animeGenres = results, isLoadingAnimeGenres = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load anime genres" }
-                _state.update { it.copy(isLoadingAnimeGenres = false) }
-            }
-        }
-    }
-
-    fun loadAnimeStudios(query: String) {
-        val q = query.trim().ifBlank { "a" }
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingAnimeStudios = true) }
-            try {
-                val results = trackerManager.aniList.api.searchStudios(q)
-                _state.update { it.copy(animeStudios = results, isLoadingAnimeStudios = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load anime studios" }
-                _state.update { it.copy(isLoadingAnimeStudios = false) }
-            }
-        }
-    }
-
-    fun loadUserAnimeList(status: String? = null) {
-        if (!isAniListLoggedIn()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingUserAnimeList = true) }
-            try {
-                val (userId, _) = trackerManager.aniList.api.getCurrentUser()
-                val results = trackerManager.aniList.api.getUserAnimeList(userId, status)
-                _state.update { it.copy(userAnimeList = results, isLoadingUserAnimeList = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load user anime list" }
-                _state.update { it.copy(isLoadingUserAnimeList = false) }
-            }
-        }
-    }
-
-    fun loadNovelReleases() {
-        if (_state.value.novelReleases.isNotEmpty()) return
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingNovelReleases = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.getRecentReleases()
-                val mapped = results.map {
-                    MUReleaseItem(
-                        title = it.title,
-                        chapter = it.chapter,
-                        groups = it.groups?.mapNotNull { g -> g.name }?.joinToString(", "),
-                        releaseDate = it.releaseDate,
-                    )
-                }
-                _state.update { it.copy(novelReleases = mapped, isLoadingNovelReleases = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load novel releases" }
-                _state.update { it.copy(isLoadingNovelReleases = false) }
-            }
-        }
-    }
-
-    fun loadAuthors(query: String) {
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingAuthors = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.searchAuthors(query)
-                _state.update { it.copy(authors = results, isLoadingAuthors = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates authors" }
-                _state.update { it.copy(isLoadingAuthors = false) }
-            }
-        }
-    }
-
-    fun loadPublishers(query: String) {
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingPublishers = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.searchPublishers(query)
-                _state.update { it.copy(publishers = results, isLoadingPublishers = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates publishers" }
-                _state.update { it.copy(isLoadingPublishers = false) }
-            }
-        }
-    }
-
-    fun loadReviews(query: String) {
-        screenModelScope.launch {
-            _state.update { it.copy(isLoadingReviews = true) }
-            try {
-                val results = trackerManager.mangaUpdates.api.searchReviews(query)
-                _state.update { it.copy(reviews = results, isLoadingReviews = false) }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to load MangaUpdates reviews" }
-                _state.update { it.copy(isLoadingReviews = false) }
-            }
-        }
-    }
-}
-
-data class TrackState(
-    val selectedSeries: TrackSeriesItem? = null,
-    val isLoadingReleases: Boolean = false,
-    val newReleases: List<MUReleaseItem> = emptyList(),
-    val isLoadingRecommended: Boolean = false,
-    val recommendedSeries: List<MURecord> = emptyList(),
-    val isLoadingNovelRecommended: Boolean = false,
-    val novelRecommendedSeries: List<MURecord> = emptyList(),
-    val isSearching: Boolean = false,
-    val searchResults: List<MURecord> = emptyList(),
-    val isSearchingNovels: Boolean = false,
-    val novelSearchResults: List<MURecord> = emptyList(),
-    val isLoadingTrendingAnime: Boolean = false,
-    val trendingAnime: List<ALAnime> = emptyList(),
-    val isLoadingSeasonalAnime: Boolean = false,
-    val seasonalAnime: List<ALAnime> = emptyList(),
-    val isLoadingTopAnime: Boolean = false,
-    val topAnime: List<ALAnime> = emptyList(),
-    val isSearchingAnime: Boolean = false,
-    val animeSearchResults: List<ALAnime> = emptyList(),
-    val isLoadingAnimeGenres: Boolean = false,
-    val animeGenres: List<String> = emptyList(),
-    val isLoadingAnimeStudios: Boolean = false,
-    val animeStudios: List<ALStudioNode> = emptyList(),
-    val isLoadingUserAnimeList: Boolean = false,
-    val userAnimeList: List<ALUserAnime> = emptyList(),
-    val isLoadingNovelReleases: Boolean = false,
-    val novelReleases: List<MUReleaseItem> = emptyList(),
-    val isLoadingGenres: Boolean = false,
-    val genres: List<MUGenreItem> = emptyList(),
-    val isLoadingGroups: Boolean = false,
-    val groups: List<MUGroupRecord> = emptyList(),
-    val isLoadingAuthors: Boolean = false,
-    val authors: List<MUAuthorRecord> = emptyList(),
-    val isLoadingPublishers: Boolean = false,
-    val publishers: List<MUPublisherRecord> = emptyList(),
-    val isLoadingReviews: Boolean = false,
-    val reviews: List<MUReviewRecord> = emptyList(),
-)
-
-data class MUReleaseItem(
-    val title: String?,
-    val chapter: String?,
-    val groups: String?,
-    val releaseDate: String? = null,
-)

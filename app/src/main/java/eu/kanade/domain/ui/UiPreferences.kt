@@ -56,6 +56,19 @@ class UiPreferences(
     fun tabSwipeBottomZoneHeight() = preferenceStore.getInt("pref_tab_swipe_bottom_zone_height", 15)
 
     fun tabSwipeMiddleZoneHeight() = preferenceStore.getInt("pref_tab_swipe_middle_zone_height", 50)
+
+    // KMK --> Track Tab
+    fun trackTabMangaService() = preferenceStore.getEnum("pref_track_tab_manga_service", TrackTabService.ANILIST)
+    fun trackTabAnimeService() = preferenceStore.getEnum("pref_track_tab_anime_service", TrackTabService.ANILIST)
+    fun trackTabNovelService() = preferenceStore.getEnum("pref_track_tab_novel_service", TrackTabService.ANILIST)
+    fun trackTabPreviousSeasons() = preferenceStore.getInt("pref_track_tab_previous_seasons", 3)
+    fun trackTabHideAdult() = preferenceStore.getBoolean("pref_track_tab_hide_adult", false)
+
+    enum class TrackTabService {
+        ANILIST,
+        MAL,
+        MANGA_UPDATES,
+    }
     // KMK <--
 
     fun relativeTime() = preferenceStore.getBoolean("relative_time_v2", true)
