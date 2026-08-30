@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -53,7 +54,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.tachiyomi.ui.browse.search.model.AdvancedSearchState
+import eu.kanade.tachiyomi.ui.browse.search.model.CanonicalTag
 import eu.kanade.tachiyomi.ui.browse.search.model.SearchTaxonomies
+import eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary
 import eu.kanade.tachiyomi.ui.browse.search.model.TagSelectionState
 
 // KMK -->
@@ -76,6 +79,12 @@ fun AdvancedSearchScreen(
     var showDemographicMenu by remember { mutableStateOf(false) }
     var showOriginMenu by remember { mutableStateOf(false) }
 
+    // Live Autocomplete States for 46,000+ Dictionary
+    var authorSuggestions by remember { mutableStateOf<List<CanonicalTag>>(emptyList()) }
+    var artistSuggestions by remember { mutableStateOf<List<CanonicalTag>>(emptyList()) }
+    var tagSearchQuery by remember { mutableStateOf("") }
+    var tagSuggestions by remember { mutableStateOf<List<CanonicalTag>>(emptyList()) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -93,24 +102,156 @@ fun AdvancedSearchScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        // Author & Artist Fields with Live Autocomplete
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = state.author,
+                    onValueChange = { input ->
+                        onStateChange(state.copy(author = input))
+                        authorSuggestions = if (input.length >= 2) TagDictionary.searchAuthors(input, limit = 8) else emptyList()
+                    },
+                    label = { Text("Author / Circle") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (authorSuggestions.isNotEmpty()) {
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = { authorSuggestions = emptyList() },
+                    ) {
+                        authorSuggestions.forEach { tag ->
+                            DropdownMenuItem(
+                                text = { Text("${tag.name} (${tag.namespace.label})") },
+                                onClick = {
+                                    onStateChange(state.copy(author = tag.name))
+                                    authorSuggestions = emptyList()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = state.artist,
+                    onValueChange = { input ->
+                        onStateChange(state.copy(artist = input))
+                        artistSuggestions = if (input.length >= 2) TagDictionary.searchArtists(input, limit = 8) else emptyList()
+                    },
+                    label = { Text("Artist") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (artistSuggestions.isNotEmpty()) {
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = { artistSuggestions = emptyList() },
+                    ) {
+                        artistSuggestions.forEach { tag ->
+                            DropdownMenuItem(
+                                text = { Text(tag.name) },
+                                onClick = {
+                                    onStateChange(state.copy(artist = tag.name))
+                                    artistSuggestions = emptyList()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+        // Dynamic Tag Search Across 46,000+ Dictionary Entries
+        Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
-                value = state.author,
-                onValueChange = { onStateChange(state.copy(author = it)) },
-                label = { Text("Author / Circle") },
+                value = tagSearchQuery,
+                onValueChange = { input ->
+                    tagSearchQuery = input
+                    tagSuggestions = if (input.length >= 2) TagDictionary.autocomplete(input, limit = 12) else emptyList()
+                },
+                label = { Text("Search 46,000+ Tags, Parodies, Characters...") },
+                leadingIcon = { Icon(Icons.Outlined.Tag, contentDescription = null) },
                 singleLine = true,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = state.artist,
-                onValueChange = { onStateChange(state.copy(artist = it)) },
-                label = { Text("Artist") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
+            if (tagSuggestions.isNotEmpty()) {
+                DropdownMenu(
+                    expanded = true,
+                    onDismissRequest = { tagSuggestions = emptyList() },
+                ) {
+                    tagSuggestions.forEach { tag ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(tag.name, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        text = tag.namespace.prefix,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            },
+                            onClick = {
+                                val updatedMap = state.tagStates.toMutableMap()
+                                updatedMap[tag.name] = TagSelectionState.INCLUDED
+                                onStateChange(state.copy(tagStates = updatedMap))
+                                tagSearchQuery = ""
+                                tagSuggestions = emptyList()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        // Active Custom/Searched Tags Bar
+        val customSelectedTags = state.tagStates.keys.filter { tag ->
+            !SearchTaxonomies.TAG_TAXONOMIES.values.any { it.contains(tag) }
+        }
+        if (customSelectedTags.isNotEmpty()) {
+            Text(
+                text = "Custom Selected Tags (${customSelectedTags.size})",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                customSelectedTags.forEach { tag ->
+                    val tagState = state.tagStates[tag] ?: TagSelectionState.UNSELECTED
+                    ThreeStateTagChip(
+                        tag = tag,
+                        state = tagState,
+                        onClick = {
+                            val nextState = when (tagState) {
+                                TagSelectionState.UNSELECTED -> TagSelectionState.INCLUDED
+                                TagSelectionState.INCLUDED -> TagSelectionState.EXCLUDED
+                                TagSelectionState.EXCLUDED -> TagSelectionState.UNSELECTED
+                            }
+                            val updatedMap = state.tagStates.toMutableMap()
+                            if (nextState == TagSelectionState.UNSELECTED) {
+                                updatedMap.remove(tag)
+                            } else {
+                                updatedMap[tag] = nextState
+                            }
+                            onStateChange(state.copy(tagStates = updatedMap))
+                        },
+                    )
+                }
+            }
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

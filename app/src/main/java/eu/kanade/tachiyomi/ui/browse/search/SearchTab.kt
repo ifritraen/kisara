@@ -76,9 +76,14 @@ private fun SearchTabContent(
     contentPadding: PaddingValues,
 ) {
     val navigator = LocalNavigator.currentOrThrow
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val screenModel = rememberScreenModel { SearchScreenModel(mediaType = mediaType) }
     val state by screenModel.state.collectAsState()
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.initialize(context)
+    }
 
     val tabTitles = persistentListOf(
         stringResource(KMR.strings.tab_global_search),
