@@ -73,6 +73,23 @@ fun MALHomeScreen(
     val pagerState = rememberPagerState { subSubTabs.size }
     val scope = rememberCoroutineScope()
 
+    androidx.compose.runtime.LaunchedEffect(pagerState.pageCount) {
+        launch {
+            eu.kanade.tachiyomi.ui.track.TrackTab.nextSubSubTabEvent.receiveAsFlow().collectLatest {
+                if (pagerState.currentPage < pagerState.pageCount - 1) {
+                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                }
+            }
+        }
+        launch {
+            eu.kanade.tachiyomi.ui.track.TrackTab.prevSubSubTabEvent.receiveAsFlow().collectLatest {
+                if (pagerState.currentPage > 0) {
+                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                }
+            }
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         // Sub-sub-tab Bar
         ScrollableTabRow(

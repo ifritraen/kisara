@@ -55,6 +55,11 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 // KMK -->
+object SearchTabEvents {
+    val nextSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val prevSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+}
+
 fun Screen.searchTab(
     mediaType: UiPreferences.MediaType = UiPreferences.MediaType.MANGA,
 ): TabContent {
@@ -92,6 +97,23 @@ private fun SearchTabContent(
     )
     val pagerState = rememberPagerState(initialPage = 0) { tabTitles.size }
     var showSourceFilterSheet by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(pagerState.pageCount) {
+        launch {
+            SearchTabEvents.nextSubTabEvent.receiveAsFlow().collectLatest {
+                if (pagerState.currentPage < pagerState.pageCount - 1) {
+                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                }
+            }
+        }
+        launch {
+            SearchTabEvents.prevSubTabEvent.receiveAsFlow().collectLatest {
+                if (pagerState.currentPage > 0) {
+                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier

@@ -487,19 +487,24 @@ object HomeScreen : Screen() {
                                                     tabNavigator.current = enabledTabs[currentIdx - 1]
                                                 }
                                             } else if (yFromBottomRatio <= middleZoneRatio) {
-                                                // Zone 2: Middle Zone -> Sub-Tabs & Subcategories
+                                                // Zone 2: Middle Zone -> Sub-Tabs & Subcategories / Subsubtabs
                                                 when (currentTab) {
                                                     is HomeTab -> {
                                                         if (swipeLeft) HomeTab.nextSubTabEvent.trySend(Unit)
                                                         else HomeTab.prevSubTabEvent.trySend(Unit)
                                                     }
                                                     is BrowseTab -> {
-                                                        if (swipeLeft) BrowseTab.nextSubTabEvent.trySend(Unit)
-                                                        else BrowseTab.prevSubTabEvent.trySend(Unit)
+                                                        if (BrowseTab.currentPageIndex == 4) {
+                                                            if (swipeLeft) eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.nextSubTabEvent.trySend(Unit)
+                                                            else eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.prevSubTabEvent.trySend(Unit)
+                                                        } else {
+                                                            if (swipeLeft) BrowseTab.nextSubTabEvent.trySend(Unit)
+                                                            else BrowseTab.prevSubTabEvent.trySend(Unit)
+                                                        }
                                                     }
                                                     is eu.kanade.tachiyomi.ui.track.TrackTab -> {
-                                                        if (swipeLeft) eu.kanade.tachiyomi.ui.track.TrackTab.nextSubTabEvent.trySend(Unit)
-                                                        else eu.kanade.tachiyomi.ui.track.TrackTab.prevSubTabEvent.trySend(Unit)
+                                                        if (swipeLeft) eu.kanade.tachiyomi.ui.track.TrackTab.nextSubSubTabEvent.trySend(Unit)
+                                                        else eu.kanade.tachiyomi.ui.track.TrackTab.prevSubSubTabEvent.trySend(Unit)
                                                     }
                                                     is LibraryTab -> {
                                                         if (swipeLeft) eu.kanade.tachiyomi.ui.library.LibraryTab.nextSubcategoryEvent.trySend(Unit)
