@@ -273,6 +273,9 @@ class UiPreferences(
     fun novelSearchSources() = preferenceStore.getStringSet("kisara_novel_search_sources", emptySet())
     fun searchRecentQueries() = preferenceStore.getStringSet("kisara_search_recent_queries", emptySet())
     fun anilistHomeEnabledSections() = preferenceStore.getStringSet("kisara_anilist_home_enabled_sections", emptySet())
+    fun trackerPrioritizedMangaSources() = preferenceStore.getString("kisara_tracker_prioritized_manga_sources", "")
+    fun trackerPrioritizedAnimeSources() = preferenceStore.getString("kisara_tracker_prioritized_anime_sources", "")
+    fun trackerPrioritizedNovelSources() = preferenceStore.getString("kisara_tracker_prioritized_novel_sources", "")
     // KMK <--
 
     // SY <--

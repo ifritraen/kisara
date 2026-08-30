@@ -114,6 +114,7 @@ import eu.kanade.tachiyomi.ui.track.anilist.AnilistMyListScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistProfileScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistSearchScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistSectionFilterSheet
+import eu.kanade.tachiyomi.ui.track.details.TrackerMediaDetailsScreen
 import eu.kanade.tachiyomi.ui.track.myanimelist.MALHomeScreen
 import eu.kanade.tachiyomi.ui.track.myanimelist.MALMyListScreen
 import eu.kanade.tachiyomi.ui.track.myanimelist.MALProfileScreen
@@ -371,7 +372,7 @@ object TrackTab : Tab {
                                     sections = state.homeSections,
                                     isLoading = state.isLoadingHome,
                                     onItemClick = { item ->
-                                        screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
                                     },
                                 )
                                 1 -> AnilistMyListScreen(
@@ -387,7 +388,7 @@ object TrackTab : Tab {
                                         scope.launch { pagerState.animateScrollToPage(3) }
                                     },
                                     onItemClick = { item ->
-                                        screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
                                     },
                                 )
                                 2 -> AnilistSearchScreen(
@@ -411,7 +412,7 @@ object TrackTab : Tab {
                                     },
                                     activeMediaType = activeMediaType,
                                     onItemClick = { item ->
-                                        screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
                                     },
                                 )
                                 3 -> AnilistProfileScreen(
@@ -437,7 +438,7 @@ object TrackTab : Tab {
                                     sections = state.malHomeSections,
                                     isLoading = state.isLoadingMALHome,
                                     onItemClick = { item ->
-                                        screenModel.selectSeries(item.toTrackSeriesItem())
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(), activeMediaType))
                                     },
                                 )
                                 1 -> MALMyListScreen(
@@ -453,7 +454,7 @@ object TrackTab : Tab {
                                         scope.launch { pagerState.animateScrollToPage(3) }
                                     },
                                     onItemClick = { item ->
-                                        screenModel.selectSeries(item.toTrackSeriesItem())
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(), activeMediaType))
                                     },
                                 )
                                 2 -> MALSearchScreen(
@@ -468,7 +469,7 @@ object TrackTab : Tab {
                                     isSearching = state.isSearchingMAL,
                                     activeMediaType = activeMediaType,
                                     onItemClick = { item ->
-                                        screenModel.selectSeries(item.toTrackSeriesItem())
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(), activeMediaType))
                                     },
                                 )
                                 3 -> MALProfileScreen(
