@@ -43,6 +43,11 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.util.plus
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.LaunchedEffect
+
 @Composable
 fun ExtensionStoresScreen(
     state: ExtensionStoreScreenState.Success,
@@ -66,6 +71,24 @@ fun ExtensionStoresScreen(
         stringResource(KMR.strings.label_media_type_novel),
     )
 
+    val pagerState = rememberPagerState(
+        initialPage = state.selectedMediaIndex,
+    ) {
+        mediaTabs.size
+    }
+
+    LaunchedEffect(state.selectedMediaIndex) {
+        if (pagerState.currentPage != state.selectedMediaIndex) {
+            pagerState.animateScrollToPage(state.selectedMediaIndex)
+        }
+    }
+
+    LaunchedEffect(pagerState.currentPage) {
+        if (state.selectedMediaIndex != pagerState.currentPage) {
+            onSelectMediaTab(pagerState.currentPage)
+        }
+    }
+
     Scaffold(
         topBar = { scrollBehavior ->
             androidx.compose.foundation.layout.Column {
@@ -83,11 +106,11 @@ fun ExtensionStoresScreen(
                     },
                 )
                 androidx.compose.material3.PrimaryTabRow(
-                    selectedTabIndex = state.selectedMediaIndex,
+                    selectedTabIndex = pagerState.currentPage,
                 ) {
                     mediaTabs.forEachIndexed { index, title ->
                         androidx.compose.material3.Tab(
-                            selected = state.selectedMediaIndex == index,
+                            selected = pagerState.currentPage == index,
                             onClick = { onSelectMediaTab(index) },
                             text = { Text(text = title) },
                         )
@@ -102,42 +125,54 @@ fun ExtensionStoresScreen(
             )
         },
     ) { paddingValues ->
-        if (state.isEmpty) {
-            val context = LocalContext.current
-            EmptyScreen(
-                MR.strings.extensionStoresScreen_emptyLabel,
-                modifier = Modifier.padding(paddingValues),
-                // KMK -->
-                help = {
-                    TextButton(
-                        onClick = { context.openInBrowser(REPO_HELP) },
-                        modifier = Modifier.padding(top = MaterialTheme.padding.small),
-                    ) {
-                        Icon(imageVector = Icons.AutoMirrored.Outlined.Help, contentDescription = null)
-                        Spacer(modifier = Modifier.width(MaterialTheme.padding.extraSmall))
-                        Text(text = stringResource(MR.strings.label_help))
-                    }
-                },
-                // KMK <--
-            )
-            return@Scaffold
-        }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+        ) { pageIndex ->
+            val pageStores = when (pageIndex) {
+                0 -> state.mangaStores
+                1 -> state.animeStores
+                2 -> state.novelStores
+                else -> state.mangaStores
+            }
 
-        ExtensionStoresContent(
-            repos = state.stores,
-            lazyListState = lazyListState,
-            paddingValues = paddingValues + topSmallPaddingValues +
-                PaddingValues(horizontal = MaterialTheme.padding.medium),
-            onCopy = onCopy,
-            onOpenWebsite = onOpenWebsite,
-            onOpenDiscord = onOpenDiscord,
-            onClickDelete = onClickDelete,
-            // KMK -->
-            onClickEnable = onClickEnable,
-            onClickDisable = onClickDisable,
-            disabledRepos = state.disabledRepos,
-            // KMK <--
-        )
+            if (pageStores.isEmpty()) {
+                val context = LocalContext.current
+                EmptyScreen(
+                    MR.strings.extensionStoresScreen_emptyLabel,
+                    modifier = Modifier.padding(paddingValues),
+                    // KMK -->
+                    help = {
+                        TextButton(
+                            onClick = { context.openInBrowser(REPO_HELP) },
+                            modifier = Modifier.padding(top = MaterialTheme.padding.small),
+                        ) {
+                            Icon(imageVector = Icons.AutoMirrored.Outlined.Help, contentDescription = null)
+                            Spacer(modifier = Modifier.width(MaterialTheme.padding.extraSmall))
+                            Text(text = stringResource(MR.strings.label_help))
+                        }
+                    },
+                    // KMK <--
+                )
+            } else {
+                val pageListState = if (pageIndex == pagerState.currentPage) lazyListState else rememberLazyListState()
+                ExtensionStoresContent(
+                    repos = pageStores,
+                    lazyListState = pageListState,
+                    paddingValues = paddingValues + topSmallPaddingValues +
+                        PaddingValues(horizontal = MaterialTheme.padding.medium),
+                    onCopy = onCopy,
+                    onOpenWebsite = onOpenWebsite,
+                    onOpenDiscord = onOpenDiscord,
+                    onClickDelete = onClickDelete,
+                    // KMK -->
+                    onClickEnable = onClickEnable,
+                    onClickDisable = onClickDisable,
+                    disabledRepos = state.disabledRepos,
+                    // KMK <--
+                )
+            }
+        }
     }
 }
 

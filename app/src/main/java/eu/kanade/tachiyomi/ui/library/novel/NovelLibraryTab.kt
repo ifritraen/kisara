@@ -304,6 +304,24 @@ data object NovelLibraryTab : Tab {
                 }
             }
             launch {
+                eu.kanade.tachiyomi.ui.library.LibraryTab.nextCategoryEvent.receiveAsFlow().collectLatest {
+                    val totalCategories = tabCategories.size
+                    if (totalCategories > 1) {
+                        val next = (screenModel.activeCategoryIndex + 1).coerceAtMost(totalCategories - 1)
+                        screenModel.activeCategoryIndex = next
+                    }
+                }
+            }
+            launch {
+                eu.kanade.tachiyomi.ui.library.LibraryTab.prevCategoryEvent.receiveAsFlow().collectLatest {
+                    val totalCategories = tabCategories.size
+                    if (totalCategories > 1) {
+                        val prev = (screenModel.activeCategoryIndex - 1).coerceAtLeast(0)
+                        screenModel.activeCategoryIndex = prev
+                    }
+                }
+            }
+            launch {
                 eu.kanade.tachiyomi.ui.library.LibraryTab.selectSubcategoryEvent.receiveAsFlow().collectLatest { subId ->
                     if (subId != null) {
                         val sub = state.categories.find { it.id == subId }
@@ -316,6 +334,30 @@ data object NovelLibraryTab : Tab {
                         }
                     }
                     activeSubcategoryId = subId
+                }
+            }
+            launch {
+                eu.kanade.tachiyomi.ui.library.LibraryTab.nextSubcategoryEvent.receiveAsFlow().collectLatest {
+                    if (subcategories.isNotEmpty()) {
+                        val currentIdx = if (activeSubcategoryId == null) -1 else subcategories.indexOfFirst { it.id == activeSubcategoryId }
+                        val nextIdx = currentIdx + 1
+                        if (nextIdx < subcategories.size) {
+                            activeSubcategoryId = subcategories[nextIdx].id
+                        }
+                    }
+                }
+            }
+            launch {
+                eu.kanade.tachiyomi.ui.library.LibraryTab.prevSubcategoryEvent.receiveAsFlow().collectLatest {
+                    if (subcategories.isNotEmpty()) {
+                        val currentIdx = if (activeSubcategoryId == null) 0 else subcategories.indexOfFirst { it.id == activeSubcategoryId }
+                        val prevIdx = currentIdx - 1
+                        if (prevIdx < 0) {
+                            activeSubcategoryId = null
+                        } else {
+                            activeSubcategoryId = subcategories[prevIdx].id
+                        }
+                    }
                 }
             }
         }

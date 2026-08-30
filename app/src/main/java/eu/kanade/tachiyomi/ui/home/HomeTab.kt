@@ -82,6 +82,8 @@ data object HomeTab : Tab {
 
     val resumeHistoryEvent = Channel<Unit>()
     private val subTabTargetChannel = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
+    val nextSubTabEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val prevSubTabEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 
     var currentPageIndex by mutableStateOf(0)
 
@@ -178,8 +180,28 @@ data object HomeTab : Tab {
         val state = rememberPagerState(initialPage = currentPageIndex) { tabs.size }
 
         LaunchedEffect(Unit) {
-            subTabTargetChannel.receiveAsFlow().collectLatest {
-                state.scrollToPage(it)
+            launch {
+                subTabTargetChannel.receiveAsFlow().collectLatest {
+                    state.animateScrollToPage(it)
+                }
+            }
+            launch {
+                nextSubTabEvent.receiveAsFlow().collectLatest {
+                    val totalTabs = tabs.size
+                    if (totalTabs > 1) {
+                        val next = (state.currentPage + 1).coerceAtMost(totalTabs - 1)
+                        state.animateScrollToPage(next)
+                    }
+                }
+            }
+            launch {
+                prevSubTabEvent.receiveAsFlow().collectLatest {
+                    val totalTabs = tabs.size
+                    if (totalTabs > 1) {
+                        val prev = (state.currentPage - 1).coerceAtLeast(0)
+                        state.animateScrollToPage(prev)
+                    }
+                }
             }
         }
 

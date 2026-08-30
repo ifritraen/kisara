@@ -174,7 +174,11 @@ import uy.kohesive.injekt.api.get
 data object LibraryTab : Tab {
     val toggleCategoryBarEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val selectCategoryEvent = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
+    val nextCategoryEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val prevCategoryEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val selectSubcategoryEvent = Channel<Long?>(1, BufferOverflow.DROP_OLDEST)
+    val nextSubcategoryEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val prevSubcategoryEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val searchEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val filterSettingsEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val syncEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
@@ -312,6 +316,24 @@ data object LibraryTab : Tab {
                 }
             }
             launch {
+                nextCategoryEvent.receiveAsFlow().collectLatest {
+                    val totalCategories = tabCategories.size
+                    if (totalCategories > 1) {
+                        val next = (state.activeCategoryIndex + 1).coerceAtMost(totalCategories - 1)
+                        screenModel.updateActiveCategoryIndex(next)
+                    }
+                }
+            }
+            launch {
+                prevCategoryEvent.receiveAsFlow().collectLatest {
+                    val totalCategories = tabCategories.size
+                    if (totalCategories > 1) {
+                        val prev = (state.activeCategoryIndex - 1).coerceAtLeast(0)
+                        screenModel.updateActiveCategoryIndex(prev)
+                    }
+                }
+            }
+            launch {
                 selectSubcategoryEvent.receiveAsFlow().collectLatest { subId ->
                     if (subId != null) {
                         val sub = state.categories.find { it.id == subId }
@@ -324,6 +346,30 @@ data object LibraryTab : Tab {
                         }
                     }
                     activeSubcategoryId = subId
+                }
+            }
+            launch {
+                nextSubcategoryEvent.receiveAsFlow().collectLatest {
+                    if (subcategories.isNotEmpty()) {
+                        val currentIdx = if (activeSubcategoryId == null) -1 else subcategories.indexOfFirst { it.id == activeSubcategoryId }
+                        val nextIdx = currentIdx + 1
+                        if (nextIdx < subcategories.size) {
+                            activeSubcategoryId = subcategories[nextIdx].id
+                        }
+                    }
+                }
+            }
+            launch {
+                prevSubcategoryEvent.receiveAsFlow().collectLatest {
+                    if (subcategories.isNotEmpty()) {
+                        val currentIdx = if (activeSubcategoryId == null) 0 else subcategories.indexOfFirst { it.id == activeSubcategoryId }
+                        val prevIdx = currentIdx - 1
+                        if (prevIdx < 0) {
+                            activeSubcategoryId = null
+                        } else {
+                            activeSubcategoryId = subcategories[prevIdx].id
+                        }
+                    }
                 }
             }
             launch {

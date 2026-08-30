@@ -50,6 +50,12 @@ class UiPreferences(
     fun activeMediaType() = preferenceStore.getEnum("pref_active_media_type_key", eu.kanade.domain.ui.model.MediaType.MANGA)
 
     fun appWakeLockMode() = preferenceStore.getEnum("pref_app_wake_lock_mode_key", AppWakeLockMode.READER_PLAYER_ONLY)
+
+    fun tabSwipeGesturesEnabled() = preferenceStore.getBoolean("pref_tab_swipe_gestures_enabled", true)
+
+    fun tabSwipeBottomZoneHeight() = preferenceStore.getInt("pref_tab_swipe_bottom_zone_height", 15)
+
+    fun tabSwipeMiddleZoneHeight() = preferenceStore.getInt("pref_tab_swipe_middle_zone_height", 50)
     // KMK <--
 
     fun relativeTime() = preferenceStore.getBoolean("relative_time_v2", true)

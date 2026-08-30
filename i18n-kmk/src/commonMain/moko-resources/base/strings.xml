@@ -3448,4 +3448,10 @@
     <string name="pref_app_wake_lock_full_app">Full App Everywhere</string>
     <string name="pref_color_filter_brightness_label">Image Brightness</string>
     <string name="pref_color_filter_reset">Reset Filters</string>
+    <string name="pref_category_tab_swipe_gestures">3-Zone Tab Swipe Gestures</string>
+    <string name="pref_tab_swipe_gestures_enabled">Enable Tab Swipe Gestures</string>
+    <string name="pref_tab_swipe_gestures_summary">Swipe horizontally across screen zones to switch main navigation tabs, sub-tabs, and categories</string>
+    <string name="pref_tab_swipe_bottom_zone">Bottom Zone Height (Main Tabs)</string>
+    <string name="pref_tab_swipe_middle_zone">Middle Zone Height (Sub-Tabs)</string>
+    <string name="pref_tab_swipe_zone_summary">%1$d%% from bottom</string>
 </resources>

@@ -244,6 +244,15 @@ object SettingsKisaraScreen : SearchableSettings {
         val jarExtensionReposPref = uiPreferences.jarExtensionRepos()
         val jarExtensionRepos by jarExtensionReposPref.collectAsState()
 
+        val tabSwipeGesturesEnabledPref = uiPreferences.tabSwipeGesturesEnabled()
+        val tabSwipeGesturesEnabled by tabSwipeGesturesEnabledPref.collectAsState()
+
+        val tabSwipeBottomZoneHeightPref = uiPreferences.tabSwipeBottomZoneHeight()
+        val tabSwipeBottomZoneHeight by tabSwipeBottomZoneHeightPref.collectAsState()
+
+        val tabSwipeMiddleZoneHeightPref = uiPreferences.tabSwipeMiddleZoneHeight()
+        val tabSwipeMiddleZoneHeight by tabSwipeMiddleZoneHeightPref.collectAsState()
+
         var showJarReposDialog by remember { mutableStateOf(false) }
         var showAddJarRepoDialog by remember { mutableStateOf(false) }
 
@@ -490,6 +499,46 @@ object SettingsKisaraScreen : SearchableSettings {
         }
 
         val allPreferences = listOf(
+            Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.pref_category_tab_swipe_gestures),
+                preferenceItems = buildList {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = tabSwipeGesturesEnabledPref,
+                            title = stringResource(KMR.strings.pref_tab_swipe_gestures_enabled),
+                            subtitle = stringResource(KMR.strings.pref_tab_swipe_gestures_summary),
+                        ),
+                    )
+                    if (tabSwipeGesturesEnabled) {
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = tabSwipeBottomZoneHeight,
+                                min = 5,
+                                max = 30,
+                                title = stringResource(KMR.strings.pref_tab_swipe_bottom_zone),
+                                subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeBottomZoneHeight),
+                                onValueChanged = {
+                                    tabSwipeBottomZoneHeightPref.set(it)
+                                    true
+                                },
+                            ),
+                        )
+                        add(
+                            Preference.PreferenceItem.SliderPreference(
+                                value = tabSwipeMiddleZoneHeight,
+                                min = 30,
+                                max = 70,
+                                title = stringResource(KMR.strings.pref_tab_swipe_middle_zone),
+                                subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeMiddleZoneHeight),
+                                onValueChanged = {
+                                    tabSwipeMiddleZoneHeightPref.set(it)
+                                    true
+                                },
+                            ),
+                        )
+                    }
+                }.toPersistentList(),
+            ),
             Preference.PreferenceGroup(
                 title = "Auto-Tracking Options",
                 preferenceItems = kotlinx.collections.immutable.persistentListOf(

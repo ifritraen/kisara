@@ -27,9 +27,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.abs
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
@@ -247,6 +251,9 @@ object HomeScreen : Screen() {
 
         val disableTabTransitions by uiPreferences.disableTabTransitions().collectAsState()
         val bypassBlurOnTransitions by uiPreferences.bypassBlurOnTransitions().collectAsState()
+        val tabSwipeGesturesEnabled by uiPreferences.tabSwipeGesturesEnabled().collectAsState()
+        val tabSwipeBottomZoneHeight by uiPreferences.tabSwipeBottomZoneHeight().collectAsState()
+        val tabSwipeMiddleZoneHeight by uiPreferences.tabSwipeMiddleZoneHeight().collectAsState()
 
         val hazeState = remember { HazeState() }
         var showActionPopup by remember { mutableStateOf(false) }
@@ -424,12 +431,120 @@ object HomeScreen : Screen() {
                         val isTransitionRunning = tabTransition.currentState != tabTransition.targetState
                         val bypassHaze = isTransitionRunning && bypassBlurOnTransitions
 
+                        val haptic = LocalHapticFeedback.current
+                        val density = LocalDensity.current
+                        val swipeThresholdPx = with(density) { 45.dp.toPx() }
+
+                        val gestureModifier = if (tabSwipeGesturesEnabled) {
+                            Modifier.pointerInput(
+                                tabSwipeGesturesEnabled,
+                                tabSwipeBottomZoneHeight,
+                                tabSwipeMiddleZoneHeight,
+                                tabNavigator.current,
+                                activeMediaType,
+                            ) {
+                                val bottomZoneRatio = tabSwipeBottomZoneHeight / 100f
+                                val middleZoneRatio = tabSwipeMiddleZoneHeight / 100f
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val startY = down.position.y
+                                    val containerHeight = size.height.toFloat()
+                                    val yFromBottomRatio = if (containerHeight > 0f) {
+                                        (containerHeight - startY) / containerHeight
+                                    } else {
+                                        0f
+                                    }
+
+                                    var totalDx = 0f
+                                    var totalDy = 0f
+                                    var gestureTriggered = false
+
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull() ?: break
+                                        if (!change.pressed) break
+
+                                        val delta = change.positionChange()
+                                        totalDx += delta.x
+                                        totalDy += delta.y
+
+                                        if (!gestureTriggered && abs(totalDx) > swipeThresholdPx && abs(totalDx) > abs(totalDy) * 1.5f) {
+                                            gestureTriggered = true
+                                            val swipeLeft = totalDx < 0f
+                                            val currentTab = tabNavigator.current
+
+                                            if (yFromBottomRatio <= bottomZoneRatio) {
+                                                // Zone 1: Bottom Zone -> Main Navigation Tabs
+                                                val enabledTabs = TABS.filter { it.isEnabled() }
+                                                val currentIdx = enabledTabs.indexOfFirst {
+                                                    it.key == currentTab.key || it::class == currentTab::class
+                                                }
+                                                if (swipeLeft && currentIdx in 0 until enabledTabs.size - 1) {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    tabNavigator.current = enabledTabs[currentIdx + 1]
+                                                } else if (!swipeLeft && currentIdx > 0) {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    tabNavigator.current = enabledTabs[currentIdx - 1]
+                                                }
+                                            } else if (yFromBottomRatio <= middleZoneRatio) {
+                                                // Zone 2: Middle Zone -> Sub-Tabs & Subcategories
+                                                when (currentTab) {
+                                                    is HomeTab -> {
+                                                        if (swipeLeft) HomeTab.nextSubTabEvent.trySend(Unit)
+                                                        else HomeTab.prevSubTabEvent.trySend(Unit)
+                                                    }
+                                                    is BrowseTab -> {
+                                                        if (swipeLeft) BrowseTab.nextSubTabEvent.trySend(Unit)
+                                                        else BrowseTab.prevSubTabEvent.trySend(Unit)
+                                                    }
+                                                    is eu.kanade.tachiyomi.ui.track.TrackTab -> {
+                                                        if (swipeLeft) eu.kanade.tachiyomi.ui.track.TrackTab.nextSubTabEvent.trySend(Unit)
+                                                        else eu.kanade.tachiyomi.ui.track.TrackTab.prevSubTabEvent.trySend(Unit)
+                                                    }
+                                                    is LibraryTab -> {
+                                                        if (swipeLeft) eu.kanade.tachiyomi.ui.library.LibraryTab.nextSubcategoryEvent.trySend(Unit)
+                                                        else eu.kanade.tachiyomi.ui.library.LibraryTab.prevSubcategoryEvent.trySend(Unit)
+                                                    }
+                                                    else -> {}
+                                                }
+                                            } else {
+                                                // Zone 3: Top Zone -> Library Categories, other screens sub-tabs
+                                                if (currentTab is LibraryTab) {
+                                                    if (swipeLeft) eu.kanade.tachiyomi.ui.library.LibraryTab.nextCategoryEvent.trySend(Unit)
+                                                    else eu.kanade.tachiyomi.ui.library.LibraryTab.prevCategoryEvent.trySend(Unit)
+                                                } else {
+                                                    when (currentTab) {
+                                                        is HomeTab -> {
+                                                            if (swipeLeft) HomeTab.nextSubTabEvent.trySend(Unit)
+                                                            else HomeTab.prevSubTabEvent.trySend(Unit)
+                                                        }
+                                                        is BrowseTab -> {
+                                                            if (swipeLeft) BrowseTab.nextSubTabEvent.trySend(Unit)
+                                                            else BrowseTab.prevSubTabEvent.trySend(Unit)
+                                                        }
+                                                        is eu.kanade.tachiyomi.ui.track.TrackTab -> {
+                                                            if (swipeLeft) eu.kanade.tachiyomi.ui.track.TrackTab.nextSubTabEvent.trySend(Unit)
+                                                            else eu.kanade.tachiyomi.ui.track.TrackTab.prevSubTabEvent.trySend(Unit)
+                                                        }
+                                                        else -> {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Modifier
+                        }
+
                         CompositionLocalProvider(LocalHazeBypass provides bypassHaze) {
                             Box(
                                 modifier = Modifier
                                     .padding(contentPadding)
                                     .consumeWindowInsets(contentPadding)
-                                    .fillMaxSize(),
+                                    .fillMaxSize()
+                                    .then(gestureModifier),
                             ) {
                                 Box(
                                     modifier = Modifier

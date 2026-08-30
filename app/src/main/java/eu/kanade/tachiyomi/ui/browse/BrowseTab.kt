@@ -129,6 +129,8 @@ data object BrowseTab : Tab {
     }
 
     private val switchToTabChannel = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
+    val nextSubTabEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
+    val prevSubTabEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
 
     fun showSource() {
         switchToTabChannel.trySend(0)
@@ -240,8 +242,30 @@ data object BrowseTab : Tab {
             )
         }
         LaunchedEffect(Unit) {
-            switchToTabChannel.receiveAsFlow()
-                .collectLatest { state.scrollToPage(it) }
+            launch {
+                switchToTabChannel.receiveAsFlow()
+                    .collectLatest { state.animateScrollToPage(it) }
+            }
+            launch {
+                nextSubTabEvent.receiveAsFlow()
+                    .collectLatest {
+                        val totalTabs = tabs.size
+                        if (totalTabs > 1) {
+                            val next = (state.currentPage + 1).coerceAtMost(totalTabs - 1)
+                            state.animateScrollToPage(next)
+                        }
+                    }
+            }
+            launch {
+                prevSubTabEvent.receiveAsFlow()
+                    .collectLatest {
+                        val totalTabs = tabs.size
+                        if (totalTabs > 1) {
+                            val prev = (state.currentPage - 1).coerceAtLeast(0)
+                            state.animateScrollToPage(prev)
+                        }
+                    }
+            }
         }
 
         LaunchedEffect(Unit) {

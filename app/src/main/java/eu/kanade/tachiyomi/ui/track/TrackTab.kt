@@ -128,6 +128,8 @@ import uy.kohesive.injekt.api.get
 object TrackTab : Tab {
 
     private val selectSubTabEvent = kotlinx.coroutines.channels.Channel<Int>()
+    val nextSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val prevSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     var currentPageIndex by mutableIntStateOf(0)
         private set
 
@@ -209,9 +211,29 @@ object TrackTab : Tab {
         }
 
         LaunchedEffect(Unit) {
-            selectSubTabEvent.receiveAsFlow().collectLatest { index ->
-                if (index in 0 until subTabs.size) {
-                    pagerState.scrollToPage(index)
+            launch {
+                selectSubTabEvent.receiveAsFlow().collectLatest { index ->
+                    if (index in 0 until subTabs.size) {
+                        pagerState.animateScrollToPage(index)
+                    }
+                }
+            }
+            launch {
+                nextSubTabEvent.receiveAsFlow().collectLatest {
+                    val totalTabs = subTabs.size
+                    if (totalTabs > 1) {
+                        val next = (pagerState.currentPage + 1).coerceAtMost(totalTabs - 1)
+                        pagerState.animateScrollToPage(next)
+                    }
+                }
+            }
+            launch {
+                prevSubTabEvent.receiveAsFlow().collectLatest {
+                    val totalTabs = subTabs.size
+                    if (totalTabs > 1) {
+                        val prev = (pagerState.currentPage - 1).coerceAtLeast(0)
+                        pagerState.animateScrollToPage(prev)
+                    }
                 }
             }
         }
