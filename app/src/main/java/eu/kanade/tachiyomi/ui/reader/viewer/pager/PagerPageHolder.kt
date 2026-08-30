@@ -512,18 +512,6 @@ class PagerPageHolder(
         removeView(translationsView)
         val view = PagerTranslationsView(context, translation = page.translation!!, font = font)
         translationsView = view
-        java.util.concurrent.Executors.newSingleThreadExecutor().execute {
-            try {
-                page.stream?.invoke()?.use { input ->
-                    val bmp = android.graphics.BitmapFactory.decodeStream(input)
-                    if (bmp != null) {
-                        view.pageBitmapState.value = bmp
-                    }
-                }
-            } catch (e: Exception) {
-                // Ignore
-            }
-        }
         if (!showTranslations) translationsView?.hide()
         addView(translationsView, MATCH_PARENT, MATCH_PARENT)
     }
