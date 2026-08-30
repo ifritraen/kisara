@@ -105,11 +105,16 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGroupRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUPublisherRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReviewRecord
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALMediaItem
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistHomeScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistMyListScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistProfileScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistSearchScreen
+import eu.kanade.tachiyomi.ui.track.myanimelist.MALHomeScreen
+import eu.kanade.tachiyomi.ui.track.myanimelist.MALMyListScreen
+import eu.kanade.tachiyomi.ui.track.myanimelist.MALProfileScreen
+import eu.kanade.tachiyomi.ui.track.myanimelist.MALSearchScreen
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -179,58 +184,69 @@ object TrackTab : Tab {
         }
 
         LaunchedEffect(activeMediaType, activeTrackerService) {
-            if (activeTrackerService == UiPreferences.TrackTabService.ANILIST) {
-                screenModel.loadAnilistHome(activeMediaType)
-                screenModel.loadAnilistUserList(activeMediaType)
-                screenModel.loadAnilistStats()
+            when (activeTrackerService) {
+                UiPreferences.TrackTabService.ANILIST -> {
+                    screenModel.loadAnilistHome(activeMediaType)
+                    screenModel.loadAnilistUserList(activeMediaType)
+                    screenModel.loadAnilistStats()
+                }
+                UiPreferences.TrackTabService.MAL -> {
+                    screenModel.loadMALHome(activeMediaType)
+                    screenModel.loadMALUserList(activeMediaType)
+                    screenModel.loadMALProfile()
+                }
+                else -> {}
             }
         }
 
         val subTabs = remember(activeMediaType, activeTrackerService) {
-            if (activeTrackerService == UiPreferences.TrackTabService.ANILIST) {
-                persistentListOf(
-                    SubTabItem("Home", Icons.Outlined.AutoAwesome),
-                    SubTabItem("My List", Icons.AutoMirrored.Outlined.List),
-                    SubTabItem("Search", Icons.Outlined.Search),
-                    SubTabItem("Profile", Icons.Outlined.AccountCircle),
-                )
-            } else {
-                when (activeMediaType) {
-                    MediaType.ANIME -> persistentListOf(
-                        SubTabItem("Trending", Icons.Outlined.AutoAwesome),
-                        SubTabItem("This Season", Icons.Outlined.NewReleases),
-                        SubTabItem("Top 100", Icons.Outlined.Visibility),
+            when (activeTrackerService) {
+                UiPreferences.TrackTabService.ANILIST, UiPreferences.TrackTabService.MAL -> {
+                    persistentListOf(
+                        SubTabItem("Home", Icons.Outlined.AutoAwesome),
+                        SubTabItem("My List", Icons.AutoMirrored.Outlined.List),
                         SubTabItem("Search", Icons.Outlined.Search),
-                        SubTabItem("Genres & Tags", Icons.Outlined.Category),
-                        SubTabItem("Studios", Icons.Outlined.Domain),
-                        SubTabItem("My Anime List", Icons.AutoMirrored.Outlined.List),
                         SubTabItem("Profile", Icons.Outlined.AccountCircle),
                     )
-                    MediaType.NOVEL -> persistentListOf(
-                        SubTabItem("Novel Releases", Icons.Outlined.NewReleases),
-                        SubTabItem("Top Novels", Icons.Outlined.AutoAwesome),
-                        SubTabItem("Novel Directory", Icons.Outlined.Info),
-                        SubTabItem("Novel Search", Icons.Outlined.Search),
-                        SubTabItem("Novel Genres", Icons.Outlined.Category),
-                        SubTabItem("Publishers", Icons.Outlined.Domain),
-                        SubTabItem("Novel Reviews", Icons.Outlined.RateReview),
-                        SubTabItem("My Novel Lists", Icons.AutoMirrored.Outlined.List),
-                        SubTabItem("User CP", Icons.Outlined.AccountCircle),
-                    )
-                    else -> persistentListOf(
-                        SubTabItem("New Releases", Icons.Outlined.NewReleases),
-                        SubTabItem("Recommended", Icons.Outlined.AutoAwesome),
-                        SubTabItem("Releases", Icons.Outlined.Visibility),
-                        SubTabItem("Series Info", Icons.Outlined.Info),
-                        SubTabItem("Scanlators", Icons.Outlined.Group),
-                        SubTabItem("Mangaka", Icons.Outlined.Person),
-                        SubTabItem("Publishers", Icons.Outlined.Domain),
-                        SubTabItem("Reviews", Icons.Outlined.RateReview),
-                        SubTabItem("Genres", Icons.Outlined.Category),
-                        SubTabItem("Search", Icons.Outlined.Search),
-                        SubTabItem("My Lists", Icons.AutoMirrored.Outlined.List),
-                        SubTabItem("User CP", Icons.Outlined.AccountCircle),
-                    )
+                }
+                else -> {
+                    when (activeMediaType) {
+                        MediaType.ANIME -> persistentListOf(
+                            SubTabItem("Trending", Icons.Outlined.AutoAwesome),
+                            SubTabItem("This Season", Icons.Outlined.NewReleases),
+                            SubTabItem("Top 100", Icons.Outlined.Visibility),
+                            SubTabItem("Search", Icons.Outlined.Search),
+                            SubTabItem("Genres & Tags", Icons.Outlined.Category),
+                            SubTabItem("Studios", Icons.Outlined.Domain),
+                            SubTabItem("My Anime List", Icons.AutoMirrored.Outlined.List),
+                            SubTabItem("Profile", Icons.Outlined.AccountCircle),
+                        )
+                        MediaType.NOVEL -> persistentListOf(
+                            SubTabItem("Novel Releases", Icons.Outlined.NewReleases),
+                            SubTabItem("Top Novels", Icons.Outlined.AutoAwesome),
+                            SubTabItem("Novel Directory", Icons.Outlined.Info),
+                            SubTabItem("Novel Search", Icons.Outlined.Search),
+                            SubTabItem("Novel Genres", Icons.Outlined.Category),
+                            SubTabItem("Publishers", Icons.Outlined.Domain),
+                            SubTabItem("Novel Reviews", Icons.Outlined.RateReview),
+                            SubTabItem("My Novel Lists", Icons.AutoMirrored.Outlined.List),
+                            SubTabItem("User CP", Icons.Outlined.AccountCircle),
+                        )
+                        else -> persistentListOf(
+                            SubTabItem("New Releases", Icons.Outlined.NewReleases),
+                            SubTabItem("Recommended", Icons.Outlined.AutoAwesome),
+                            SubTabItem("Releases", Icons.Outlined.Visibility),
+                            SubTabItem("Series Info", Icons.Outlined.Info),
+                            SubTabItem("Scanlators", Icons.Outlined.Group),
+                            SubTabItem("Mangaka", Icons.Outlined.Person),
+                            SubTabItem("Publishers", Icons.Outlined.Domain),
+                            SubTabItem("Reviews", Icons.Outlined.RateReview),
+                            SubTabItem("Genres", Icons.Outlined.Category),
+                            SubTabItem("Search", Icons.Outlined.Search),
+                            SubTabItem("My Lists", Icons.AutoMirrored.Outlined.List),
+                            SubTabItem("User CP", Icons.Outlined.AccountCircle),
+                        )
+                    }
                 }
             }
         }
@@ -329,110 +345,167 @@ object TrackTab : Tab {
                         .fillMaxWidth()
                         .weight(1f),
                 ) { page ->
-                    if (activeTrackerService == UiPreferences.TrackTabService.ANILIST) {
-                        when (page) {
-                            0 -> AnilistHomeScreen(
-                                sections = state.homeSections,
-                                isLoading = state.isLoadingHome,
-                                onItemClick = { item ->
-                                    screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
-                                },
-                            )
-                            1 -> AnilistMyListScreen(
-                                isLoggedIn = screenModel.isAniListLoggedIn(),
-                                entries = state.userList,
-                                isLoading = state.isLoadingUserList,
-                                selectedStatus = state.userListStatus,
-                                activeMediaType = activeMediaType,
-                                onStatusSelected = { status ->
-                                    screenModel.setAnilistStatusFilter(status)
-                                },
-                                onLoginClick = {
-                                    scope.launch { pagerState.animateScrollToPage(3) }
-                                },
-                                onItemClick = { item ->
-                                    screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
-                                },
-                            )
-                            2 -> AnilistSearchScreen(
-                                query = state.searchQuery,
-                                onQueryChange = { q ->
-                                    screenModel.searchAnilist(q, activeMediaType)
-                                },
-                                onSearch = {
-                                    screenModel.searchAnilist(state.searchQuery, activeMediaType)
-                                },
-                                results = state.searchResults,
-                                isSearching = state.isSearching,
-                                genres = state.filterGenres,
-                                selectedGenre = state.selectedGenre,
-                                onGenreSelected = { genre ->
-                                    screenModel.setAnilistGenre(genre)
-                                },
-                                selectedSort = state.selectedSort,
-                                onSortSelected = { sort ->
-                                    screenModel.setAnilistSort(sort)
-                                },
-                                activeMediaType = activeMediaType,
-                                onItemClick = { item ->
-                                    screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
-                                },
-                            )
-                            3 -> AnilistProfileScreen(
-                                isLoggedIn = screenModel.isAniListLoggedIn(),
-                                userStats = state.userStats,
-                                isLoading = state.isLoadingStats,
-                                onLoginToken = { token ->
-                                    screenModel.loginAniList(token)
-                                },
-                                onLogout = {
-                                    screenModel.logoutAniList()
-                                },
-                                onRefresh = {
-                                    screenModel.loadAnilistStats()
-                                },
-                            )
-                            else -> Box(Modifier.fillMaxSize())
+                    when (activeTrackerService) {
+                        UiPreferences.TrackTabService.ANILIST -> {
+                            when (page) {
+                                0 -> AnilistHomeScreen(
+                                    sections = state.homeSections,
+                                    isLoading = state.isLoadingHome,
+                                    onItemClick = { item ->
+                                        screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                    },
+                                )
+                                1 -> AnilistMyListScreen(
+                                    isLoggedIn = screenModel.isAniListLoggedIn(),
+                                    entries = state.userList,
+                                    isLoading = state.isLoadingUserList,
+                                    selectedStatus = state.userListStatus,
+                                    activeMediaType = activeMediaType,
+                                    onStatusSelected = { status ->
+                                        screenModel.setAnilistStatusFilter(status)
+                                    },
+                                    onLoginClick = {
+                                        scope.launch { pagerState.animateScrollToPage(3) }
+                                    },
+                                    onItemClick = { item ->
+                                        screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                    },
+                                )
+                                2 -> AnilistSearchScreen(
+                                    query = state.searchQuery,
+                                    onQueryChange = { q ->
+                                        screenModel.searchAnilist(q, activeMediaType)
+                                    },
+                                    onSearch = {
+                                        screenModel.searchAnilist(state.searchQuery, activeMediaType)
+                                    },
+                                    results = state.searchResults,
+                                    isSearching = state.isSearching,
+                                    genres = state.filterGenres,
+                                    selectedGenre = state.selectedGenre,
+                                    onGenreSelected = { genre ->
+                                        screenModel.setAnilistGenre(genre)
+                                    },
+                                    selectedSort = state.selectedSort,
+                                    onSortSelected = { sort ->
+                                        screenModel.setAnilistSort(sort)
+                                    },
+                                    activeMediaType = activeMediaType,
+                                    onItemClick = { item ->
+                                        screenModel.selectSeries(item.toTrackSeriesItem(activeMediaType))
+                                    },
+                                )
+                                3 -> AnilistProfileScreen(
+                                    isLoggedIn = screenModel.isAniListLoggedIn(),
+                                    userStats = state.userStats,
+                                    isLoading = state.isLoadingStats,
+                                    onLoginToken = { token ->
+                                        screenModel.loginAniList(token)
+                                    },
+                                    onLogout = {
+                                        screenModel.logoutAniList()
+                                    },
+                                    onRefresh = {
+                                        screenModel.loadAnilistStats()
+                                    },
+                                )
+                                else -> Box(Modifier.fillMaxSize())
+                            }
                         }
-                    } else {
-                        when (activeMediaType) {
-                            MediaType.ANIME -> when (page) {
-                                0 -> AniListTrendingFeed(screenModel)
-                                1 -> AniListSeasonalFeed(screenModel)
-                                2 -> AniListTopRatedFeed(screenModel)
-                                3 -> AniListSearchSection(screenModel)
-                                4 -> AniListGenresSection(screenModel)
-                                5 -> AniListStudiosSection(screenModel)
-                                6 -> AniListMyListSection(screenModel)
-                                7 -> AniListProfileSection(screenModel)
-                                else -> AniListTrendingFeed(screenModel)
+                        UiPreferences.TrackTabService.MAL -> {
+                            when (page) {
+                                0 -> MALHomeScreen(
+                                    sections = state.malHomeSections,
+                                    isLoading = state.isLoadingMALHome,
+                                    onItemClick = { item ->
+                                        screenModel.selectSeries(item.toTrackSeriesItem())
+                                    },
+                                )
+                                1 -> MALMyListScreen(
+                                    isLoggedIn = screenModel.isMALLoggedIn(),
+                                    entries = state.malUserList,
+                                    isLoading = state.isLoadingMALUserList,
+                                    selectedStatus = state.malUserListStatus,
+                                    activeMediaType = activeMediaType,
+                                    onStatusSelected = { status ->
+                                        screenModel.setMALStatusFilter(status)
+                                    },
+                                    onLoginClick = {
+                                        scope.launch { pagerState.animateScrollToPage(3) }
+                                    },
+                                    onItemClick = { item ->
+                                        screenModel.selectSeries(item.toTrackSeriesItem())
+                                    },
+                                )
+                                2 -> MALSearchScreen(
+                                    query = state.malSearchQuery,
+                                    onQueryChange = { q ->
+                                        screenModel.searchMAL(q, activeMediaType)
+                                    },
+                                    onSearch = {
+                                        screenModel.searchMAL(state.malSearchQuery, activeMediaType)
+                                    },
+                                    results = state.malSearchResults,
+                                    isSearching = state.isSearchingMAL,
+                                    activeMediaType = activeMediaType,
+                                    onItemClick = { item ->
+                                        screenModel.selectSeries(item.toTrackSeriesItem())
+                                    },
+                                )
+                                3 -> MALProfileScreen(
+                                    isLoggedIn = screenModel.isMALLoggedIn(),
+                                    userProfile = state.malUserProfile,
+                                    isLoading = state.isLoadingMALProfile,
+                                    onLogout = {
+                                        screenModel.logoutMAL()
+                                    },
+                                    onRefresh = {
+                                        screenModel.loadMALProfile()
+                                    },
+                                )
+                                else -> Box(Modifier.fillMaxSize())
                             }
-                            MediaType.NOVEL -> when (page) {
-                                0 -> MangaUpdatesNovelReleaseFeed(screenModel)
-                                1 -> MangaUpdatesNovelRecommended(screenModel)
-                                2 -> MangaUpdatesSearchSection(screenModel, "releases", isNovel = true)
-                                3 -> MangaUpdatesNovelSearchSection(screenModel)
-                                4 -> MangaUpdatesGenresSection(screenModel)
-                                5 -> MangaUpdatesPublishersSection(screenModel)
-                                6 -> MangaUpdatesReviewsSection(screenModel)
-                                7 -> MangaUpdatesMyLists(screenModel)
-                                8 -> MangaUpdatesUserCP(screenModel)
-                                else -> MangaUpdatesNovelReleaseFeed(screenModel)
-                            }
-                            else -> when (page) {
-                                0 -> MangaUpdatesReleaseFeed(screenModel)
-                                1 -> MangaUpdatesRecommended(screenModel)
-                                2 -> MangaUpdatesSearchSection(screenModel, "releases")
-                                3 -> MangaUpdatesSeriesDirectory(screenModel)
-                                4 -> MangaUpdatesGroupsSection(screenModel)
-                                5 -> MangaUpdatesAuthorsSection(screenModel)
-                                6 -> MangaUpdatesPublishersSection(screenModel)
-                                7 -> MangaUpdatesReviewsSection(screenModel)
-                                8 -> MangaUpdatesGenresSection(screenModel)
-                                9 -> MangaUpdatesSearchSection(screenModel, "search")
-                                10 -> MangaUpdatesMyLists(screenModel)
-                                11 -> MangaUpdatesUserCP(screenModel)
-                                else -> MangaUpdatesReleaseFeed(screenModel)
+                        }
+                        else -> {
+                            when (activeMediaType) {
+                                MediaType.ANIME -> when (page) {
+                                    0 -> AniListTrendingFeed(screenModel)
+                                    1 -> AniListSeasonalFeed(screenModel)
+                                    2 -> AniListTopRatedFeed(screenModel)
+                                    3 -> AniListSearchSection(screenModel)
+                                    4 -> AniListGenresSection(screenModel)
+                                    5 -> AniListStudiosSection(screenModel)
+                                    6 -> AniListMyListSection(screenModel)
+                                    7 -> AniListProfileSection(screenModel)
+                                    else -> AniListTrendingFeed(screenModel)
+                                }
+                                MediaType.NOVEL -> when (page) {
+                                    0 -> MangaUpdatesNovelReleaseFeed(screenModel)
+                                    1 -> MangaUpdatesNovelRecommended(screenModel)
+                                    2 -> MangaUpdatesSearchSection(screenModel, "releases", isNovel = true)
+                                    3 -> MangaUpdatesNovelSearchSection(screenModel)
+                                    4 -> MangaUpdatesGenresSection(screenModel)
+                                    5 -> MangaUpdatesPublishersSection(screenModel)
+                                    6 -> MangaUpdatesReviewsSection(screenModel)
+                                    7 -> MangaUpdatesMyLists(screenModel)
+                                    8 -> MangaUpdatesUserCP(screenModel)
+                                    else -> MangaUpdatesNovelReleaseFeed(screenModel)
+                                }
+                                else -> when (page) {
+                                    0 -> MangaUpdatesReleaseFeed(screenModel)
+                                    1 -> MangaUpdatesRecommended(screenModel)
+                                    2 -> MangaUpdatesSearchSection(screenModel, "releases")
+                                    3 -> MangaUpdatesSeriesDirectory(screenModel)
+                                    4 -> MangaUpdatesGroupsSection(screenModel)
+                                    5 -> MangaUpdatesAuthorsSection(screenModel)
+                                    6 -> MangaUpdatesPublishersSection(screenModel)
+                                    7 -> MangaUpdatesReviewsSection(screenModel)
+                                    8 -> MangaUpdatesGenresSection(screenModel)
+                                    9 -> MangaUpdatesSearchSection(screenModel, "search")
+                                    10 -> MangaUpdatesMyLists(screenModel)
+                                    11 -> MangaUpdatesUserCP(screenModel)
+                                    else -> MangaUpdatesReleaseFeed(screenModel)
+                                }
                             }
                         }
                     }
@@ -488,6 +561,22 @@ fun ALSearchItem.toTrackSeriesItem(activeMediaType: MediaType): TrackSeriesItem 
         authors = staff?.edges?.mapNotNull { it.node.name() }?.joinToString(", ")
             ?: studios?.edges?.filter { it.isMain }?.map { it.node.name }?.joinToString(", "),
         genres = genres ?: emptyList(),
+    )
+}
+
+fun MALMediaItem.toTrackSeriesItem(): TrackSeriesItem {
+    return TrackSeriesItem(
+        title = title,
+        coverUrl = coverUrl,
+        type = format?.uppercase() ?: if (isAnime) "ANIME" else "MANGA",
+        status = status?.replace("_", " ")?.uppercase(),
+        rating = score?.let { String.format("%.2f", it) },
+        score = score?.times(10),
+        description = synopsis,
+        trackingUrl = if (isAnime) "https://myanimelist.net/anime/$id" else "https://myanimelist.net/manga/$id",
+        year = startDate?.take(4),
+        authors = authors,
+        genres = genres,
     )
 }
 

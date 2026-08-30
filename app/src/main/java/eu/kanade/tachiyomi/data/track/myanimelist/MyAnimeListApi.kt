@@ -5,13 +5,21 @@ import androidx.core.net.toUri
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALAnime
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALAnimeRankingResult
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALAnimeSearchResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALListItem
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALListItemStatus
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALMangaMetadata
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALMangaRankingResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUser
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserAnimeListResult
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserAnimeNode
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserMangaListResult
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserMangaNode
 import eu.kanade.tachiyomi.network.DELETE
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
@@ -283,6 +291,139 @@ class MyAnimeListApi(
         }
     }
 
+    // KMK --> Discovery & Tracking Methods
+    suspend fun getAnimeRanking(rankingType: String, limit: Int = 25): List<MALAnime> {
+        return withIOContext {
+            val url = "$BASE_API_URL/anime/ranking".toUri().buildUpon()
+                .appendQueryParameter("ranking_type", rankingType)
+                .appendQueryParameter("limit", limit.toString())
+                .appendQueryParameter("fields", ANIME_FIELDS)
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALAnimeRankingResult>()
+                    .data
+                    .map { it.node }
+            }
+        }
+    }
+
+    suspend fun getMangaRanking(rankingType: String, limit: Int = 25): List<MALManga> {
+        return withIOContext {
+            val url = "$BASE_API_URL/manga/ranking".toUri().buildUpon()
+                .appendQueryParameter("ranking_type", rankingType)
+                .appendQueryParameter("limit", limit.toString())
+                .appendQueryParameter("fields", MANGA_FIELDS)
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALMangaRankingResult>()
+                    .data
+                    .map { it.node }
+            }
+        }
+    }
+
+    suspend fun getSeasonalAnime(year: Int, season: String, limit: Int = 25): List<MALAnime> {
+        return withIOContext {
+            val url = "$BASE_API_URL/anime/season/$year/$season".toUri().buildUpon()
+                .appendQueryParameter("limit", limit.toString())
+                .appendQueryParameter("fields", ANIME_FIELDS)
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALAnimeRankingResult>()
+                    .data
+                    .map { it.node }
+            }
+        }
+    }
+
+    suspend fun getUserAnimeList(status: String? = null): List<MALUserAnimeNode> {
+        return withIOContext {
+            val urlBuilder = "$BASE_API_URL/users/@me/animelist".toUri().buildUpon()
+                .appendQueryParameter("fields", "list_status{score,num_episodes_watched,is_rewatching,updated_at,start_date,finish_date},$ANIME_FIELDS")
+                .appendQueryParameter("limit", "100")
+            if (status != null) {
+                urlBuilder.appendQueryParameter("status", status)
+            }
+            with(json) {
+                authClient.newCall(GET(urlBuilder.build().toString()))
+                    .awaitSuccess()
+                    .parseAs<MALUserAnimeListResult>()
+                    .data
+            }
+        }
+    }
+
+    suspend fun getUserMangaList(status: String? = null): List<MALUserMangaNode> {
+        return withIOContext {
+            val urlBuilder = "$BASE_API_URL/users/@me/mangalist".toUri().buildUpon()
+                .appendQueryParameter("fields", "list_status{score,num_chapters_read,is_rereading,updated_at,start_date,finish_date},$MANGA_FIELDS")
+                .appendQueryParameter("limit", "100")
+            if (status != null) {
+                urlBuilder.appendQueryParameter("status", status)
+            }
+            with(json) {
+                authClient.newCall(GET(urlBuilder.build().toString()))
+                    .awaitSuccess()
+                    .parseAs<MALUserMangaListResult>()
+                    .data
+            }
+        }
+    }
+
+    suspend fun searchAnime(query: String): List<MALAnime> {
+        return withIOContext {
+            val url = "$BASE_API_URL/anime".toUri().buildUpon()
+                .appendQueryParameter("q", query.take(64))
+                .appendQueryParameter("limit", "30")
+                .appendQueryParameter("fields", ANIME_FIELDS)
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALAnimeSearchResult>()
+                    .data
+                    .map { it.node }
+            }
+        }
+    }
+
+    suspend fun searchManga(query: String): List<MALManga> {
+        return withIOContext {
+            val url = "$BASE_API_URL/manga".toUri().buildUpon()
+                .appendQueryParameter("q", query.take(64))
+                .appendQueryParameter("limit", "30")
+                .appendQueryParameter("fields", MANGA_FIELDS)
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALSearchResult>()
+                    .data
+                    .map { it.node }
+            }
+        }
+    }
+
+    suspend fun getUserProfile(): MALUser {
+        return withIOContext {
+            val url = "$BASE_API_URL/users/@me".toUri().buildUpon()
+                .appendQueryParameter("fields", "anime_statistics,picture,gender,birthday,location,joined_at")
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<MALUser>()
+            }
+        }
+    }
+    // KMK <--
+
     companion object {
         // Registered under KMK's MAL account
         private const val CLIENT_ID = "2be14959235191ece14eebdc2eea0466"
@@ -290,8 +431,13 @@ class MyAnimeListApi(
         private const val BASE_OAUTH_URL = "https://myanimelist.net/v1/oauth2"
         private const val BASE_API_URL = "https://api.myanimelist.net/v2"
 
-        private const val SEARCH_FIELDS =
+        const val ANIME_FIELDS =
+            "id,title,synopsis,num_episodes,mean,main_picture,status,media_type,start_date,genres"
+
+        const val MANGA_FIELDS =
             "id,title,synopsis,num_chapters,mean,main_picture,status,media_type,start_date,authors{first_name,last_name}"
+
+        private const val SEARCH_FIELDS = MANGA_FIELDS
 
         private const val LIST_PAGINATION_AMOUNT = 250
 

@@ -19,6 +19,11 @@ import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUGroupRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUPublisherRecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MURecord
 import eu.kanade.tachiyomi.data.track.mangaupdates.dto.MUReviewRecord
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALAnime
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALHomeSection
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALMediaItem
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUser
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -247,11 +252,189 @@ class TrackScreenModel(
                 _state.update { it.copy(isLoadingStats = false) }
             }
         }
+    // ==========================================
+    // MYANIMELIST OPERATIONS
+    // ==========================================
+
+    fun isMALLoggedIn(): Boolean = trackerManager.myAnimeList.isLoggedIn
+
+    fun logoutMAL() {
+        screenModelScope.launch {
+            try {
+                trackerManager.myAnimeList.logout()
+                _state.update { it.copy(malUserProfile = null, malUserList = emptyList()) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to log out of MyAnimeList" }
+            }
+        }
     }
 
-    // ==========================================
-    // DETAIL SHEET & SELECTION
-    // ==========================================
+    fun loadMALHome(mediaType: MediaType, forceRefresh: Boolean = false) {
+        if (!forceRefresh && _state.value.malHomeSections.isNotEmpty() && _state.value.currentMALHomeMediaType == mediaType) {
+            return
+        }
+
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingMALHome = true, currentMALHomeMediaType = mediaType) }
+            try {
+                val isAnime = mediaType == MediaType.ANIME
+                val sections = mutableListOf<MALHomeSection>()
+
+                if (isAnime) {
+                    val airing = trackerManager.myAnimeList.api.getAnimeRanking("airing").map { it.toMALMediaItem() }
+                    if (airing.isNotEmpty()) sections.add(MALHomeSection("airing", "Top Airing", airing))
+
+                    val popular = trackerManager.myAnimeList.api.getAnimeRanking("bypopularity").map { it.toMALMediaItem() }
+                    if (popular.isNotEmpty()) sections.add(MALHomeSection("popular", "All Time Popular", popular))
+
+                    val top = trackerManager.myAnimeList.api.getAnimeRanking("all").map { it.toMALMediaItem() }
+                    if (top.isNotEmpty()) sections.add(MALHomeSection("top", "Top Ranked", top))
+
+                    val upcoming = trackerManager.myAnimeList.api.getAnimeRanking("upcoming").map { it.toMALMediaItem() }
+                    if (upcoming.isNotEmpty()) sections.add(MALHomeSection("upcoming", "Top Upcoming", upcoming))
+
+                    val favorite = trackerManager.myAnimeList.api.getAnimeRanking("favorite").map { it.toMALMediaItem() }
+                    if (favorite.isNotEmpty()) sections.add(MALHomeSection("favorite", "Most Favorited", favorite))
+                } else if (mediaType == MediaType.NOVEL) {
+                    val novels = trackerManager.myAnimeList.api.getMangaRanking("novels").map { it.toMALMediaItem() }
+                    if (novels.isNotEmpty()) sections.add(MALHomeSection("novels", "Top Light Novels", novels))
+
+                    val popular = trackerManager.myAnimeList.api.getMangaRanking("bypopularity").map { it.toMALMediaItem() }
+                    if (popular.isNotEmpty()) sections.add(MALHomeSection("popular", "All Time Popular", popular))
+
+                    val top = trackerManager.myAnimeList.api.getMangaRanking("all").map { it.toMALMediaItem() }
+                    if (top.isNotEmpty()) sections.add(MALHomeSection("top", "Top Ranked", top))
+                } else {
+                    val popular = trackerManager.myAnimeList.api.getMangaRanking("bypopularity").map { it.toMALMediaItem() }
+                    if (popular.isNotEmpty()) sections.add(MALHomeSection("popular", "All Time Popular", popular))
+
+                    val top = trackerManager.myAnimeList.api.getMangaRanking("all").map { it.toMALMediaItem() }
+                    if (top.isNotEmpty()) sections.add(MALHomeSection("top", "Top Ranked", top))
+
+                    val manga = trackerManager.myAnimeList.api.getMangaRanking("manga").map { it.toMALMediaItem() }
+                    if (manga.isNotEmpty()) sections.add(MALHomeSection("manga", "Top Manga", manga))
+
+                    val novels = trackerManager.myAnimeList.api.getMangaRanking("novels").map { it.toMALMediaItem() }
+                    if (novels.isNotEmpty()) sections.add(MALHomeSection("novels", "Top Light Novels", novels))
+
+                    val favorite = trackerManager.myAnimeList.api.getMangaRanking("favorite").map { it.toMALMediaItem() }
+                    if (favorite.isNotEmpty()) sections.add(MALHomeSection("favorite", "Most Favorited", favorite))
+                }
+
+                _state.update {
+                    it.copy(
+                        malHomeSections = sections,
+                        isLoadingMALHome = false,
+                    )
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load MAL home sections" }
+                _state.update { it.copy(isLoadingMALHome = false) }
+            }
+        }
+    }
+
+    fun loadMALUserList(mediaType: MediaType, forceRefresh: Boolean = false) {
+        if (!isMALLoggedIn()) return
+        if (!forceRefresh && _state.value.malUserList.isNotEmpty() && _state.value.currentMALUserListMediaType == mediaType) return
+
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingMALUserList = true, currentMALUserListMediaType = mediaType) }
+            try {
+                val isAnime = mediaType == MediaType.ANIME
+                val items = if (isAnime) {
+                    trackerManager.myAnimeList.api.getUserAnimeList().map { it.node.toMALMediaItem() }
+                } else {
+                    trackerManager.myAnimeList.api.getUserMangaList().map { it.node.toMALMediaItem() }
+                }
+
+                _state.update {
+                    it.copy(
+                        malUserList = items,
+                        isLoadingMALUserList = false,
+                    )
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load MAL user list" }
+                _state.update { it.copy(isLoadingMALUserList = false) }
+            }
+        }
+    }
+
+    fun setMALStatusFilter(status: String?) {
+        _state.update { it.copy(malUserListStatus = status) }
+    }
+
+    fun searchMAL(query: String, mediaType: MediaType) {
+        screenModelScope.launch {
+            _state.update { it.copy(isSearchingMAL = true, malSearchQuery = query) }
+            try {
+                val isAnime = mediaType == MediaType.ANIME
+                val results = if (isAnime) {
+                    trackerManager.myAnimeList.api.searchAnime(query).map { it.toMALMediaItem() }
+                } else {
+                    trackerManager.myAnimeList.api.searchManga(query).map { it.toMALMediaItem() }
+                }
+
+                _state.update {
+                    it.copy(
+                        malSearchResults = results,
+                        isSearchingMAL = false,
+                    )
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to search MAL" }
+                _state.update { it.copy(isSearchingMAL = false) }
+            }
+        }
+    }
+
+    fun loadMALProfile() {
+        if (!isMALLoggedIn()) return
+        screenModelScope.launch {
+            _state.update { it.copy(isLoadingMALProfile = true) }
+            try {
+                val profile = trackerManager.myAnimeList.api.getUserProfile()
+                _state.update {
+                    it.copy(
+                        malUserProfile = profile,
+                        isLoadingMALProfile = false,
+                    )
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to load MAL user profile" }
+                _state.update { it.copy(isLoadingMALProfile = false) }
+            }
+        }
+    }
+
+    private fun MALAnime.toMALMediaItem(): MALMediaItem = MALMediaItem(
+        id = id,
+        title = title,
+        coverUrl = covers?.large?.ifEmpty { null },
+        score = if (mean > 0) mean else null,
+        format = mediaType,
+        status = status,
+        numEpisodesOrChapters = numEpisodes,
+        isAnime = true,
+        synopsis = synopsis,
+        startDate = startDate,
+        genres = genres?.map { it.name } ?: emptyList(),
+    )
+
+    private fun MALManga.toMALMediaItem(): MALMediaItem = MALMediaItem(
+        id = id,
+        title = title,
+        coverUrl = covers?.large?.ifEmpty { null } ?: covers?.medium,
+        score = if (mean > 0) mean else null,
+        format = mediaType,
+        status = status,
+        numEpisodesOrChapters = numChapters,
+        isAnime = false,
+        synopsis = synopsis,
+        startDate = startDate,
+        authors = authors.mapNotNull { it.node.getFullName() }.joinToString(", ").ifBlank { null },
+    )
 
     fun selectSeries(item: TrackSeriesItem?) {
         _state.update { it.copy(selectedSeries = item) }
@@ -463,6 +646,19 @@ data class TrackState(
     val selectedSort: String = "TRENDING_DESC",
     val userStats: ALUserStatsViewer? = null,
     val isLoadingStats: Boolean = false,
+    // MyAnimeList State
+    val malHomeSections: List<MALHomeSection> = emptyList(),
+    val isLoadingMALHome: Boolean = false,
+    val currentMALHomeMediaType: MediaType? = null,
+    val malUserList: List<MALMediaItem> = emptyList(),
+    val isLoadingMALUserList: Boolean = false,
+    val currentMALUserListMediaType: MediaType? = null,
+    val malUserListStatus: String? = null,
+    val malSearchQuery: String = "",
+    val malSearchResults: List<MALMediaItem> = emptyList(),
+    val isSearchingMAL: Boolean = false,
+    val malUserProfile: MALUser? = null,
+    val isLoadingMALProfile: Boolean = false,
     // MangaUpdates State
     val isLoadingReleases: Boolean = false,
     val newReleases: List<MUReleaseItem> = emptyList(),
