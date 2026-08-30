@@ -136,13 +136,13 @@ class NHentai(delegate: HttpSource, val context: Context) :
         } else {
             // HTML response fallback from web gallery page
             try {
-                val reconstructedResponse = input.newBuilder()
-                    .body(bodyStr.toResponseBody(input.body.contentType()))
-                    .build()
-                val delegateManga = delegate.mangaDetailsParse(reconstructedResponse)
-                metadata.shortTitle = delegateManga.title
-                metadata.coverImageUrl = delegateManga.thumbnail_url
-                metadata.scanlator = delegateManga.author
+                val method = HttpSource::class.java.getDeclaredMethod("mangaDetailsParse", Response::class.java).apply { isAccessible = true }
+                val delegateManga = method.invoke(delegate, input) as? SManga
+                if (delegateManga != null) {
+                    metadata.shortTitle = delegateManga.title
+                    metadata.coverImageUrl = delegateManga.thumbnail_url
+                    metadata.scanlator = delegateManga.author
+                }
             } catch (_: Exception) {
             }
         }

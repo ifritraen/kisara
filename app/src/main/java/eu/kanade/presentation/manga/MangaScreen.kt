@@ -434,6 +434,8 @@ fun MangaScreen(
                     onTagLongClick = handleTagLongClick,
                     selectedTags = multiSelectedTags,
                     isTagMultiSelectMode = isTagMultiSelectMode,
+                    onSaveGranularScore = onSaveGranularScore,
+                    onSaveGranularTemplate = onSaveGranularTemplate,
                     // KMK <--
                 )
             } else {
@@ -520,6 +522,8 @@ fun MangaScreen(
                     onTagLongClick = handleTagLongClick,
                     selectedTags = multiSelectedTags,
                     isTagMultiSelectMode = isTagMultiSelectMode,
+                    onSaveGranularScore = onSaveGranularScore,
+                    onSaveGranularTemplate = onSaveGranularTemplate,
                     // KMK <--
                 )
             }
@@ -664,6 +668,8 @@ private fun MangaScreenSmallImpl(
     onTagLongClick: ((String) -> Unit)? = null,
     selectedTags: Set<String> = emptySet(),
     isTagMultiSelectMode: Boolean = false,
+    onSaveGranularScore: ((tachiyomi.domain.scoring.model.GranularScoreEntry) -> Unit)? = null,
+    onSaveGranularTemplate: ((tachiyomi.domain.scoring.model.GranularScoreTemplate) -> Unit)? = null,
     // KMK <--
 ) {
     val currentContext = LocalContext.current
@@ -1445,6 +1451,8 @@ private fun MangaScreenLargeImpl(
     onTagLongClick: ((String) -> Unit)? = null,
     selectedTags: Set<String> = emptySet(),
     isTagMultiSelectMode: Boolean = false,
+    onSaveGranularScore: ((tachiyomi.domain.scoring.model.GranularScoreEntry) -> Unit)? = null,
+    onSaveGranularTemplate: ((tachiyomi.domain.scoring.model.GranularScoreTemplate) -> Unit)? = null,
     // KMK <--
 ) {
     val currentContext = LocalContext.current

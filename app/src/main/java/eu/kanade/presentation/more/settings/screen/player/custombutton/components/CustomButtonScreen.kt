@@ -10,22 +10,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
-import eu.kanade.presentation.components.FloatingActionAddButton
-import eu.kanade.presentation.more.settings.SettingsScaffold
-import eu.kanade.presentation.more.settings.canScroll
-import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
+import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.more.settings.screen.player.custombutton.CustomButtonScreenState
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.domain.custombuttons.model.CustomButton
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
@@ -45,24 +46,27 @@ fun CustomButtonScreen(
     navigateUp: () -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
-    val uiStyle = rememberResolvedSettingsUiStyle()
-    SettingsScaffold(
-        title = stringResource(KMR.strings.pref_player_custom_button_header),
-        uiStyle = uiStyle,
-        onBackPressed = navigateUp,
-        topBarCanScroll = { lazyListState.canScroll() },
-        actions = {
-            IconButton(onClick = onClickFAQ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
-                    contentDescription = stringResource(KMR.strings.pref_player_custom_button_guide),
-                )
-            }
+    tachiyomi.presentation.core.components.material.Scaffold(
+        topBar = {
+            AppBar(
+                title = stringResource(KMR.strings.pref_player_custom_button_header),
+                navigateUp = navigateUp,
+                actions = {
+                    IconButton(onClick = onClickFAQ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                            contentDescription = stringResource(KMR.strings.pref_player_custom_button_guide),
+                        )
+                    }
+                },
+            )
         },
         floatingActionButton = {
-            FloatingActionAddButton(
-                lazyListState = lazyListState,
+            ExtendedFloatingActionButton(
                 onClick = onClickCreate,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text(stringResource(MR.strings.action_add)) },
+                expanded = lazyListState.firstVisibleItemIndex == 0,
             )
         },
     ) { paddingValues ->
@@ -71,18 +75,17 @@ fun CustomButtonScreen(
                 stringRes = KMR.strings.pref_player_custom_button_empty,
                 modifier = Modifier.padding(paddingValues),
             )
-            return@SettingsScaffold
+        } else {
+            CustomButtonContent(
+                customButtons = state.customButtons,
+                lazyListState = lazyListState,
+                paddingValues = paddingValues,
+                onClickPrimary = onClickPrimary,
+                onClickEdit = onClickEdit,
+                onClickDelete = onClickDelete,
+                onChangeOrder = onChangeOrder,
+            )
         }
-
-        CustomButtonContent(
-            customButtons = state.customButtons,
-            lazyListState = lazyListState,
-            paddingValues = paddingValues,
-            onClickPrimary = onClickPrimary,
-            onClickEdit = onClickEdit,
-            onClickDelete = onClickDelete,
-            onChangeOrder = onChangeOrder,
-        )
     }
 }
 

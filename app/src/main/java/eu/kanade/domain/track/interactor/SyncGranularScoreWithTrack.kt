@@ -26,7 +26,7 @@ class SyncGranularScoreWithTrack(
         if (tracks.isEmpty()) return
 
         tracks.forEach { track ->
-            val tracker = trackerManager.getTracker(track.trackerId)
+            val tracker = trackerManager.get(track.trackerId)
             if (tracker != null && tracker.isLoggedIn) {
                 try {
                     val dbTrack = track.toDbTrack()

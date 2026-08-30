@@ -71,7 +71,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import eu.kanade.domain.ui.model.MediaType
-import eu.kanade.presentation.util.formatDate
+import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.track.TrackSeriesItem
@@ -460,7 +460,7 @@ class TrackerMediaDetailsScreen(
                                     )
                                     if (chapter.dateUpload > 0) {
                                         Text(
-                                            text = chapter.dateUpload.formatDate(),
+                                            text = relativeDateText(chapter.dateUpload),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         )

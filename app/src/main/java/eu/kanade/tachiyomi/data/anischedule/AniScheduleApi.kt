@@ -41,7 +41,7 @@ class AniScheduleApi(
             }
             try {
                 val response = client.newCall(GET(SUB_SCHEDULE_URL)).awaitSuccess()
-                val list = response.parseAs<List<AniScheduleMedia>>(json)
+                val list = with(json) { response.parseAs<List<AniScheduleMedia>>() }
                 cachedSchedule = list
                 lastScheduleFetch = now
                 list
@@ -59,7 +59,7 @@ class AniScheduleApi(
             }
             try {
                 val response = client.newCall(GET(SUB_EPISODE_FEED_URL)).awaitSuccess()
-                val list = response.parseAs<List<AniScheduleFeedItem>>(json)
+                val list = with(json) { response.parseAs<List<AniScheduleFeedItem>>() }
                 cachedSubFeed = list
                 lastSubFeedFetch = now
                 list
@@ -77,7 +77,7 @@ class AniScheduleApi(
             }
             try {
                 val response = client.newCall(GET(DUB_EPISODE_FEED_URL)).awaitSuccess()
-                val list = response.parseAs<List<AniScheduleFeedItem>>(json)
+                val list = with(json) { response.parseAs<List<AniScheduleFeedItem>>() }
                 cachedDubFeed = list
                 lastDubFeedFetch = now
                 list
@@ -95,7 +95,7 @@ class AniScheduleApi(
             }
             try {
                 val response = client.newCall(GET(HENTAI_EPISODE_FEED_URL)).awaitSuccess()
-                val list = response.parseAs<List<AniScheduleFeedItem>>(json)
+                val list = with(json) { response.parseAs<List<AniScheduleFeedItem>>() }
                 cachedHentaiFeed = list
                 lastHentaiFeedFetch = now
                 list

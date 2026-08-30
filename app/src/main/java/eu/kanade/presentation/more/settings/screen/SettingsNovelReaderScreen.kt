@@ -1251,16 +1251,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         onClick = {
                             pageTurnTuningExpanded = !pageTurnTuningExpanded
                         },
-                        widget = {
-                            Icon(
-                                imageVector = if (pageTurnTuningExpanded) {
-                                    Icons.Filled.KeyboardArrowDown
-                                } else {
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight
-                                },
-                                contentDescription = null,
-                            )
-                        },
                     ),
                 )
                 if (pageTurnTuningExpanded) {
@@ -1748,14 +1738,29 @@ object SettingsNovelReaderScreen : SearchableSettings {
             )
         } else {
             installedDictionaries.forEach { dictionary ->
-                items += Preference.PreferenceItem.TextPreference(
+                items += Preference.PreferenceItem.CustomPreference(
                     title = dictionary.bookname,
-                    subtitle = stringResource(
-                        KMR.strings.novel_reader_dictionary_word_count,
-                        dictionary.wordCount,
-                    ) + " · " + Formatter.formatFileSize(context, dictionary.sizeBytes),
-                    widget = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    content = {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = dictionary.bookname,
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        KMR.strings.novel_reader_dictionary_word_count,
+                                        dictionary.wordCount,
+                                    ) + " · " + Formatter.formatFileSize(context, dictionary.sizeBytes),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Switch(
                                 checked = dictionary.id !in disabledIds,
                                 onCheckedChange = { enabled ->

@@ -1430,7 +1430,7 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun cycleSubtitleTrack() {
-        val subs = tracks.value.getOrDefault("sub", emptyList())
+        val subs = subtitleTracks.value
         if (subs.isEmpty()) return
         val currentSid = _selectedSubtitles.value.first
         val sidList = listOf(-1) + subs.map { it.id }
@@ -1439,7 +1439,7 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun cycleAudioTrack() {
-        val audios = tracks.value.getOrDefault("audio", emptyList())
+        val audios = audioTracks.value
         if (audios.size <= 1) return
         val currentAid = _selectedAudio.value
         val aidList = audios.map { it.id }

@@ -18,6 +18,7 @@ import logcat.LogPriority
 import okhttp3.Response
 import okio.buffer
 import okio.sink
+import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import java.io.File
@@ -178,7 +179,7 @@ class ChapterCache(
             throw IOException("HTTP error ${response.code}")
         }
         val source = response.body.source()
-        if (!ImageUtil.isImage(source.peek().inputStream())) {
+        if (ImageUtil.findImageType(source.peek().inputStream()) == null) {
             response.close()
             throw IOException("Response is not a valid image")
         }

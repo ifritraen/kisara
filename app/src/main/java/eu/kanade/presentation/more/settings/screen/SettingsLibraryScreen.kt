@@ -129,12 +129,12 @@ object SettingsLibraryScreen : SearchableSettings {
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(KMR.strings.pref_category_suggestions),
                     subtitle = stringResource(KMR.strings.pref_suggestions_summary),
-                    onClick = { navigator.push(SettingsSuggestionsScreen) },
+                    onClick = { navigator.push(SettingsSuggestionsScreen()) },
                 ),
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(KMR.strings.pref_category_blocked_tags),
                     subtitle = stringResource(KMR.strings.pref_blocked_tags_summary),
-                    onClick = { navigator.push(SettingsBlockedTagsScreen) },
+                    onClick = { navigator.push(SettingsBlockedTagsScreen()) },
                 ),
             ),
         )

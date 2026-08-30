@@ -2,6 +2,7 @@ package eu.kanade.translation
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import java.io.File
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.hippo.unifile.UniFile

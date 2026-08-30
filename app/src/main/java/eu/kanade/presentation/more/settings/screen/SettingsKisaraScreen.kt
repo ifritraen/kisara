@@ -513,26 +513,22 @@ object SettingsKisaraScreen : SearchableSettings {
                         add(
                             Preference.PreferenceItem.SliderPreference(
                                 value = tabSwipeBottomZoneHeight,
-                                min = 5,
-                                max = 30,
+                                valueRange = 5..30,
                                 title = stringResource(KMR.strings.pref_tab_swipe_bottom_zone),
                                 subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeBottomZoneHeight),
                                 onValueChanged = {
                                     tabSwipeBottomZoneHeightPref.set(it)
-                                    true
                                 },
                             ),
                         )
                         add(
                             Preference.PreferenceItem.SliderPreference(
                                 value = tabSwipeMiddleZoneHeight,
-                                min = 30,
-                                max = 70,
+                                valueRange = 30..70,
                                 title = stringResource(KMR.strings.pref_tab_swipe_middle_zone),
                                 subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeMiddleZoneHeight),
                                 onValueChanged = {
                                     tabSwipeMiddleZoneHeightPref.set(it)
-                                    true
                                 },
                             ),
                         )
@@ -580,13 +576,11 @@ object SettingsKisaraScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = uiPreferences.trackTabPreviousSeasons().get(),
-                            min = 1,
-                            max = 8,
+                            valueRange = 1..8,
                             title = stringResource(KMR.strings.pref_track_tab_previous_seasons),
                             subtitle = stringResource(KMR.strings.pref_track_tab_previous_seasons_summary, uiPreferences.trackTabPreviousSeasons().get()),
                             onValueChanged = {
                                 uiPreferences.trackTabPreviousSeasons().set(it)
-                                true
                             },
                         ),
                     )

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
@@ -33,13 +34,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.browse.components.GlobalSearchCardRow
-import eu.kanade.presentation.browse.components.GlobalSearchToolbar
+import eu.kanade.presentation.components.SearchToolbar
 import eu.kanade.presentation.components.TabContent
-import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.ui.browse.bulk.BulkSearchScreen
 import eu.kanade.tachiyomi.ui.browse.bulk.BulkSearchScreenModel
@@ -48,6 +49,8 @@ import eu.kanade.tachiyomi.ui.browse.search.components.GlobalSearchLandingView
 import eu.kanade.tachiyomi.ui.browse.search.components.SearchSourceFilterSheet
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -61,13 +64,14 @@ object SearchTabEvents {
 }
 
 fun Screen.searchTab(
-    mediaType: UiPreferences.MediaType = UiPreferences.MediaType.MANGA,
+    mediaType: MediaType = MediaType.MANGA,
 ): TabContent {
     return TabContent(
         titleRes = KMR.strings.bulk_search,
         searchEnabled = false,
         content = { contentPadding, _ ->
             SearchTabContent(
+                screen = this,
                 mediaType = mediaType,
                 contentPadding = contentPadding,
             )
@@ -77,13 +81,14 @@ fun Screen.searchTab(
 
 @Composable
 private fun SearchTabContent(
-    mediaType: UiPreferences.MediaType,
+    screen: Screen,
+    mediaType: MediaType,
     contentPadding: PaddingValues,
 ) {
     val navigator = LocalNavigator.currentOrThrow
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val screenModel = rememberScreenModel { SearchScreenModel(mediaType = mediaType) }
+    val screenModel = screen.rememberScreenModel { SearchScreenModel(mediaType = mediaType) }
     val state by screenModel.state.collectAsState()
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -150,12 +155,16 @@ private fun SearchTabContent(
                     // Page 0: Global Search
                     0 -> {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            GlobalSearchToolbar(
+                            SearchToolbar(
                                 searchQuery = state.searchQuery,
-                                onChangeSearchQuery = screenModel::updateSearchQuery,
+                                onChangeSearchQuery = { screenModel.updateSearchQuery(it ?: "") },
                                 onSearch = screenModel::search,
                                 onClickCloseSearch = { screenModel.updateSearchQuery("") },
-                                onToggleFilter = { showSourceFilterSheet = true },
+                                actions = {
+                                    IconButton(onClick = { showSourceFilterSheet = true }) {
+                                        Icon(Icons.Outlined.Tune, contentDescription = "Search Sources")
+                                    }
+                                },
                             )
 
                             if (state.searchQuery.isBlank() && state.results.isEmpty()) {
@@ -185,12 +194,20 @@ private fun SearchTabContent(
                                                 }
                                             }
                                             is SearchItemResult.Success -> {
-                                                GlobalSearchCardRow(
-                                                    titles = result.list,
-                                                    source = source,
-                                                    onClick = { navigator.push(MangaScreen(it.id, true)) },
-                                                    onLongClick = { navigator.push(MangaScreen(it.id, true)) },
-                                                )
+                                                Column {
+                                                    Text(
+                                                        text = source.name,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    )
+                                                    GlobalSearchCardRow(
+                                                        titles = result.list,
+                                                        getManga = { manga -> remember(manga) { mutableStateOf(manga) } },
+                                                        onClick = { navigator.push(MangaScreen(it.id, true)) },
+                                                        onLongClick = { navigator.push(MangaScreen(it.id, true)) },
+                                                        selection = emptyList(),
+                                                    )
+                                                }
                                             }
                                             is SearchItemResult.Error -> {
                                                 Column(modifier = Modifier.padding(16.dp)) {
@@ -211,10 +228,6 @@ private fun SearchTabContent(
 
                     // Page 1: Bulk Search
                     1 -> {
-                        val bulkScreenModel = rememberScreenModel {
-                            val enabledSourceIds = state.availableSources.filter { it.isEnabled }.map { it.id }
-                            BulkSearchScreenModel(sourceIds = enabledSourceIds, queries = emptyList())
-                        }
                         BulkSearchScreen(
                             sourceIds = state.availableSources.filter { it.isEnabled }.map { it.id },
                             queries = emptyList(),

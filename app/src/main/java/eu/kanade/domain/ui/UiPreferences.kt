@@ -276,6 +276,8 @@ class UiPreferences(
     fun trackerPrioritizedMangaSources() = preferenceStore.getString("kisara_tracker_prioritized_manga_sources", "")
     fun trackerPrioritizedAnimeSources() = preferenceStore.getString("kisara_tracker_prioritized_anime_sources", "")
     fun trackerPrioritizedNovelSources() = preferenceStore.getString("kisara_tracker_prioritized_novel_sources", "")
+    fun animatedAuroraBackground() = preferenceStore.getBoolean("pref_animated_aurora_background", true)
+    fun specialBackgroundStyle() = preferenceStore.getString("pref_special_background_style", "none")
     // KMK <--
 
     // SY <--

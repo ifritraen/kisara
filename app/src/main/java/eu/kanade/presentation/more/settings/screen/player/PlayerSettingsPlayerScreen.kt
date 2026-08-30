@@ -46,7 +46,10 @@ object PlayerSettingsPlayerScreen : SearchableSettings {
     override fun getPreferences(): List<Preference> {
         val playerPreferences = remember { Injekt.get<PlayerPreferences>() }
         val basePreferences = remember { Injekt.get<BasePreferences>() }
-        val deviceSupportsPip = basePreferences.deviceHasPip()
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val deviceSupportsPip = remember {
+            context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        }
 
         return listOfNotNull(
             Preference.PreferenceItem.ListPreference(
@@ -302,7 +305,6 @@ object PlayerSettingsPlayerScreen : SearchableSettings {
                 ),
                 Preference.PreferenceItem.InfoPreference(
                     title = stringResource(KMR.strings.pref_category_player_aniskip_info),
-                    enabled = isIntroSkipEnabled,
                 ),
             ),
         )

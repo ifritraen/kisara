@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALHomeSection
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALMediaItem
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 // KMK -->

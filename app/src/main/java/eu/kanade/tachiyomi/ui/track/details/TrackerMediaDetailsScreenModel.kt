@@ -11,9 +11,9 @@ import eu.kanade.tachiyomi.ui.track.matcher.TrackerSourceMatcher
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.category.interactor.SetMangaCategories
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.interactor.GetManga
-import tachiyomi.domain.manga.interactor.SetMangaDefaultCategory
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
@@ -56,7 +56,7 @@ class TrackerMediaDetailsScreenModel(
     private val sourceManager: SourceManager = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
-    private val setMangaDefaultCategory: SetMangaDefaultCategory = Injekt.get(),
+    private val setMangaCategories: SetMangaCategories = Injekt.get(),
 ) : StateScreenModel<TrackerMediaDetailsState>(TrackerMediaDetailsState()) {
 
     private val matcher = TrackerSourceMatcher()
@@ -213,7 +213,7 @@ class TrackerMediaDetailsScreenModel(
         screenModelScope.launchIO {
             if (newFav) {
                 updateManga.awaitUpdateFavorite(manga.id, true)
-                setMangaDefaultCategory.await(manga.id)
+                setMangaCategories.await(manga.id, emptyList())
             } else {
                 updateManga.awaitUpdateFavorite(manga.id, false)
             }

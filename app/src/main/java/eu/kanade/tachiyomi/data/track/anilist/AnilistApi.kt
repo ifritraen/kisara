@@ -1202,29 +1202,29 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
         perPage: Int
     ): ALPaginatedSearchResult {
         return withIOContext {
-            val query = ""${'"'}
-            |query(
-                |${'$'}page: Int, ${'$'}perPage: Int, ${'$'}type: MediaType, ${'$'}format: MediaFormat,
-                |${'$'}search: String, ${'$'}genres: [String], ${'$'}tags: [String], ${'$'}status: MediaStatus,
-                |${'$'}sort: [MediaSort], ${'$'}year: Int, ${'$'}isAdult: Boolean
-            |) {
-                |Page(page: ${'$'}page, perPage: ${'$'}perPage) {
-                    |pageInfo {
-                        |total
-                        |perPage
-                        |currentPage
-                        |lastPage
-                        |hasNextPage
-                    |}
-                    |media(
-                        |type: ${'$'}type, format: ${'$'}format, search: ${'$'}search, genre_in: ${'$'}genres,
-                        |tag_in: ${'$'}tags, status: ${'$'}status, sort: ${'$'}sort, seasonYear: ${'$'}year, isAdult: ${'$'}isAdult
-                    |) {
-                        |id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
-                    |}
-                |}
-            |}
-            ""${'"'}.trimMargin()
+            val query = $$"""
+                query(
+                    $page: Int, $perPage: Int, $type: MediaType, $format: MediaFormat,
+                    $search: String, $genres: [String], $tags: [String], $status: MediaStatus,
+                    $sort: [MediaSort], $year: Int, $isAdult: Boolean
+                ) {
+                    Page(page: $page, perPage: $perPage) {
+                        pageInfo {
+                            total
+                            perPage
+                            currentPage
+                            lastPage
+                            hasNextPage
+                        }
+                        media(
+                            type: $type, format: $format, search: $search, genre_in: $genres,
+                            tag_in: $tags, status: $status, sort: $sort, seasonYear: $year, isAdult: $isAdult
+                        ) {
+                            id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
+                        }
+                    }
+                }
+            """.trimIndent()
             
             val payload = buildJsonObject {
                 put("query", query)
@@ -1260,38 +1260,38 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
 
     suspend fun getUserMediaList(userId: Int, type: String): ALUserListResult {
         return withIOContext {
-            val query = ""${'"'}
-            |query (${'$'}id: Int, ${'$'}type: MediaType) {
-                |MediaListCollection(userId: ${'$'}id, type: ${'$'}type) {
-                    |lists {
-                        |name
-                        |isCustomList
-                        |isSplitCompletedList
-                        |status
-                        |entries {
-                            |id
-                            |status
-                            |score
-                            |progress
-                            |progressVolumes
-                            |repeat
-                            |priority
-                            |private
-                            |hiddenFromStatusLists
-                            |customLists
-                            |advancedScores
-                            |notes
-                            |updatedAt
-                            |startedAt { year month day }
-                            |completedAt { year month day }
-                            |media {
-                                |id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
-                            |}
-                        |}
-                    |}
-                |}
-            |}
-            ""${'"'}.trimMargin()
+            val query = $$"""
+                query ($id: Int, $type: MediaType) {
+                    MediaListCollection(userId: $id, type: $type) {
+                        lists {
+                            name
+                            isCustomList
+                            isSplitCompletedList
+                            status
+                            entries {
+                                id
+                                status
+                                score
+                                progress
+                                progressVolumes
+                                repeat
+                                priority
+                                private
+                                hiddenFromStatusLists
+                                customLists
+                                advancedScores
+                                notes
+                                updatedAt
+                                startedAt { year month day }
+                                completedAt { year month day }
+                                media {
+                                    id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
+                                }
+                            }
+                        }
+                    }
+                }
+            """.trimIndent()
             
             val payload = buildJsonObject {
                 put("query", query)

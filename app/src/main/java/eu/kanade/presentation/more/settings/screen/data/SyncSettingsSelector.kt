@@ -53,7 +53,7 @@ class SyncSettingsSelector : Screen() {
             ) {
                 item {
                     SectionCard(MR.strings.label_library) {
-                        Options(BackupOptions.libraryOptions, state, model)
+                        Options(BackupOptions.fullLibraryOptions, state, model)
                     }
                 }
 

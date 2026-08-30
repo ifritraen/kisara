@@ -37,7 +37,7 @@ data class AiringScheduleCardData(
 
 class AnimeScheduleScreenModel(
     private val api: AniScheduleApi = Injekt.get(),
-    private val trackerManager: TrackerManager = Injekt.get(),
+    private val uiPreferences: eu.kanade.domain.ui.UiPreferences = Injekt.get(),
 ) : StateScreenModel<AnimeScheduleScreenModel.State>(
     State(
         selectedDay = LocalDate.now().dayOfWeek,
@@ -45,8 +45,7 @@ class AnimeScheduleScreenModel(
 ) {
 
     init {
-        val anilist = trackerManager.trackers.firstOrNull { it.id == TrackerManager.ANILIST }
-        val isAdult = anilist?.isAdultEnabled() ?: false
+        val isAdult = !uiPreferences.trackTabHideAdult().get()
         mutableState.update { it.copy(isAdultEnabled = isAdult) }
 
         loadData()

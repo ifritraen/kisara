@@ -9,7 +9,9 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.AnilistMediaCache
 import eu.kanade.tachiyomi.data.track.anilist.AnilistSeasonUtil
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALHomeSection
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALItemTitle
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchItem
+import eu.kanade.tachiyomi.data.track.anilist.dto.ItemCover
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALStudioNode
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListEntry
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserStatsViewer
@@ -123,23 +125,24 @@ class TrackScreenModel(
                 // Continue section (According to tracker)
                 if ((enabledSections.isEmpty() || "continue" in enabledSections) && isAniListLoggedIn()) {
                     try {
-                        val userListResult = trackerManager.aniList.api.getUserMediaList(type)
-                        val continueItems = userListResult.lists
+                        val (userId, _) = trackerManager.aniList.api.getCurrentUser()
+                        val userListResult = trackerManager.aniList.api.getUserMediaList(userId, type)
+                        val continueItems = userListResult.data.collection.lists
                             .filter { it.status == "CURRENT" }
                             .flatMap { it.entries }
                             .mapNotNull { entry ->
                                 val media = entry.media ?: return@mapNotNull null
                                 ALSearchItem(
                                     id = media.id,
-                                    title = media.title?.userPreferred ?: "",
-                                    coverImage = media.coverImage?.large,
+                                    title = ALItemTitle(userPreferred = media.title?.userPreferred ?: ""),
+                                    coverImage = ItemCover(large = media.coverImage?.large ?: ""),
+                                    description = media.description,
                                     format = media.format,
                                     status = media.status,
                                     episodes = media.episodes,
                                     chapters = media.chapters,
                                     averageScore = media.averageScore,
                                     genres = media.genres,
-                                    isAdult = media.isAdult,
                                 )
                             }
                         if (continueItems.isNotEmpty()) {
@@ -306,6 +309,8 @@ class TrackScreenModel(
                 _state.update { it.copy(isLoadingStats = false) }
             }
         }
+    }
+
     // ==========================================
     // MYANIMELIST OPERATIONS
     // ==========================================

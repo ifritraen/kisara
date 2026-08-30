@@ -56,6 +56,7 @@ import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentMap
 import tachiyomi.core.common.util.lang.launchIO
@@ -242,13 +243,11 @@ object SettingsTrackingScreen : SearchableSettings {
                     ),
                     Preference.PreferenceItem.SliderPreference(
                         value = uiPreferences.trackTabPreviousSeasons().get(),
-                        min = 1,
-                        max = 8,
+                        valueRange = 1..8,
                         title = stringResource(KMR.strings.pref_track_tab_previous_seasons),
                         subtitle = stringResource(KMR.strings.pref_track_tab_previous_seasons_summary, uiPreferences.trackTabPreviousSeasons().get()),
                         onValueChanged = {
                             uiPreferences.trackTabPreviousSeasons().set(it)
-                            true
                         },
                     ),
                     Preference.PreferenceItem.SwitchPreference(

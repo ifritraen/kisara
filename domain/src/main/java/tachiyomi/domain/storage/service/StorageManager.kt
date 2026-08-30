@@ -316,12 +316,12 @@ private const val LOGS_PATH = "logs"
 // SY <--
 
 // KMK -->
-private const val FONTS_PATH = "fonts"
-private const val SCRIPTS_PATH = "scripts"
-private const val SCRIPT_OPTS_PATH = "script-opts"
-private const val SHADERS_PATH = "shaders"
-private const val TRANSLATION_PATH = "translations"
-private const val COLORIZER_PATH = "colorizer"
-private const val SUPER_RESOLUTION_PATH = "superres"
-private const val MPV_CONFIG_PATH = "mpv-config"
+const val FONTS_PATH = "fonts"
+const val SCRIPTS_PATH = "scripts"
+const val SCRIPT_OPTS_PATH = "script-opts"
+const val SHADERS_PATH = "shaders"
+const val TRANSLATION_PATH = "translations"
+const val COLORIZER_PATH = "colorizer"
+const val SUPER_RESOLUTION_PATH = "superres"
+const val MPV_CONFIG_PATH = "mpv-config"
 // KMK <--

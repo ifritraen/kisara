@@ -41,9 +41,6 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
-import eu.kanade.presentation.more.settings.SettingsScaffold
-import eu.kanade.presentation.more.settings.canScroll
-import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.editor.components.UnsavedChangesDialog
 import eu.kanade.presentation.util.Screen
 import kotlinx.collections.immutable.persistentListOf
@@ -64,7 +61,6 @@ class CodeEditScreen(private val filePath: String) : Screen() {
         val state by screenModel.state.collectAsStateWithLifecycle()
         val dialogShown by screenModel.dialogShown.collectAsStateWithLifecycle()
         val hasModified by screenModel.hasModified.collectAsStateWithLifecycle()
-        val uiStyle = rememberResolvedSettingsUiStyle()
         val verticalScrollState = rememberScrollState()
         val horizontalScrollState = rememberScrollState()
 

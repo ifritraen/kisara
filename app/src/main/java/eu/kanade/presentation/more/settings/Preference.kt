@@ -10,6 +10,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.preference.Preference as PreferenceData
 
 sealed class Preference {
@@ -178,12 +179,9 @@ sealed class Preference {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager()) {
                         val inputFile = storageManager.getMPVConfigDirectory()
                             ?.createFile(fileName)
-                        inputFile?.openFileDescriptor(context, "rwt")?.fileDescriptor
-                            ?.let {
-                                java.io.FileOutputStream(it).bufferedWriter().use { writer ->
-                                    writer.write(value)
-                                }
-                            }
+                        inputFile?.openOutputStream()?.bufferedWriter()?.use { writer ->
+                            writer.write(value)
+                        }
                         preference.set(value)
                     }
                 }

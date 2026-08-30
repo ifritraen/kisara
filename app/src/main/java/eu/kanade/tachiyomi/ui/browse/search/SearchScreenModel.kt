@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -36,10 +37,10 @@ sealed interface SearchItemResult {
 }
 
 class SearchScreenModel(
-    private val mediaType: UiPreferences.MediaType = UiPreferences.MediaType.MANGA,
+    private val mediaType: MediaType = MediaType.MANGA,
     private val sourceManager: SourceManager = Injekt.get(),
-    private val animeSourceManager: tachiyomi.domain.entries.anime.source.service.AnimeSourceManager = Injekt.get(),
-    private val novelSourceManager: tachiyomi.domain.entries.novel.source.service.NovelSourceManager = Injekt.get(),
+    private val animeSourceManager: tachiyomi.domain.source.anime.service.AnimeSourceManager = Injekt.get(),
+    private val novelSourceManager: tachiyomi.domain.source.novel.service.NovelSourceManager = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
 ) : StateScreenModel<SearchScreenModel.State>(State()) {
 
@@ -71,13 +72,13 @@ class SearchScreenModel(
 
     fun loadSources() {
         val prefSources = when (mediaType) {
-            UiPreferences.MediaType.MANGA -> uiPreferences.mangaSearchSources().get()
-            UiPreferences.MediaType.ANIME -> uiPreferences.animeSearchSources().get()
-            UiPreferences.MediaType.NOVEL -> uiPreferences.novelSearchSources().get()
+            MediaType.MANGA -> uiPreferences.mangaSearchSources().get()
+            MediaType.ANIME -> uiPreferences.animeSearchSources().get()
+            MediaType.NOVEL -> uiPreferences.novelSearchSources().get()
         }
 
         val allSources = when (mediaType) {
-            UiPreferences.MediaType.MANGA -> sourceManager.getCatalogueSources().map {
+            MediaType.MANGA -> sourceManager.getCatalogueSources().map {
                 SearchSourceItem(
                     id = it.id,
                     name = it.name,
@@ -85,7 +86,7 @@ class SearchScreenModel(
                     isEnabled = prefSources.isEmpty() || prefSources.contains(it.id.toString()),
                 )
             }
-            UiPreferences.MediaType.ANIME -> animeSourceManager.getCatalogueSources().map {
+            MediaType.ANIME -> animeSourceManager.getCatalogueSources().map {
                 SearchSourceItem(
                     id = it.id,
                     name = it.name,
@@ -93,7 +94,7 @@ class SearchScreenModel(
                     isEnabled = prefSources.isEmpty() || prefSources.contains(it.id.toString()),
                 )
             }
-            UiPreferences.MediaType.NOVEL -> novelSourceManager.getCatalogueSources().map {
+            MediaType.NOVEL -> novelSourceManager.getCatalogueSources().map {
                 SearchSourceItem(
                     id = it.id,
                     name = it.name,
@@ -130,9 +131,9 @@ class SearchScreenModel(
     private fun saveEnabledSources(sources: List<SearchSourceItem>) {
         val enabledIds = sources.filter { it.isEnabled }.map { it.id.toString() }.toSet()
         when (mediaType) {
-            UiPreferences.MediaType.MANGA -> uiPreferences.mangaSearchSources().set(enabledIds)
-            UiPreferences.MediaType.ANIME -> uiPreferences.animeSearchSources().set(enabledIds)
-            UiPreferences.MediaType.NOVEL -> uiPreferences.novelSearchSources().set(enabledIds)
+            MediaType.MANGA -> uiPreferences.mangaSearchSources().set(enabledIds)
+            MediaType.ANIME -> uiPreferences.animeSearchSources().set(enabledIds)
+            MediaType.NOVEL -> uiPreferences.novelSearchSources().set(enabledIds)
         }
     }
 
@@ -161,7 +162,7 @@ class SearchScreenModel(
         searchJob?.cancel()
         searchJob = screenModelScope.launch(Dispatchers.IO) {
             val enabledSources = when (mediaType) {
-                UiPreferences.MediaType.MANGA -> {
+                MediaType.MANGA -> {
                     val enabledIds = state.value.availableSources.filter { it.isEnabled }.map { it.id }.toSet()
                     sourceManager.getCatalogueSources().filter { enabledIds.contains(it.id) }
                 }

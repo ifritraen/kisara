@@ -434,10 +434,11 @@ object HomeScreen : Screen() {
                         val haptic = LocalHapticFeedback.current
                         val density = LocalDensity.current
                         val swipeThresholdPx = with(density) { 45.dp.toPx() }
+                        val currentEnabledTabs = TABS.filter { it.isEnabled() }
 
                         val gestureModifier = if (tabSwipeGesturesEnabled) {
                             Modifier.pointerInput(
-                                tabSwipeGesturesEnabled,
+                                currentEnabledTabs,
                                 tabSwipeBottomZoneHeight,
                                 tabSwipeMiddleZoneHeight,
                                 tabNavigator.current,
@@ -475,7 +476,7 @@ object HomeScreen : Screen() {
 
                                             if (yFromBottomRatio <= bottomZoneRatio) {
                                                 // Zone 1: Bottom Zone -> Main Navigation Tabs
-                                                val enabledTabs = TABS.filter { it.isEnabled() }
+                                                val enabledTabs = currentEnabledTabs
                                                 val currentIdx = enabledTabs.indexOfFirst {
                                                     it.key == currentTab.key || it::class == currentTab::class
                                                 }

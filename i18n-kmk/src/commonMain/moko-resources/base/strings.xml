@@ -3569,4 +3569,12 @@
     <string name="tab_calendar">Calendar</string>
     <string name="tab_updates">Updates</string>
     <string name="tab_schedule">Schedule</string>
+
+    <!-- Granular Scoring & Suggestions & Blocked Tags -->
+    <string name="pref_category_granular_scoring">Granular Scoring</string>
+    <string name="pref_granular_scoring_templates">Scoring Templates</string>
+    <string name="pref_granular_scoring_templates_summary">Customize granular rating categories and weights</string>
+    <string name="pref_category_suggestions">Suggestions</string>
+    <string name="pref_category_blocked_tags">Blocked Tags</string>
+    <string name="pref_blocked_tags_summary">Hide manga containing specific tags</string>
 </resources>

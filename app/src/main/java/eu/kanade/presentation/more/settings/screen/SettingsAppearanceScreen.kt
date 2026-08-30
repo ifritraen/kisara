@@ -370,26 +370,22 @@ object SettingsAppearanceScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = glassBlur,
-                            min = 0,
-                            max = 24,
+                            valueRange = 0..24,
                             title = "Blur Radius",
                             subtitle = "${glassBlur}dp",
                             onValueChanged = {
                                 uiPreferences.bottomBarBlur().set(it)
-                                true
                             },
                         ),
                     )
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = glassOpacity,
-                            min = 10,
-                            max = 100,
+                            valueRange = 10..100,
                             title = "Glass Surface Opacity",
                             subtitle = "$glassOpacity%",
                             onValueChanged = {
                                 uiPreferences.bottomBarOpacity().set(it)
-                                true
                             },
                         ),
                     )
@@ -419,39 +415,33 @@ object SettingsAppearanceScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = bottomBarHeight,
-                            min = 36,
-                            max = 64,
+                            valueRange = 36..64,
                             title = "Dock Height",
                             subtitle = "${bottomBarHeight}dp",
                             onValueChanged = {
                                 uiPreferences.bottomBarHeight().set(it)
-                                true
                             },
                         ),
                     )
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = bottomBarCornerRadius,
-                            min = 4,
-                            max = 32,
+                            valueRange = 4..32,
                             title = "Dock Corner Radius",
                             subtitle = "${bottomBarCornerRadius}dp",
                             onValueChanged = {
                                 uiPreferences.bottomBarCornerRadius().set(it)
-                                true
                             },
                         ),
                     )
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = bottomBarGap,
-                            min = 0,
-                            max = 16,
+                            valueRange = 0..16,
                             title = "Dock Button Gap",
                             subtitle = "${bottomBarGap}dp",
                             onValueChanged = {
                                 uiPreferences.bottomBarGap().set(it)
-                                true
                             },
                         ),
                     )
@@ -487,26 +477,22 @@ object SettingsAppearanceScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = tabSwipeBottomZoneHeight,
-                            min = 5,
-                            max = 30,
+                            valueRange = 5..30,
                             title = stringResource(KMR.strings.pref_tab_swipe_bottom_zone),
                             subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeBottomZoneHeight),
                             onValueChanged = {
                                 uiPreferences.tabSwipeBottomZoneHeight().set(it)
-                                true
                             },
                         ),
                     )
                     add(
                         Preference.PreferenceItem.SliderPreference(
                             value = tabSwipeMiddleZoneHeight,
-                            min = 30,
-                            max = 70,
+                            valueRange = 30..70,
                             title = stringResource(KMR.strings.pref_tab_swipe_middle_zone),
                             subtitle = stringResource(KMR.strings.pref_tab_swipe_zone_summary, tabSwipeMiddleZoneHeight),
                             onValueChanged = {
                                 uiPreferences.tabSwipeMiddleZoneHeight().set(it)
-                                true
                             },
                         ),
                     )

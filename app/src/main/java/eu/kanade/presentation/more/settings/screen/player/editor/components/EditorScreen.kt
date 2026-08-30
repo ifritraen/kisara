@@ -8,11 +8,13 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.IntegrationInstructions
 import androidx.compose.material.icons.outlined.SettingsApplications
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -23,15 +25,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.DropdownMenu
-import eu.kanade.presentation.components.FloatingActionAddButton
-import eu.kanade.presentation.more.settings.SettingsScaffold
-import eu.kanade.presentation.more.settings.canScroll
-import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorListItem
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorListType
 import eu.kanade.presentation.more.settings.screen.player.editor.EditorScreenState
 import kotlinx.collections.immutable.toPersistentList
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -63,9 +63,11 @@ fun EditorScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionAddButton(
-                lazyListState = lazyListState,
+            ExtendedFloatingActionButton(
                 onClick = onClickAdd,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text(stringResource(MR.strings.action_add)) },
+                expanded = lazyListState.firstVisibleItemIndex == 0,
             )
         },
     ) { paddingValues ->
@@ -79,17 +81,16 @@ fun EditorScreen(
                         stringRes = KMR.strings.pref_player_no_items,
                         modifier = Modifier.padding(paddingValues),
                     )
-                    return@SettingsScaffold
+                } else {
+                    EditorListContent(
+                        items = state.editorListItems,
+                        lazyListState = lazyListState,
+                        paddingValues = paddingValues,
+                        onClickItem = onClickItem,
+                        onRenameItem = onRenameItem,
+                        onDeleteItem = onDeleteItem,
+                    )
                 }
-
-                EditorListContent(
-                    items = state.editorListItems,
-                    lazyListState = lazyListState,
-                    paddingValues = paddingValues,
-                    onClickItem = onClickItem,
-                    onRenameItem = onRenameItem,
-                    onDeleteItem = onDeleteItem,
-                )
             }
         }
     }
