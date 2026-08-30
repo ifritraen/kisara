@@ -138,7 +138,7 @@ class DomainModule : InjektModule {
         addFactory { UpdateManga(get(), get()) }
         addFactory { UpdateMangaFromRemote(get(), get(), get(), get(), get(), get(), get()) }
         addFactory { UpdateMangaNotes(get()) }
-        addFactory { SetMangaCategories(get()) }
+        addFactory { SetMangaCategories(get(), get()) }
         addFactory { GetExcludedScanlators(get()) }
         addFactory { SetExcludedScanlators(get()) }
         addFactory {
@@ -242,7 +242,7 @@ class DomainModule : InjektModule {
         addFactory { tachiyomi.domain.category.novel.interactor.UpdateNovelCategory(get()) }
         addFactory { tachiyomi.domain.category.novel.interactor.HideNovelCategory(get()) }
         addFactory { tachiyomi.domain.category.novel.interactor.DeleteNovelCategory(get(), get(), get()) }
-        addFactory { tachiyomi.domain.category.novel.interactor.SetNovelCategories(get()) }
+        addFactory { tachiyomi.domain.category.novel.interactor.SetNovelCategories(get(), get()) }
         addFactory { tachiyomi.domain.category.novel.interactor.UpdateNovelCategoryFlags(get()) }
 
         addSingletonFactory<tachiyomi.domain.series.novel.repository.NovelSeriesRepository> {
@@ -383,7 +383,7 @@ class DomainModule : InjektModule {
         addFactory { tachiyomi.domain.category.anime.interactor.UpdateAnimeCategory(get()) }
         addFactory { tachiyomi.domain.category.anime.interactor.HideAnimeCategory(get()) }
         addFactory { tachiyomi.domain.category.anime.interactor.DeleteAnimeCategory(get(), get(), get()) }
-        addFactory { tachiyomi.domain.category.anime.interactor.SetAnimeCategories(get()) }
+        addFactory { tachiyomi.domain.category.anime.interactor.SetAnimeCategories(get(), get()) }
 
         addSingletonFactory<tachiyomi.domain.entries.anime.repository.AnimeRepository> {
             tachiyomi.data.entries.anime.AnimeRepositoryImpl(get())
