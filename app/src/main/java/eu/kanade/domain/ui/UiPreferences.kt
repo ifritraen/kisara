@@ -265,9 +265,14 @@ class UiPreferences(
     fun showSeasonTabs() = preferenceStore.getBoolean("pref_show_season_tabs", true)
     fun alwaysShowFullEpisodeList() = preferenceStore.getBoolean("pref_always_show_full_episode_list", false)
     fun metadataAuthHintShown() = preferenceStore.getBoolean("pref_metadata_auth_hint_shown", false)
-    fun animatedAuroraBackground() = preferenceStore.getBoolean("pref_animated_aurora_background", true)
-    fun specialBackgroundStyle() = preferenceStore.getString("pref_special_background_style", "default")
     enum class MetadataSource { NONE, ANILIST, MAL, KOTATSU }
+
+    // KMK -->
+    fun mangaSearchSources() = preferenceStore.getStringSet("kisara_manga_search_sources", emptySet())
+    fun animeSearchSources() = preferenceStore.getStringSet("kisara_anime_search_sources", emptySet())
+    fun novelSearchSources() = preferenceStore.getStringSet("kisara_novel_search_sources", emptySet())
+    fun searchRecentQueries() = preferenceStore.getStringSet("kisara_search_recent_queries", emptySet())
+    // KMK <--
 
     // SY <--
 

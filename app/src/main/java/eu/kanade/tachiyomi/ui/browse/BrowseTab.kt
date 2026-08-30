@@ -65,6 +65,7 @@ import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionsTab
 import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelSourceTab
 import eu.kanade.tachiyomi.ui.browse.novel.source.novelSourcesTab
+import eu.kanade.tachiyomi.ui.browse.search.searchTab
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.browse.source.sourcesTab
 import eu.kanade.tachiyomi.ui.home.HomeScreen
@@ -169,7 +170,7 @@ data object BrowseTab : Tab {
                         novelExtensionsTab(novelExtensionsScreenModel),
                         migrateNovelSourceTab(),
                         novelDuplicateTab(),
-                        novelBulkSearchTab(),
+                        searchTab(MediaType.NOVEL),
                     ),
                     novelExtensionsState.searchQuery,
                     { query: String? -> novelExtensionsScreenModel.search(query) },
@@ -184,7 +185,7 @@ data object BrowseTab : Tab {
                         animeExtensionsTab(animeExtensionsScreenModel),
                         migrateAnimeSourceTab(),
                         animeDuplicateTab(),
-                        animeBulkSearchTab(),
+                        searchTab(MediaType.ANIME),
                     ),
                     animeExtensionsState.searchQuery,
                     { query: String? -> animeExtensionsScreenModel.search(query) },
@@ -199,7 +200,7 @@ data object BrowseTab : Tab {
                         extensionsTab(extensionsScreenModel),
                         migrateSourceTab(),
                         duplicateSourceTab(),
-                        bulkSearchTab(),
+                        searchTab(MediaType.MANGA),
                     ),
                     extensionsState.searchQuery,
                     { query: String? -> extensionsScreenModel.search(query) },

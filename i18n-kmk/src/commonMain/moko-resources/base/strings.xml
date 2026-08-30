@@ -304,6 +304,25 @@
     <string name="google_drive_secrets_missing">Google Drive client secrets are missing (client_secrets.json is not bundled). This feature is unavailable in this build.</string>
     <!-- KMK -->
     <string name="bulk_search">Search</string>
+    <string name="tab_global_search">Global</string>
+    <string name="tab_bulk_search">Bulk</string>
+    <string name="tab_advanced_search">Advanced</string>
+    <string name="search_sources_filter">Search Sources</string>
+    <string name="search_sources_filter_summary">Select extensions to include in search</string>
+    <string name="search_artist">Artist</string>
+    <string name="search_author">Author / Circle</string>
+    <string name="search_logic_mode">Logic Mode</string>
+    <string name="search_logic_and">AND (Match all)</string>
+    <string name="search_logic_or">OR (Match any)</string>
+    <string name="search_demographics">Demographics</string>
+    <string name="search_origin">Origin</string>
+    <string name="search_status">Status</string>
+    <string name="search_year">Release Year</string>
+    <string name="search_chapters">Chapters</string>
+    <string name="search_sort_by">Sort By</string>
+    <string name="search_quick_suggestions">Suggestions</string>
+    <string name="search_recent_queries">Recent Searches</string>
+    <string name="search_clear_history">Clear History</string>
     <string name="label_home">Home</string>
     <string name="pref_floating_bottom_bar">Floating bottom bar</string>
     <string name="pref_floating_bottom_bar_summary">Use a floating bottom navigation bar with rounded corners</string>
