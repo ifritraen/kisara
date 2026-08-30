@@ -87,6 +87,7 @@ import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.manga.interactor.GetDuplicateLibraryManga
 import tachiyomi.domain.manga.interactor.GetLibraryManga
+import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.manga.model.asMangaCover
@@ -126,6 +127,7 @@ class DuplicateScreenModel(
     private val getCategories: GetCategories = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
+    private val getManga: GetManga = Injekt.get(),
     private val getDuplicateLibraryManga: GetDuplicateLibraryManga = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
 ) : StateScreenModel<DuplicateScreenState>(DuplicateScreenState()) {
@@ -154,9 +156,30 @@ class DuplicateScreenModel(
             val maxScan = uiPreferences.duplicateMaxScanCount().get()
             val limit = if (maxScan > 0) maxScan else Int.MAX_VALUE
 
+            val extraTargetManga = if (isManualTargetCheck) {
+                val existingIds = allLibrary.map { it.manga.id }.toSet()
+                searchIds.filter { it !in existingIds }.mapNotNull { id ->
+                    val m = getManga.await(id) ?: return@mapNotNull null
+                    LibraryManga(
+                        manga = m,
+                        categories = emptyList(),
+                        totalChapters = 0,
+                        readCount = 0,
+                        bookmarkCount = 0,
+                        bookmarkReadCount = 0,
+                        chapterFlags = 0,
+                        latestUpload = 0,
+                        chapterFetchedAt = 0,
+                        lastRead = 0,
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
             // Filter out items in history ONLY during global scans, NOT when manually checking specific target manga
             val filteredLibrary = if (isManualTargetCheck) {
-                allLibrary
+                allLibrary + extraTargetManga
             } else {
                 allLibrary.filter { it.manga.id.toString() !in history }
             }
@@ -209,6 +232,16 @@ class DuplicateScreenModel(
                 if (ids.size > 1) {
                     val firstId = ids.first()
                     ids.drop(1).forEach { union(firstId, it) }
+                }
+            }
+
+            // Group 3: Direct duplicate match for manual target queries
+            if (isManualTargetCheck) {
+                filteredLibrary.filter { searchIds.contains(it.manga.id) }.forEach { target ->
+                    val directDuplicates = getDuplicateLibraryManga(target.manga)
+                    directDuplicates.forEach { dup ->
+                        union(target.manga.id, dup.manga.id)
+                    }
                 }
             }
 

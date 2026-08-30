@@ -347,9 +347,7 @@ class MangaScreen(
                     screenModel.showTrackDialog()
                 }
             },
-            onDuplicateClicked = {
-                navigator.push(eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateMangaScreen(successState.manga.id))
-            },
+            onDuplicateClicked = screenModel::showDuplicateDialog,
             onTagSearch = { scope.launch { performGenreSearch(navigator, it, screenModel.source!!) } },
             onFilterButtonClicked = screenModel::showSettingsDialog,
             onRefresh = screenModel::fetchAllFromSource,

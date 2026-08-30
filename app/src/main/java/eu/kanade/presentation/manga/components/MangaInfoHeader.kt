@@ -329,7 +329,7 @@ fun MangaActionRow(
         // SY <--
         if (duplicateCount > 0) {
             MangaActionButton(
-                title = stringResource(MR.strings.possible_duplicates_title),
+                title = stringResource(KMR.strings.label_duplicate),
                 icon = Icons.Outlined.ContentCopy,
                 color = MaterialTheme.colorScheme.primary,
                 onClick = onDuplicateClicked,
