@@ -38,4 +38,10 @@ class GesturePreferences(
     fun mediaPreviousGesture() = preferenceStore.getEnum("pref_media_previous", SingleActionGesture.Switch)
     fun mediaPlayPauseGesture() = preferenceStore.getEnum("pref_media_playpause", SingleActionGesture.PlayPause)
     fun mediaNextGesture() = preferenceStore.getEnum("pref_media_next", SingleActionGesture.Switch)
+
+    // Split Zones
+    fun gestureSplitZonesEnabled() = preferenceStore.getBoolean("pref_gesture_split_zones_enabled", true)
+    fun gestureSplitZoneConfig() = preferenceStore.getString("pref_gesture_split_zone_config", "")
+    fun showGestureRipple() = preferenceStore.getBoolean("pref_gesture_ripple", true)
+    fun showGestureHud() = preferenceStore.getBoolean("pref_gesture_hud", true)
 }

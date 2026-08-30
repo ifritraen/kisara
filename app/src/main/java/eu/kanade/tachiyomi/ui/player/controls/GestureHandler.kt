@@ -78,6 +78,15 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.math.ln
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import eu.kanade.tachiyomi.ui.player.settings.PlayerGestureZoneConfig
+import eu.kanade.tachiyomi.ui.player.settings.PlayerZoneAction
+import tachiyomi.presentation.core.i18n.stringResource
+
 @Composable
 fun GestureHandler(
     viewModel: PlayerViewModel,
@@ -99,6 +108,27 @@ fun GestureHandler(
     val seekAmount by viewModel.doubleTapSeekAmount.collectAsStateWithLifecycle()
     val isSeekingForwards by viewModel.isSeekingForwards.collectAsStateWithLifecycle()
     var isDoubleTapSeeking by remember { mutableStateOf(false) }
+
+    val splitZonesEnabled by gesturePreferences.gestureSplitZonesEnabled().collectAsStateWithLifecycle()
+    val splitConfigJson by gesturePreferences.gestureSplitZoneConfig().collectAsStateWithLifecycle()
+    val splitConfig = remember(splitConfigJson) { PlayerGestureZoneConfig.deserialize(splitConfigJson) }
+    val showRipple by gesturePreferences.showGestureRipple().collectAsStateWithLifecycle()
+    val showHud by gesturePreferences.showGestureHud().collectAsStateWithLifecycle()
+
+    var activeTappedZone by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var hudActionText by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(activeTappedZone) {
+        if (activeTappedZone == null) return@LaunchedEffect
+        delay(400)
+        activeTappedZone = null
+    }
+
+    LaunchedEffect(hudActionText) {
+        if (hudActionText == null) return@LaunchedEffect
+        delay(900)
+        hudActionText = null
+    }
 
     LaunchedEffect(seekAmount) {
         if (seekAmount == 0) return@LaunchedEffect
@@ -201,24 +231,60 @@ fun GestureHandler(
                     }
                 }
             }
-            .pointerInput(longPressAction, areControlsLocked) {
+            .pointerInput(longPressAction, areControlsLocked, splitZonesEnabled, splitConfig) {
                 val originalSpeed = viewModel.playbackSpeed.value
                 detectTapGestures(
                     onTap = {
                         if (controlsShown) viewModel.hideControls() else viewModel.showControls()
                     },
-                    onDoubleTap = {
+                    onDoubleTap = { offset ->
                         if (areControlsLocked) return@detectTapGestures
-                        if (it.x > size.width * 3 / 5) {
-                            if (!isSeekingForwards) viewModel.updateSeekAmount(0)
-                            viewModel.handleRightDoubleTap()
-                            isDoubleTapSeeking = true
-                        } else if (it.x < size.width * 2 / 5) {
-                            if (isSeekingForwards) viewModel.updateSeekAmount(0)
-                            viewModel.handleLeftDoubleTap()
-                            isDoubleTapSeeking = true
+                        if (splitZonesEnabled) {
+                            val col = (offset.x / size.width * 5).toInt().coerceIn(0, 4)
+                            val row = (offset.y / size.height * 2).toInt().coerceIn(0, 1)
+                            val action = splitConfig.getAction(col, row)
+                            viewModel.executeZoneAction(action)
+                            if (showRipple) {
+                                activeTappedZone = col to row
+                            }
+                            if (showHud && action != PlayerZoneAction.NONE) {
+                                val actionName = when (action) {
+                                    PlayerZoneAction.SEEK_BACKWARD_10 -> "-10s"
+                                    PlayerZoneAction.SEEK_BACKWARD_5 -> "-5s"
+                                    PlayerZoneAction.SEEK_BACKWARD_15 -> "-15s"
+                                    PlayerZoneAction.SEEK_BACKWARD_30 -> "-30s"
+                                    PlayerZoneAction.SEEK_FORWARD_10 -> "+10s"
+                                    PlayerZoneAction.SEEK_FORWARD_5 -> "+5s"
+                                    PlayerZoneAction.SEEK_FORWARD_15 -> "+15s"
+                                    PlayerZoneAction.SEEK_FORWARD_30 -> "+30s"
+                                    PlayerZoneAction.PLAY_PAUSE -> if (viewModel.paused.value) "Pause" else "Play"
+                                    PlayerZoneAction.SPEED_UP -> "Speed: ${viewModel.playbackSpeed.value}x"
+                                    PlayerZoneAction.SPEED_DOWN -> "Speed: ${viewModel.playbackSpeed.value}x"
+                                    PlayerZoneAction.SPEED_RESET -> "Speed: 1.0x"
+                                    PlayerZoneAction.VOLUME_UP, PlayerZoneAction.VOLUME_DOWN -> "Volume: ${currentVolume}"
+                                    PlayerZoneAction.BRIGHTNESS_UP, PlayerZoneAction.BRIGHTNESS_DOWN -> "Brightness"
+                                    PlayerZoneAction.TOGGLE_ASPECT_RATIO -> "Aspect Ratio"
+                                    PlayerZoneAction.SCREENSHOT -> "Screenshot"
+                                    PlayerZoneAction.TOGGLE_SUBTITLE -> "Subtitles"
+                                    PlayerZoneAction.TOGGLE_AUDIO_TRACK -> "Audio Track"
+                                    PlayerZoneAction.SHOW_CONTROLS -> "Controls"
+                                    PlayerZoneAction.NONE -> ""
+                                }
+                                hudActionText = actionName
+                            }
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         } else {
-                            viewModel.handleCenterDoubleTap()
+                            if (offset.x > size.width * 3 / 5) {
+                                if (!isSeekingForwards) viewModel.updateSeekAmount(0)
+                                viewModel.handleRightDoubleTap()
+                                isDoubleTapSeeking = true
+                            } else if (offset.x < size.width * 2 / 5) {
+                                if (isSeekingForwards) viewModel.updateSeekAmount(0)
+                                viewModel.handleLeftDoubleTap()
+                                isDoubleTapSeeking = true
+                            } else {
+                                viewModel.handleCenterDoubleTap()
+                            }
                         }
                     },
                     onPress = {
@@ -278,42 +344,78 @@ fun GestureHandler(
                 var targetPosition = startingPosition
                 var startingX = 0f
                 var wasPlayerAlreadyPause = false
+                var isSpeedDragging = false
+                var startingSpeed = viewModel.playbackSpeed.value
+
                 detectHorizontalDragGestures(
-                    onDragStart = {
-                        startingPosition = position.toInt()
-                        targetPosition = startingPosition
-                        startingX = it.x
-                        wasPlayerAlreadyPause = viewModel.paused.value
-                        viewModel.pause()
-                        if (showSeekbar) viewModel.showSeekBar()
+                    onDragStart = { offset ->
+                        val startRow = (offset.y / size.height * 2).toInt().coerceIn(0, 1)
+                        if (splitZonesEnabled && startRow == 0) {
+                            // Top Half: Playback Speed Adjustment!
+                            isSpeedDragging = true
+                            startingSpeed = viewModel.playbackSpeed.value
+                            startingX = offset.x
+                            viewModel.hideControls()
+                        } else {
+                            // Bottom Half: Timeline Position Seek!
+                            isSpeedDragging = false
+                            startingPosition = position.toInt()
+                            targetPosition = startingPosition
+                            startingX = offset.x
+                            wasPlayerAlreadyPause = viewModel.paused.value
+                            viewModel.pause()
+                            if (showSeekbar) viewModel.showSeekBar()
+                        }
                     },
                     onDragEnd = {
-                        // Exact demux seek on pointer release
-                        viewModel.seekTo(targetPosition, precise = true)
-                        viewModel.gestureSeekAmount.update { null }
-                        viewModel.hideSeekBar()
-                        if (!wasPlayerAlreadyPause) viewModel.unpause()
+                        if (isSpeedDragging) {
+                            isSpeedDragging = false
+                        } else {
+                            // Exact demux seek on pointer release
+                            viewModel.seekTo(targetPosition, precise = true)
+                            viewModel.gestureSeekAmount.update { null }
+                            viewModel.hideSeekBar()
+                            if (!wasPlayerAlreadyPause) viewModel.unpause()
+                        }
                     },
                     onDragCancel = {
-                        viewModel.gestureSeekAmount.update { null }
-                        viewModel.hideSeekBar()
-                        if (!wasPlayerAlreadyPause) viewModel.unpause()
+                        if (isSpeedDragging) {
+                            isSpeedDragging = false
+                        } else {
+                            viewModel.gestureSeekAmount.update { null }
+                            viewModel.hideSeekBar()
+                            if (!wasPlayerAlreadyPause) viewModel.unpause()
+                        }
                     },
                 ) { change, dragAmount ->
-                    if (position <= 0f && dragAmount < 0) return@detectHorizontalDragGestures
-                    if (position >= duration && dragAmount > 0) return@detectHorizontalDragGestures
-                    targetPosition = calculateNewHorizontalGestureValue(startingPosition, startingX, change.position.x, 0.15f)
-                        .coerceIn(0, duration.toInt())
-                    viewModel.gestureSeekAmount.update { _ ->
-                        Pair(
-                            startingPosition,
-                            (targetPosition - startingPosition)
-                                .coerceIn(0 - startingPosition, (duration - startingPosition).toInt()),
-                        )
+                    if (isSpeedDragging) {
+                        val deltaX = change.position.x - startingX
+                        val stepPx = 30.dp.toPx()
+                        val steps = (deltaX / stepPx).toInt()
+                        val newSpeed = (startingSpeed + steps * 0.1f).coerceIn(0.2f, 6.0f).let { Math.round(it * 10f) / 10f }
+                        if (viewModel.playbackSpeed.value != newSpeed) {
+                            viewModel.playbackSpeed.update { newSpeed }
+                            playerPreferences.playerSpeed().set(newSpeed)
+                            MPVLib.setPropertyDouble("speed", newSpeed.toDouble())
+                            viewModel.playerUpdate.update { PlayerUpdates.Speed }
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                    } else {
+                        if (position <= 0f && dragAmount < 0) return@detectHorizontalDragGestures
+                        if (position >= duration && dragAmount > 0) return@detectHorizontalDragGestures
+                        targetPosition = calculateNewHorizontalGestureValue(startingPosition, startingX, change.position.x, 0.15f)
+                            .coerceIn(0, duration.toInt())
+                        viewModel.gestureSeekAmount.update { _ ->
+                            Pair(
+                                startingPosition,
+                                (targetPosition - startingPosition)
+                                    .coerceIn(0 - startingPosition, (duration - startingPosition).toInt()),
+                            )
+                        }
+                        // Fast keyframe seek during active horizontal drag
+                        viewModel.seekTo(targetPosition, precise = false)
+                        if (showSeekbar) viewModel.showSeekBar()
                     }
-                    // Fast keyframe seek during active horizontal drag
-                    viewModel.seekTo(targetPosition, precise = false)
-                    if (showSeekbar) viewModel.showSeekBar()
                 }
             }
             .pointerInput(areControlsLocked) {
@@ -393,14 +495,65 @@ fun GestureHandler(
                         )
                         viewModel.displayBrightnessSlider()
                     }
-                    if (swapVolumeBrightness) {
-                        if (change.position.x > size.width / 2) changeBrightness() else changeVolume()
+
+                    val col = (change.position.x / size.width * 5).toInt().coerceIn(0, 4)
+                    val isLeft = col <= 1 || (col == 2 && !swapVolumeBrightness)
+                    val shouldAdjustBrightness = if (swapVolumeBrightness) !isLeft else isLeft
+                    if (shouldAdjustBrightness) {
+                        changeBrightness()
                     } else {
-                        if (change.position.x < size.width / 2) changeBrightness() else changeVolume()
+                        changeVolume()
                     }
                 }
             },
-    )
+    ) {
+        // Visual Zone Highlight Ripple on Double-Tap
+        activeTappedZone?.let { (col, row) ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.2f)
+                        .fillMaxHeight(0.5f)
+                        .align(
+                            when {
+                                row == 0 && col == 0 -> Alignment.TopStart
+                                row == 0 && col == 4 -> Alignment.TopEnd
+                                row == 1 && col == 0 -> Alignment.BottomStart
+                                row == 1 && col == 4 -> Alignment.BottomEnd
+                                row == 0 -> Alignment.TopCenter
+                                else -> Alignment.BottomCenter
+                            },
+                        )
+                        .background(Color.White.copy(alpha = 0.22f), shape = RoundedCornerShape(12.dp)),
+                )
+            }
+        }
+
+        // Floating Action HUD Indicator
+        AnimatedVisibility(
+            visible = hudActionText != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            hudActionText?.let { text ->
+                Surface(
+                    color = Color.Black.copy(alpha = 0.75f),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(
+                        text = text,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

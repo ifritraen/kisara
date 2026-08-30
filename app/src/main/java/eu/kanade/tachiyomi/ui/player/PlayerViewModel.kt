@@ -48,6 +48,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.screen.player.custombutton.CustomButtonFetchState
 import eu.kanade.presentation.more.settings.screen.player.custombutton.getButtons
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.ui.player.settings.PlayerZoneAction
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SerializableHoster.Companion.toHosterList
@@ -1388,6 +1389,104 @@ class PlayerViewModel @JvmOverloads constructor(
         _isSeekingForwards.value = true
         seekBy(step, preciseSeek)
         if (showSeekBar) showSeekBar()
+    }
+
+    fun seekByAmount(seconds: Int) {
+        val current = if ((seconds > 0 && _doubleTapSeekAmount.value < 0) || (seconds < 0 && _doubleTapSeekAmount.value > 0)) {
+            0
+        } else {
+            _doubleTapSeekAmount.value
+        }
+        val newAmount = current + seconds
+        _doubleTapSeekAmount.value = newAmount
+        _isSeekingForwards.value = seconds > 0
+        seekBy(seconds, preciseSeek)
+        if (showSeekBar) showSeekBar()
+    }
+
+    fun adjustPlaybackSpeed(delta: Float) {
+        val current = (playbackSpeed.value + delta).let { Math.round(it * 10f) / 10f }.coerceIn(0.2f, 6.0f)
+        playbackSpeed.update { current }
+        playerPreferences.playerSpeed().set(current)
+        `is`.xyz.mpv.MPVLib.setPropertyDouble("speed", current.toDouble())
+        playerUpdate.update { PlayerUpdates.Speed }
+    }
+
+    fun resetPlaybackSpeed() {
+        playbackSpeed.update { 1.0f }
+        playerPreferences.playerSpeed().set(1.0f)
+        `is`.xyz.mpv.MPVLib.setPropertyDouble("speed", 1.0)
+        playerUpdate.update { PlayerUpdates.Speed }
+    }
+
+    fun cycleAspectRatio() {
+        val current = playerPreferences.aspectState().get()
+        val next = when (current) {
+            VideoAspect.Fit -> VideoAspect.Crop
+            VideoAspect.Crop -> VideoAspect.Stretch
+            VideoAspect.Stretch -> VideoAspect.Fit
+        }
+        changeVideoAspect(next)
+    }
+
+    fun cycleSubtitleTrack() {
+        val subs = tracks.value.getOrDefault("sub", emptyList())
+        if (subs.isEmpty()) return
+        val currentSid = _selectedSubtitles.value.first
+        val sidList = listOf(-1) + subs.map { it.id }
+        val nextIndex = (sidList.indexOf(currentSid) + 1) % sidList.size
+        selectSub(sidList[nextIndex])
+    }
+
+    fun cycleAudioTrack() {
+        val audios = tracks.value.getOrDefault("audio", emptyList())
+        if (audios.size <= 1) return
+        val currentAid = _selectedAudio.value
+        val aidList = audios.map { it.id }
+        val nextIndex = (aidList.indexOf(currentAid) + 1) % aidList.size
+        selectAudio(aidList[nextIndex])
+    }
+
+    fun changeBrightnessBy(delta: Float) {
+        val newBrightness = (currentBrightness.value + delta).coerceIn(-0.75f, 1f)
+        changeBrightnessTo(newBrightness)
+        displayBrightnessSlider()
+    }
+
+    fun executeZoneAction(action: PlayerZoneAction) {
+        when (action) {
+            PlayerZoneAction.NONE -> {}
+            PlayerZoneAction.PLAY_PAUSE -> pauseUnpause()
+            PlayerZoneAction.SEEK_BACKWARD_5 -> seekByAmount(-5)
+            PlayerZoneAction.SEEK_BACKWARD_10 -> seekByAmount(-10)
+            PlayerZoneAction.SEEK_BACKWARD_15 -> seekByAmount(-15)
+            PlayerZoneAction.SEEK_BACKWARD_30 -> seekByAmount(-30)
+            PlayerZoneAction.SEEK_FORWARD_5 -> seekByAmount(5)
+            PlayerZoneAction.SEEK_FORWARD_10 -> seekByAmount(10)
+            PlayerZoneAction.SEEK_FORWARD_15 -> seekByAmount(15)
+            PlayerZoneAction.SEEK_FORWARD_30 -> seekByAmount(30)
+            PlayerZoneAction.SPEED_UP -> adjustPlaybackSpeed(0.1f)
+            PlayerZoneAction.SPEED_DOWN -> adjustPlaybackSpeed(-0.1f)
+            PlayerZoneAction.SPEED_RESET -> resetPlaybackSpeed()
+            PlayerZoneAction.VOLUME_UP -> {
+                changeVolumeBy(1)
+                displayVolumeSlider()
+            }
+            PlayerZoneAction.VOLUME_DOWN -> {
+                changeVolumeBy(-1)
+                displayVolumeSlider()
+            }
+            PlayerZoneAction.BRIGHTNESS_UP -> changeBrightnessBy(0.05f)
+            PlayerZoneAction.BRIGHTNESS_DOWN -> changeBrightnessBy(-0.05f)
+            PlayerZoneAction.TOGGLE_ASPECT_RATIO -> cycleAspectRatio()
+            PlayerZoneAction.SCREENSHOT -> {
+                pause()
+                sheetShown.update { Sheets.Screenshot }
+            }
+            PlayerZoneAction.TOGGLE_SUBTITLE -> cycleSubtitleTrack()
+            PlayerZoneAction.TOGGLE_AUDIO_TRACK -> cycleAudioTrack()
+            PlayerZoneAction.SHOW_CONTROLS -> if (controlsShown.value) hideControls() else showControls()
+        }
     }
 
     fun resetHosterState() {

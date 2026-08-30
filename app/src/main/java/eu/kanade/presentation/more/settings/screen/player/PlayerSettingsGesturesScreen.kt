@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.tachiyomi.ui.player.LongPressGesture
@@ -44,11 +46,36 @@ object PlayerSettingsGesturesScreen : SearchableSettings {
         val gesturePreferences = remember { Injekt.get<GesturePreferences>() }
 
         return listOf(
+            getSplitZonesGroup(gesturePreferences = gesturePreferences),
             getSlidersGroup(gesturePreferences = gesturePreferences),
             getSeekingGroup(gesturePreferences = gesturePreferences),
             getDoubleTapGroup(gesturePreferences = gesturePreferences),
             getLongPressGroup(gesturePreferences = gesturePreferences),
             getMediaControlsGroup(gesturePreferences = gesturePreferences),
+        )
+    }
+
+    @Composable
+    private fun getSplitZonesGroup(gesturePreferences: GesturePreferences): Preference.PreferenceGroup {
+        val navigator = LocalNavigator.currentOrThrow
+        val splitZonesEnabled = gesturePreferences.gestureSplitZonesEnabled()
+
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.pref_player_gesture_split_zones),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = splitZonesEnabled,
+                    title = stringResource(KMR.strings.pref_player_gesture_split_zones),
+                    subtitle = stringResource(KMR.strings.pref_player_gesture_split_zones_summary),
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = "Customize 5x2 Split Zones",
+                    subtitle = "Tap-to-edit actions for all 10 screen zones",
+                    onClick = {
+                        navigator.push(PlayerGestureZonesEditorScreen())
+                    },
+                ),
+            ),
         )
     }
 
