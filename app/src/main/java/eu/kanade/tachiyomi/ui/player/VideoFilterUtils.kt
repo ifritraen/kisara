@@ -154,3 +154,25 @@ fun applyAnime4K(prefs: DecoderPreferences, manager: Anime4KManager, isInit: Boo
         MPVLib.setPropertyString("glsl-shaders", chain)
     }
 }
+
+fun applyCasSharpening(value: Int) {
+    val sharpenVal = (value / 50f).toString() // 0..100 maps to 0.0..2.0
+    MPVLib.setPropertyString("sharpen", sharpenVal)
+}
+
+fun applyScaleProfile(scaler: String) {
+    MPVLib.setPropertyString("scale", scaler)
+    MPVLib.setPropertyString("cscale", scaler)
+    MPVLib.setPropertyString("dscale", scaler)
+}
+
+fun applyMotionInterpolation(enabled: Boolean) {
+    if (enabled) {
+        MPVLib.setPropertyString("video-sync", "display-resample")
+        MPVLib.setPropertyString("interpolation", "yes")
+        MPVLib.setPropertyString("tscale", "oversample")
+    } else {
+        MPVLib.setPropertyString("interpolation", "no")
+        MPVLib.setPropertyString("video-sync", "audio")
+    }
+}

@@ -120,6 +120,7 @@ fun PlayerControls(
     val gesturePreferences = remember { Injekt.get<GesturePreferences>() }
     val audioPreferences = remember { Injekt.get<AudioPreferences>() }
     val subtitlePreferences = remember { Injekt.get<SubtitlePreferences>() }
+    val decoderPreferences = remember { Injekt.get<DecoderPreferences>() }
     val interactionSource = remember { MutableInteractionSource() }
 
     val controlsShown by viewModel.controlsShown.collectAsStateWithLifecycle()
@@ -136,6 +137,7 @@ fun PlayerControls(
     val currentChapter by viewModel.currentChapter.collectAsStateWithLifecycle()
     val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     val currentBrightness by viewModel.currentBrightness.collectAsStateWithLifecycle()
+    val warmNightLight by decoderPreferences.warmNightLightFilter().collectAsStateWithLifecycle()
     val isDynamicSpeedActive by viewModel.isDynamicSpeedActive.collectAsStateWithLifecycle()
     val gesturePlaybackSpeed by viewModel.gesturePlaybackSpeed.collectAsStateWithLifecycle()
     val longPressAction by gesturePreferences.longPressGesture().collectAsStateWithLifecycle()
@@ -187,6 +189,16 @@ fun PlayerControls(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = scrimAlpha)),
+        )
+    }
+
+    // Warm Eye Care Night Light Overlay
+    if (warmNightLight > 0) {
+        val tintAlpha = (warmNightLight / 100f) * 0.45f
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFFF9800).copy(alpha = tintAlpha)),
         )
     }
 

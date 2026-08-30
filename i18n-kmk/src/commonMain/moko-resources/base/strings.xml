@@ -3427,4 +3427,17 @@
     <string name="pref_player_long_press_speed_summary">Initial speed when long pressing the player (%1$.1fx)</string>
     <string name="player_speed_locked">Locked at %1$.1fx</string>
     <string name="player_drag_to_lock">Pull left to lock</string>
+    <string name="player_tab_shaders">Shaders</string>
+    <string name="player_tab_adjustments">Adjustments</string>
+    <string name="player_tab_deband_effects">Deband &amp; Effects</string>
+    <string name="player_shader_anime4k">Anime4K Shader</string>
+    <string name="player_shader_quality">Shader Quality</string>
+    <string name="player_shader_cas">CAS Sharpening</string>
+    <string name="player_scaler_profile">Upscaling Algorithm</string>
+    <string name="player_deband_toggle">Debanding</string>
+    <string name="player_deband_threshold">Deband Threshold</string>
+    <string name="player_deband_range">Deband Range</string>
+    <string name="player_deband_grain">Deband Grain</string>
+    <string name="player_motion_interpolation">Motion Interpolation</string>
+    <string name="player_warm_tint">Eye Care Warm Tint</string>
 </resources>

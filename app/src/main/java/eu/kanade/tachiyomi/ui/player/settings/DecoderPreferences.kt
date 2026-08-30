@@ -40,4 +40,7 @@ class DecoderPreferences(
     fun debandThreshold() = preferenceStore.getInt("pref_player_filter_deband_threshold", 32)
     fun debandRange() = preferenceStore.getInt("pref_player_filter_deband_range", 16)
     fun videoFilterTheme() = preferenceStore.getInt("pref_video_filter_theme", 0)
+    fun casSharpening() = preferenceStore.getInt("pref_cas_sharpening", 0)
+    fun warmNightLightFilter() = preferenceStore.getInt("pref_warm_night_light_filter", 0)
+    fun videoScaleProfile() = preferenceStore.getString("pref_video_scale_profile", "spline36")
 }
