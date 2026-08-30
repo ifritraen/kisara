@@ -166,6 +166,10 @@ class StorageManager(
     fun getShadersDirectory(): UniFile? {
         return baseDir?.findFile(SHADERS_PATH) ?: baseDir?.createDirectory(SHADERS_PATH)
     }
+
+    fun getMPVConfigDirectory(): UniFile? {
+        return baseDir?.findFile(MPV_CONFIG_PATH) ?: baseDir?.createDirectory(MPV_CONFIG_PATH)
+    }
     // KMK <--
 
     companion object {
@@ -319,4 +323,5 @@ private const val SHADERS_PATH = "shaders"
 private const val TRANSLATION_PATH = "translations"
 private const val COLORIZER_PATH = "colorizer"
 private const val SUPER_RESOLUTION_PATH = "superres"
+private const val MPV_CONFIG_PATH = "mpv-config"
 // KMK <--

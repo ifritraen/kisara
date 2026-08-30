@@ -155,7 +155,7 @@ internal fun PreferenceItem(
                 val values by item.preference.collectAsState()
                 EditTextPreferenceWidget(
                     title = item.title,
-                    subtitle = item.subtitle,
+                    subtitle = item.subtitle?.toString(),
                     icon = item.icon,
                     value = values,
                     onConfirm = {
@@ -163,6 +163,60 @@ internal fun PreferenceItem(
                         if (accepted) item.preference.set(it)
                         accepted
                     },
+                )
+            }
+            is Preference.PreferenceItem.MultiLineEditTextPreference -> {
+                val values by item.preference.collectAsState()
+                EditTextPreferenceWidget(
+                    title = item.title,
+                    subtitle = item.subtitle?.toString(),
+                    icon = item.icon,
+                    value = values,
+                    onConfirm = {
+                        val accepted = item.onValueChanged(it)
+                        if (accepted) item.preference.set(it)
+                        accepted
+                    },
+                    singleLine = false,
+                    canBeBlank = item.canBeBlank,
+                )
+            }
+            is Preference.PreferenceItem.MPVConfPreference -> {
+                val values by item.preference.collectAsState()
+                EditTextPreferenceWidget(
+                    title = item.title,
+                    subtitle = item.subtitle?.toString(),
+                    icon = item.icon,
+                    value = values,
+                    onConfirm = {
+                        val accepted = item.onValueChanged(it)
+                        if (accepted) item.preference.set(it)
+                        accepted
+                    },
+                    singleLine = false,
+                    canBeBlank = item.canBeBlank,
+                    formatSubtitle = false,
+                )
+            }
+            is Preference.PreferenceItem.EditTextInfoPreference -> {
+                val values by item.preference.collectAsState()
+                EditTextPreferenceWidget(
+                    title = item.title,
+                    subtitle = item.subtitle?.toString(),
+                    dialogSubtitle = item.dialogSubtitle,
+                    icon = item.icon,
+                    value = values,
+                    enabled = item.enabled,
+                    onConfirm = {
+                        val accepted = item.onValueChanged(it)
+                        if (accepted) item.preference.set(it)
+                        accepted
+                    },
+                    singleLine = true,
+                    canBeBlank = true,
+                    validate = item.validate,
+                    errorMessage = item.errorMessage,
+                    keyboardOptions = item.keyboardOptions,
                 )
             }
             is Preference.PreferenceItem.TrackerPreference -> {

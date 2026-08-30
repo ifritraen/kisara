@@ -21,7 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.TextFieldValue
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.more.settings.screen.player.editor.codeeditor.githubTheme
+import eu.kanade.presentation.more.settings.screen.player.editor.codeeditor.luaHighlight
+import eu.kanade.presentation.more.settings.screen.player.editor.codeeditor.toAnnotatedString
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import tachiyomi.domain.custombuttons.model.CustomButton
@@ -42,9 +46,32 @@ fun CustomButtonButtonDialog(
     initialState: CustomButton?,
 ) {
     var title by remember { mutableStateOf(initialState?.name ?: "") }
-    var content by remember { mutableStateOf(initialState?.content ?: "") }
-    var longPressContent by remember { mutableStateOf(initialState?.longPressContent ?: "") }
-    var startUp by remember { mutableStateOf(initialState?.onStartup ?: "") }
+
+    val luaHighlight = remember { luaHighlight(githubTheme) }
+    var content by remember {
+        mutableStateOf(
+            TextFieldValue(
+                annotatedString = luaHighlight.toAnnotatedString(initialState?.content ?: ""),
+                composition = null,
+            ),
+        )
+    }
+    var longPressContent by remember {
+        mutableStateOf(
+            TextFieldValue(
+                annotatedString = luaHighlight.toAnnotatedString(initialState?.longPressContent ?: ""),
+                composition = null,
+            ),
+        )
+    }
+    var startUp by remember {
+        mutableStateOf(
+            TextFieldValue(
+                annotatedString = luaHighlight.toAnnotatedString(initialState?.onStartup ?: ""),
+                composition = null,
+            ),
+        )
+    }
 
     val focusRequester = remember { FocusRequester() }
     val titleAlreadyExists = remember(title) { buttonNames.contains(title) }
@@ -53,9 +80,9 @@ fun CustomButtonButtonDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
-                enabled = title.isNotEmpty() && content.isNotEmpty() && !titleAlreadyExists,
+                enabled = title.isNotEmpty() && content.text.isNotEmpty() && !titleAlreadyExists,
                 onClick = {
-                    onAction(title, content, longPressContent, startUp)
+                    onAction(title, content.text, longPressContent.text, startUp.text)
                     onDismissRequest()
                 },
             ) {
@@ -107,7 +134,7 @@ fun CustomButtonButtonDialog(
 
                 OutlinedTextField(
                     value = content,
-                    onValueChange = { content = it },
+                    onValueChange = { content = it.copy(luaHighlight.toAnnotatedString(it.text)) },
                     label = {
                         Text(text = stringResource(KMR.strings.pref_player_custom_button_content))
                     },
@@ -120,7 +147,7 @@ fun CustomButtonButtonDialog(
 
                 OutlinedTextField(
                     value = longPressContent,
-                    onValueChange = { longPressContent = it },
+                    onValueChange = { longPressContent = it.copy(luaHighlight.toAnnotatedString(it.text)) },
                     label = {
                         Text(text = stringResource(KMR.strings.pref_player_custom_button_content_long))
                     },
@@ -133,7 +160,7 @@ fun CustomButtonButtonDialog(
 
                 OutlinedTextField(
                     value = startUp,
-                    onValueChange = { startUp = it },
+                    onValueChange = { startUp = it.copy(luaHighlight.toAnnotatedString(it.text)) },
                     label = {
                         Text(text = stringResource(KMR.strings.pref_player_custom_button_startup))
                     },
@@ -148,6 +175,7 @@ fun CustomButtonButtonDialog(
     )
 
     LaunchedEffect(focusRequester) {
+        // TODO: https://issuetracker.google.com/issues/204502668
         delay(0.1.seconds)
         focusRequester.requestFocus()
     }

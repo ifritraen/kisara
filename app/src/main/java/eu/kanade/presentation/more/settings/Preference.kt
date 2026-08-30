@@ -142,6 +142,72 @@ sealed class Preference {
         }
 
         /**
+         * A [PreferenceItem] that shows a multi-line EditText in the dialog.
+         */
+        data class MultiLineEditTextPreference(
+            val preference: PreferenceData<String>,
+            val canBeBlank: Boolean = false,
+            override val title: String,
+            override val subtitle: CharSequence? = "%s",
+            override val icon: ImageVector? = null,
+            override val enabled: Boolean = true,
+            override val onValueChanged: suspend (value: String) -> Boolean = { true },
+        ) : PreferenceItem<String, Boolean>()
+
+        /**
+         * A [PreferenceItem] for editing MPV config files.
+         */
+        data class MPVConfPreference(
+            val preference: PreferenceData<String>,
+            val scope: kotlinx.coroutines.CoroutineScope,
+            val context: android.content.Context,
+            val fileName: String? = null,
+            val canBeBlank: Boolean = true,
+            override val title: String,
+            override val subtitle: CharSequence? = preference.get()
+                .lines().take(2)
+                .joinToString(
+                    separator = "\n",
+                    postfix = if (preference.get().lines().size > 2) "\n..." else "",
+                ),
+            override val icon: ImageVector? = null,
+            override val enabled: Boolean = true,
+            override val onValueChanged: suspend (value: String) -> Boolean = { value ->
+                if (fileName != null) {
+                    val storageManager: tachiyomi.domain.storage.service.StorageManager = uy.kohesive.injekt.Injekt.get()
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager()) {
+                        val inputFile = storageManager.getMPVConfigDirectory()
+                            ?.createFile(fileName)
+                        inputFile?.openFileDescriptor(context, "rwt")?.fileDescriptor
+                            ?.let {
+                                java.io.FileOutputStream(it).bufferedWriter().use { writer ->
+                                    writer.write(value)
+                                }
+                            }
+                        preference.set(value)
+                    }
+                }
+                true
+            },
+        ) : PreferenceItem<String, Boolean>()
+
+        /**
+         * A [PreferenceItem] that shows a EditText with a subtitle in the dialog.
+         */
+        data class EditTextInfoPreference(
+            val preference: PreferenceData<String>,
+            val dialogSubtitle: String?,
+            val validate: (String) -> Boolean = { true },
+            val errorMessage: @Composable ((String) -> String)? = null,
+            val keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+            override val title: String,
+            override val subtitle: CharSequence? = "%s",
+            override val icon: ImageVector? = null,
+            override val enabled: Boolean = true,
+            override val onValueChanged: suspend (value: String) -> Boolean = { true },
+        ) : PreferenceItem<String, Boolean>()
+
+        /**
          * A [PreferenceItem] for individual tracker.
          */
         data class TrackerPreference(

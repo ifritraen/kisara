@@ -1,4 +1,4 @@
-package eu.kanade.presentation.more.settings.screen
+package eu.kanade.presentation.more.settings.screen.player
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -8,23 +8,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
-import androidx.compose.material.icons.outlined.Book
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.CollectionsBookmark
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.GetApp
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material.icons.outlined.VideoSettings
-import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
@@ -37,34 +21,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
-import eu.kanade.presentation.more.settings.screen.about.AboutScreen
+import eu.kanade.presentation.more.settings.screen.SettingsSearchScreen
+import eu.kanade.presentation.more.settings.screen.playerSettingsNavigationItems
+import eu.kanade.presentation.more.settings.screen.subtitleText
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
-import exh.assets.EhAssets
-import exh.assets.ehassets.EhLogo
-import exh.assets.ehassets.MangadexLogo
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
-import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreen
 
-object SettingsMainScreen : Screen() {
-    @Suppress("unused")
-    private fun readResolve(): Any = SettingsMainScreen
-
+class PlayerSettingsMainScreen(private val mainSettings: Boolean) : Screen() {
     @Composable
     override fun Content() {
         Content(twoPane = false)
@@ -92,12 +69,19 @@ object SettingsMainScreen : Screen() {
         val backPress = LocalBackPress.currentOrThrow
         val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surface
         val topBarState = rememberTopAppBarState()
+        val items = remember { playerSettingsNavigationItems() }
 
         Scaffold(
             topBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topBarState),
             topBar = { scrollBehavior ->
                 AppBar(
-                    title = stringResource(MR.strings.label_settings),
+                    title = stringResource(
+                        if (mainSettings) {
+                            KMR.strings.label_player
+                        } else {
+                            KMR.strings.label_player_settings
+                        },
+                    ),
                     navigateUp = backPress::invoke,
                     actions = {
                         AppBarActions(
@@ -116,16 +100,12 @@ object SettingsMainScreen : Screen() {
             containerColor = containerColor,
             content = { contentPadding ->
                 val state = rememberLazyListState()
-                // SY -->
-                val items = items.filter { it.screen !is SearchableSettings || it.screen.isEnabled() }
-                // SY <--
                 val indexSelected = if (twoPane) {
                     items.indexOfFirst { it.screen::class == navigator.items.first()::class }
                         .also {
                             LaunchedEffect(Unit) {
                                 state.animateScrollToItem(it)
                                 if (it > 0) {
-                                    // Lift scroll
                                     topBarState.contentOffset = topBarState.heightOffsetLimit
                                 }
                             }
@@ -140,7 +120,7 @@ object SettingsMainScreen : Screen() {
                 ) {
                     itemsIndexed(
                         items = items,
-                        key = { _, item -> "settings-main-${item.hashCode()}" },
+                        key = { _, item -> "settings-player-${item.key}" },
                     ) { index, item ->
                         val selected = indexSelected == index
                         var modifier: Modifier = Modifier
@@ -164,7 +144,7 @@ object SettingsMainScreen : Screen() {
                             TextPreferenceWidget(
                                 modifier = modifier,
                                 title = stringResource(item.titleRes),
-                                subtitle = item.formatSubtitle(),
+                                subtitle = item.subtitleText(),
                                 icon = item.icon,
                                 onPreferenceClick = { navigator.navigate(item.screen, twoPane) },
                             )
@@ -178,118 +158,4 @@ object SettingsMainScreen : Screen() {
     private fun Navigator.navigate(screen: VoyagerScreen, twoPane: Boolean) {
         if (twoPane) replaceAll(screen) else push(screen)
     }
-
-    private data class Item(
-        val titleRes: StringResource,
-        val subtitleRes: StringResource,
-        val formatSubtitle: @Composable () -> String = { stringResource(subtitleRes) },
-        val icon: ImageVector,
-        val screen: VoyagerScreen,
-    )
-
-    private val items = listOf(
-        Item(
-            titleRes = MR.strings.pref_category_appearance,
-            subtitleRes = MR.strings.pref_appearance_summary,
-            icon = Icons.Outlined.Palette,
-            screen = SettingsAppearanceScreen,
-        ),
-        Item(
-            titleRes = MR.strings.pref_category_library,
-            subtitleRes = MR.strings.pref_library_summary,
-            icon = Icons.Outlined.CollectionsBookmark,
-            screen = SettingsLibraryScreen,
-        ),
-        Item(
-            titleRes = MR.strings.pref_category_reader,
-            subtitleRes = MR.strings.pref_reader_summary,
-            icon = Icons.AutoMirrored.Outlined.ChromeReaderMode,
-            screen = SettingsReaderScreen,
-        ),
-        Item(
-            titleRes = KMR.strings.pref_category_novel_reader,
-            subtitleRes = KMR.strings.pref_novel_reader_summary,
-            icon = Icons.Outlined.Book,
-            screen = SettingsNovelReaderScreen,
-        ),
-        Item(
-            titleRes = KMR.strings.label_player,
-            subtitleRes = KMR.strings.pref_player_settings_summary,
-            icon = Icons.Outlined.VideoSettings,
-            screen = PlayerSettingsScreen(mainSettings = true),
-        ),
-        Item(
-            titleRes = MR.strings.pref_category_downloads,
-            subtitleRes = MR.strings.pref_downloads_summary,
-            icon = Icons.Outlined.GetApp,
-            screen = SettingsDownloadScreen,
-        ),
-        Item(
-            titleRes = MR.strings.pref_category_tracking,
-            subtitleRes = MR.strings.pref_tracking_summary,
-            icon = Icons.Outlined.Sync,
-            screen = SettingsTrackingScreen,
-        ),
-        // AM (CONNECTIONS) -->
-        Item(
-            titleRes = KMR.strings.pref_category_connections,
-            subtitleRes = KMR.strings.pref_connections_summary,
-            icon = Icons.Outlined.Link,
-            screen = SettingsConnectionScreen,
-        ),
-        // <-- AM (CONNECTIONS)
-        Item(
-            titleRes = MR.strings.browse,
-            subtitleRes = MR.strings.pref_browse_summary,
-            icon = Icons.Outlined.Explore,
-            screen = SettingsBrowseScreen,
-        ),
-        Item(
-            titleRes = MR.strings.label_data_storage,
-            subtitleRes = MR.strings.pref_backup_summary,
-            icon = Icons.Outlined.Storage,
-            screen = SettingsDataScreen,
-        ),
-        Item(
-            titleRes = MR.strings.pref_category_security,
-            subtitleRes = MR.strings.pref_security_summary,
-            icon = Icons.Outlined.Security,
-            screen = SettingsSecurityScreen,
-        ),
-        Item(
-            titleRes = KMR.strings.pref_category_vpn,
-            subtitleRes = KMR.strings.pref_vpn_summary,
-            icon = Icons.Outlined.Security,
-            screen = SettingsVpnScreen,
-        ),
-        // SY -->
-        Item(
-            titleRes = SYMR.strings.pref_category_eh,
-            subtitleRes = SYMR.strings.pref_ehentai_summary,
-            icon = EhAssets.EhLogo,
-            screen = SettingsEhScreen,
-        ),
-        Item(
-            titleRes = SYMR.strings.pref_category_mangadex,
-            subtitleRes = SYMR.strings.pref_mangadex_summary,
-            icon = EhAssets.MangadexLogo,
-            screen = SettingsMangadexScreen,
-        ),
-        // SY <--
-        Item(
-            titleRes = MR.strings.pref_category_advanced,
-            subtitleRes = MR.strings.pref_advanced_summary,
-            icon = Icons.Outlined.Code,
-            screen = SettingsAdvancedScreen,
-        ),
-        Item(
-            titleRes = MR.strings.pref_category_about,
-            subtitleRes = StringResource(0),
-            formatSubtitle = {
-                "${stringResource(MR.strings.app_name)} ${AboutScreen.getVersionName(withBuildDate = false)}"
-            },
-            icon = Icons.Outlined.Info,
-            screen = AboutScreen(),
-        ),
-    )
 }

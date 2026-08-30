@@ -1,12 +1,15 @@
 package eu.kanade.presentation.more.settings.widget
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,25 +32,38 @@ import tachiyomi.presentation.core.i18n.stringResource
 fun EditTextPreferenceWidget(
     title: String,
     subtitle: String?,
-    icon: ImageVector?,
+    dialogSubtitle: String? = null,
+    icon: ImageVector? = null,
     value: String,
     widget: @Composable (() -> Unit)? = null,
     singleLine: Boolean = true,
     canBeBlank: Boolean = false,
     formatSubtitle: Boolean = true,
+    validate: (String) -> Boolean = { true },
+    errorMessage: @Composable ((String) -> String)? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    enabled: Boolean = true,
     onConfirm: suspend (String) -> Boolean,
 ) {
     var isDialogShown by remember { mutableStateOf(false) }
 
     TextPreferenceWidget(
         title = title,
-        subtitle = if (formatSubtitle) subtitle?.format(value) else subtitle,
+        subtitle = if (formatSubtitle) {
+            try {
+                subtitle?.format(value)
+            } catch (ex: IllegalArgumentException) {
+                value
+            }
+        } else {
+            subtitle
+        },
         icon = icon,
         widget = widget,
         onPreferenceClick = { isDialogShown = true },
     )
 
-    if (isDialogShown) {
+    if (isDialogShown && enabled) {
         val scope = rememberCoroutineScope()
         val onDismissRequest = { isDialogShown = false }
         var textFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -55,13 +71,24 @@ fun EditTextPreferenceWidget(
         }
         AlertDialog(
             onDismissRequest = onDismissRequest,
-            title = { Text(text = title) },
+            title = {
+                Column {
+                    Text(text = title)
+                    if (dialogSubtitle != null) {
+                        Text(
+                            text = dialogSubtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
             text = {
                 OutlinedTextField(
                     value = textFieldValue,
                     onValueChange = { textFieldValue = it },
                     trailingIcon = {
-                        if (!canBeBlank && textFieldValue.text.isBlank()) {
+                        if ((textFieldValue.text.isBlank() && !canBeBlank) || !validate(textFieldValue.text)) {
                             Icon(imageVector = Icons.Filled.Error, contentDescription = null)
                         } else {
                             IconButton(onClick = { textFieldValue = TextFieldValue("") }) {
@@ -69,8 +96,14 @@ fun EditTextPreferenceWidget(
                             }
                         }
                     },
-                    isError = !canBeBlank && textFieldValue.text.isBlank(),
+                    supportingText = {
+                        if (!validate(textFieldValue.text) && errorMessage != null) {
+                            Text(errorMessage(textFieldValue.text))
+                        }
+                    },
+                    isError = (textFieldValue.text.isBlank() && !canBeBlank) || !validate(textFieldValue.text),
                     singleLine = singleLine,
+                    keyboardOptions = keyboardOptions,
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -79,7 +112,10 @@ fun EditTextPreferenceWidget(
             ),
             confirmButton = {
                 TextButton(
-                    enabled = textFieldValue.text != value && (canBeBlank || textFieldValue.text.isNotBlank()),
+                    enabled =
+                    textFieldValue.text != value &&
+                        (textFieldValue.text.isNotBlank() || canBeBlank) &&
+                        validate(textFieldValue.text),
                     onClick = {
                         scope.launch {
                             if (onConfirm(textFieldValue.text)) {
