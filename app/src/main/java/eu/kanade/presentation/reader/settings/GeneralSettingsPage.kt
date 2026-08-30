@@ -99,6 +99,23 @@ internal fun GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.keepScreenOn(),
     )
 
+    val customBrightness by screenModel.preferences.customBrightness().collectAsState()
+    val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_custom_brightness),
+        pref = screenModel.preferences.customBrightness(),
+    )
+    if (customBrightness) {
+        SliderItem(
+            value = customBrightnessValue,
+            valueRange = -75..100,
+            steps = 0,
+            label = stringResource(MR.strings.pref_custom_brightness),
+            onChange = { screenModel.preferences.customBrightnessValue().set(it) },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+    }
+
     CheckboxItem(
         label = stringResource(MR.strings.pref_read_with_long_tap),
         pref = screenModel.preferences.readWithLongTap(),

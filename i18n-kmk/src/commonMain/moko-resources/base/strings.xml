@@ -3446,4 +3446,6 @@
     <string name="pref_app_wake_lock_off">Off (System Timeout)</string>
     <string name="pref_app_wake_lock_reader_player">Reader &amp; Player Only</string>
     <string name="pref_app_wake_lock_full_app">Full App Everywhere</string>
+    <string name="pref_color_filter_brightness_label">Image Brightness</string>
+    <string name="pref_color_filter_reset">Reset Filters</string>
 </resources>

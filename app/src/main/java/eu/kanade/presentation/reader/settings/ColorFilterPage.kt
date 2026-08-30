@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences.Companion.ColorFi
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
 import tachiyomi.presentation.core.components.SwitchItem
@@ -21,17 +22,14 @@ import tachiyomi.presentation.core.util.collectAsState
 
 @Composable
 internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
-    // 1. Brightness & Contrast Sliders
-    val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
+    // 1. Image Color Filter Brightness Slider
+    val brightness by screenModel.preferences.colorFilterBrightness().collectAsState()
     SliderItem(
-        value = customBrightnessValue,
-        valueRange = -75..100,
+        value = (brightness * 100).toInt(),
+        valueRange = -100..100,
         steps = 0,
-        label = stringResource(MR.strings.pref_custom_brightness),
-        onChange = {
-            screenModel.preferences.customBrightness().set(it != 0)
-            screenModel.preferences.customBrightnessValue().set(it)
-        },
+        label = stringResource(KMR.strings.pref_color_filter_brightness_label),
+        onChange = { screenModel.preferences.colorFilterBrightness().set(it / 100f) },
         pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 
