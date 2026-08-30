@@ -60,6 +60,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Settings
@@ -495,6 +496,11 @@ internal fun NovelReaderContentHost(
     }
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
     var autoScrollWasUsed by remember(state.chapter.id) { mutableStateOf(false) }
+    var isDraggingForAutoScrollSpeed by remember(state.chapter.id) { mutableStateOf(false) }
+    var dragSpeedStartInterval by remember(state.chapter.id) { mutableFloatStateOf(3f) }
+    var dragSpeedStartX by remember(state.chapter.id) { mutableFloatStateOf(0f) }
+    var dragSpeedStartY by remember(state.chapter.id) { mutableFloatStateOf(0f) }
+    var autoScrollSpeedHudText by remember(state.chapter.id) { mutableStateOf<String?>(null) }
     var touchCooldownUntilNanos by remember(state.chapter.id) { mutableLongStateOf(0L) }
     var speedFactor by remember(state.chapter.id) { mutableFloatStateOf(1f) }
     var autoScrollEndStableFrames by remember(state.chapter.id) { mutableIntStateOf(0) }
@@ -1941,6 +1947,13 @@ internal fun NovelReaderContentHost(
             width,
             height,
         ->
+        if (autoScrollEnabled && !latestShowReaderUi) {
+            autoScrollEnabled = false
+            onCancelAutoScrollHandoff()
+            autoScrollEndStableFrames = 0
+            autoScrollEndDwellActive = false
+            return@rememberUpdatedState
+        }
         dispatchConfiguredReaderTapAction(
             tapX = tapX,
             tapY = tapY,
@@ -2177,9 +2190,9 @@ internal fun NovelReaderContentHost(
                         hasCompletedInitialReaderLayout = true
                     }
                 }
-                .pointerInput(autoScrollEnabled) {
+                .pointerInput(autoScrollEnabled, state.readerSettings.autoScrollInterval, autoScrollSpeed) {
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        val down = awaitFirstDown(requireUnconsumed = false)
                         val touchNanos = System.nanoTime()
                         touchCooldownUntilNanos = touchNanos + AUTO_SCROLL_COOLDOWN_MS * 1_000_000L
                         // The controller owns the cooldown the auto-scroll loop reads now; the
@@ -2188,6 +2201,50 @@ internal fun NovelReaderContentHost(
                             nowNanos = touchNanos,
                             cooldownMs = AUTO_SCROLL_COOLDOWN_MS,
                         )
+
+                        if (!autoScrollEnabled) return@awaitEachGesture
+
+                        dragSpeedStartX = down.position.x
+                        dragSpeedStartY = down.position.y
+                        val currentIntervalFloat = state.readerSettings.autoScrollInterval.toFloat().coerceIn(0.5f, 60f)
+                        dragSpeedStartInterval = currentIntervalFloat
+                        isDraggingForAutoScrollSpeed = false
+
+                        do {
+                            val event = awaitPointerEvent()
+                            val currentChange = event.changes.firstOrNull() ?: break
+                            if (!currentChange.pressed) break
+
+                            val dx = currentChange.position.x - dragSpeedStartX
+                            val dy = currentChange.position.y - dragSpeedStartY
+
+                            if (!isDraggingForAutoScrollSpeed) {
+                                val touchSlop = viewConfiguration.touchSlop
+                                if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f) {
+                                    isDraggingForAutoScrollSpeed = true
+                                    dragSpeedStartX = currentChange.position.x
+                                }
+                            }
+
+                            if (isDraggingForAutoScrollSpeed) {
+                                currentChange.consume()
+                                val change = (currentChange.position.x - dragSpeedStartX) / 60f
+                                val newInterval = (dragSpeedStartInterval - change).coerceIn(0.5f, 60.0f)
+                                val formatted = String.format(java.util.Locale.US, "%.1fs", newInterval)
+                                autoScrollSpeedHudText = "AutoScroll: $formatted"
+
+                                val newSpeed = intervalToAutoScrollSpeed(kotlin.math.round(newInterval).toInt())
+                                if (newSpeed != autoScrollSpeed) {
+                                    autoScrollSpeed = newSpeed
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
+
+                        if (isDraggingForAutoScrollSpeed) {
+                            isDraggingForAutoScrollSpeed = false
+                            val finalInterval = autoScrollSpeedToInterval(autoScrollSpeed)
+                            persistAutoScrollIntervalPreference(finalInterval)
+                        }
                     }
                 },
         ) {
@@ -3915,6 +3972,41 @@ internal fun NovelReaderContentHost(
                 DisplayRefreshHost(
                     hostState = displayRefreshHost,
                 )
+            }
+
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isDraggingForAutoScrollSpeed && autoScrollSpeedHudText != null,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(24.dp),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 8.dp,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FlashOn,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Text(
+                            text = autoScrollSpeedHudText.orEmpty(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             NovelReaderAutoScrollEndOverlay(
