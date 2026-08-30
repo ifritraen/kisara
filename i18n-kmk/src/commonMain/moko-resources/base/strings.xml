@@ -3387,4 +3387,6 @@
     <string name="action_show_all_episodes">Show all (%1$d)</string>
     <string name="episodes">Episodes</string>
     <string name="seasons">Seasons</string>
+    <string name="backup_detected_summary">Detected Backup Contents</string>
+    <string name="label_backup_full">Full</string>
 </resources>

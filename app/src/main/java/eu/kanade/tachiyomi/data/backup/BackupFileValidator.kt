@@ -55,11 +55,26 @@ class BackupFileValidator(
             .map { it.name }
             .sorted()
 
-        return Results(missingSources, missingTrackers)
+        return Results(
+            missingSources = missingSources,
+            missingTrackers = missingTrackers,
+            mangaCount = backup.backupManga.size,
+            animeCount = backup.backupAnime.size,
+            novelCount = backup.backupNovel.size,
+            mangaCategoryCount = backup.backupCategories.size,
+            animeCategoryCount = backup.backupAnimeCategories.size,
+            novelCategoryCount = backup.backupNovelCategories.size,
+        )
     }
 
     data class Results(
         val missingSources: List<String>,
         val missingTrackers: List<String>,
+        val mangaCount: Int = 0,
+        val animeCount: Int = 0,
+        val novelCount: Int = 0,
+        val mangaCategoryCount: Int = 0,
+        val animeCategoryCount: Int = 0,
+        val novelCategoryCount: Int = 0,
     )
 }

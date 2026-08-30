@@ -76,9 +76,56 @@ class RestoreBackupScreen(
                 }
 
                 if (state.canRestore) {
+                    val results = state.results
+                    if (results != null) {
+                        item {
+                            SectionCard {
+                                Column(
+                                    modifier = Modifier.padding(MaterialTheme.padding.medium),
+                                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+                                ) {
+                                    Text(
+                                        text = stringResource(KMR.strings.backup_detected_summary),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    if (results.mangaCount > 0) {
+                                        Text(
+                                            text = "• ${stringResource(MR.strings.manga)}: ${results.mangaCount} (" +
+                                                "${results.mangaCategoryCount} ${stringResource(MR.strings.categories).lowercase()})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                    if (results.animeCount > 0) {
+                                        Text(
+                                            text = "• ${stringResource(KMR.strings.label_anime)}: ${results.animeCount} (" +
+                                                "${results.animeCategoryCount} ${stringResource(MR.strings.categories).lowercase()})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                    if (results.novelCount > 0) {
+                                        Text(
+                                            text = "• ${stringResource(KMR.strings.label_novel)}: ${results.novelCount} (" +
+                                                "${results.novelCategoryCount} ${stringResource(MR.strings.categories).lowercase()})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         SectionCard {
-                            RestoreOptions.options.forEach { option ->
+                            val filteredOptions = RestoreOptions.options.filter { option ->
+                                when (option.label) {
+                                    MR.strings.manga -> (results?.mangaCount ?: 1) > 0
+                                    KMR.strings.label_anime -> (results?.animeCount ?: 1) > 0
+                                    KMR.strings.label_novel -> (results?.novelCount ?: 1) > 0
+                                    else -> true
+                                }
+                            }
+                            filteredOptions.forEach { option ->
                                 LabeledCheckbox(
                                     label = stringResource(option.label),
                                     checked = option.getter(state.options),
@@ -196,26 +243,43 @@ private class RestoreBackupScreenModel(
             setError(
                 error = InvalidRestore(uri, e.message.toString()),
                 canRestore = false,
+                results = null,
             )
             return
         }
+
+        val initialOptions = RestoreOptions(
+            libraryEntries = results.mangaCount > 0,
+            animeEntries = results.animeCount > 0,
+            novelEntries = results.novelCount > 0,
+            categories = results.mangaCategoryCount > 0 || results.animeCategoryCount > 0 || results.novelCategoryCount > 0,
+        )
 
         if (results.missingSources.isNotEmpty() || results.missingTrackers.isNotEmpty()) {
             setError(
                 error = MissingRestoreComponents(uri, results.missingSources, results.missingTrackers),
                 canRestore = true,
+                results = results,
+                options = initialOptions,
             )
             return
         }
 
-        setError(error = null, canRestore = true)
+        setError(error = null, canRestore = true, results = results, options = initialOptions)
     }
 
-    private fun setError(error: Any?, canRestore: Boolean) {
+    private fun setError(
+        error: Any?,
+        canRestore: Boolean,
+        results: BackupFileValidator.Results?,
+        options: RestoreOptions = state.value.options,
+    ) {
         mutableState.update {
             it.copy(
                 error = error,
                 canRestore = canRestore,
+                results = results,
+                options = options,
             )
         }
     }
@@ -224,6 +288,7 @@ private class RestoreBackupScreenModel(
     data class State(
         val error: Any? = null,
         val canRestore: Boolean = false,
+        val results: BackupFileValidator.Results? = null,
         val options: RestoreOptions = RestoreOptions(),
     )
 }

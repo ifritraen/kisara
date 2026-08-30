@@ -6,7 +6,15 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 
+enum class BackupTargetMode {
+    MANGA,
+    ANIME,
+    NOVEL,
+    FULL,
+}
+
 data class BackupOptions(
+    val targetMode: BackupTargetMode = BackupTargetMode.FULL,
     val libraryEntries: Boolean = true,
     val categories: Boolean = true,
     val chapters: Boolean = true,
@@ -52,11 +60,195 @@ data class BackupOptions(
         // KMK <--
     )
 
-    fun canCreate() =
-        libraryEntries || animeEntries || novelEntries || categories || appSettings || extensionRepoSettings || sourceSettings || savedSearchesFeeds || sideloadedExtensions || vpnSettings
+    fun canCreate(): Boolean = when (targetMode) {
+        BackupTargetMode.MANGA -> libraryEntries || categories || sourceSettings || savedSearchesFeeds
+        BackupTargetMode.ANIME -> animeEntries || categories || sourceSettings || savedSearchesFeeds
+        BackupTargetMode.NOVEL -> novelEntries || categories || sourceSettings || savedSearchesFeeds
+        BackupTargetMode.FULL -> libraryEntries || animeEntries || novelEntries || categories || appSettings || extensionRepoSettings || sourceSettings || savedSearchesFeeds || sideloadedExtensions || vpnSettings
+    }
 
     companion object {
-        val libraryOptions = persistentListOf(
+        fun forManga() = BackupOptions(
+            targetMode = BackupTargetMode.MANGA,
+            libraryEntries = true,
+            animeEntries = false,
+            novelEntries = false,
+            appSettings = false,
+            vpnSettings = false,
+        )
+
+        fun forAnime() = BackupOptions(
+            targetMode = BackupTargetMode.ANIME,
+            libraryEntries = false,
+            animeEntries = true,
+            novelEntries = false,
+            appSettings = false,
+            vpnSettings = false,
+        )
+
+        fun forNovel() = BackupOptions(
+            targetMode = BackupTargetMode.NOVEL,
+            libraryEntries = false,
+            animeEntries = false,
+            novelEntries = true,
+            appSettings = false,
+            vpnSettings = false,
+        )
+
+        fun forFull() = BackupOptions(
+            targetMode = BackupTargetMode.FULL,
+            libraryEntries = true,
+            animeEntries = true,
+            novelEntries = true,
+            appSettings = true,
+            vpnSettings = true,
+        )
+
+        val mangaLibraryOptions = persistentListOf(
+            Entry(
+                label = MR.strings.manga,
+                getter = BackupOptions::libraryEntries,
+                setter = { options, enabled -> options.copy(libraryEntries = enabled) },
+            ),
+            Entry(
+                label = MR.strings.chapters,
+                getter = BackupOptions::chapters,
+                setter = { options, enabled -> options.copy(chapters = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = MR.strings.track,
+                getter = BackupOptions::tracking,
+                setter = { options, enabled -> options.copy(tracking = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = MR.strings.history,
+                getter = BackupOptions::history,
+                setter = { options, enabled -> options.copy(history = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = MR.strings.categories,
+                getter = BackupOptions::categories,
+                setter = { options, enabled -> options.copy(categories = enabled) },
+            ),
+            Entry(
+                label = MR.strings.non_library_settings,
+                getter = BackupOptions::readEntries,
+                setter = { options, enabled -> options.copy(readEntries = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = SYMR.strings.custom_entry_info,
+                getter = BackupOptions::customInfo,
+                setter = { options, enabled -> options.copy(customInfo = enabled) },
+                enabled = { it.libraryEntries },
+            ),
+            Entry(
+                label = KMR.strings.saved_searches_feeds,
+                getter = BackupOptions::savedSearchesFeeds,
+                setter = { options, enabled -> options.copy(savedSearchesFeeds = enabled) },
+            ),
+        )
+
+        val animeLibraryOptions = persistentListOf(
+            Entry(
+                label = KMR.strings.label_anime,
+                getter = BackupOptions::animeEntries,
+                setter = { options, enabled -> options.copy(animeEntries = enabled) },
+            ),
+            Entry(
+                label = KMR.strings.episodes,
+                getter = BackupOptions::chapters,
+                setter = { options, enabled -> options.copy(chapters = enabled) },
+                enabled = { it.animeEntries },
+            ),
+            Entry(
+                label = MR.strings.track,
+                getter = BackupOptions::tracking,
+                setter = { options, enabled -> options.copy(tracking = enabled) },
+                enabled = { it.animeEntries },
+            ),
+            Entry(
+                label = MR.strings.history,
+                getter = BackupOptions::history,
+                setter = { options, enabled -> options.copy(history = enabled) },
+                enabled = { it.animeEntries },
+            ),
+            Entry(
+                label = MR.strings.categories,
+                getter = BackupOptions::categories,
+                setter = { options, enabled -> options.copy(categories = enabled) },
+            ),
+            Entry(
+                label = MR.strings.non_library_settings,
+                getter = BackupOptions::readEntries,
+                setter = { options, enabled -> options.copy(readEntries = enabled) },
+                enabled = { it.animeEntries },
+            ),
+            Entry(
+                label = SYMR.strings.custom_entry_info,
+                getter = BackupOptions::customInfo,
+                setter = { options, enabled -> options.copy(customInfo = enabled) },
+                enabled = { it.animeEntries },
+            ),
+            Entry(
+                label = KMR.strings.saved_searches_feeds,
+                getter = BackupOptions::savedSearchesFeeds,
+                setter = { options, enabled -> options.copy(savedSearchesFeeds = enabled) },
+            ),
+        )
+
+        val novelLibraryOptions = persistentListOf(
+            Entry(
+                label = KMR.strings.label_novel,
+                getter = BackupOptions::novelEntries,
+                setter = { options, enabled -> options.copy(novelEntries = enabled) },
+            ),
+            Entry(
+                label = MR.strings.chapters,
+                getter = BackupOptions::chapters,
+                setter = { options, enabled -> options.copy(chapters = enabled) },
+                enabled = { it.novelEntries },
+            ),
+            Entry(
+                label = MR.strings.track,
+                getter = BackupOptions::tracking,
+                setter = { options, enabled -> options.copy(tracking = enabled) },
+                enabled = { it.novelEntries },
+            ),
+            Entry(
+                label = MR.strings.history,
+                getter = BackupOptions::history,
+                setter = { options, enabled -> options.copy(history = enabled) },
+                enabled = { it.novelEntries },
+            ),
+            Entry(
+                label = MR.strings.categories,
+                getter = BackupOptions::categories,
+                setter = { options, enabled -> options.copy(categories = enabled) },
+            ),
+            Entry(
+                label = MR.strings.non_library_settings,
+                getter = BackupOptions::readEntries,
+                setter = { options, enabled -> options.copy(readEntries = enabled) },
+                enabled = { it.novelEntries },
+            ),
+            Entry(
+                label = SYMR.strings.custom_entry_info,
+                getter = BackupOptions::customInfo,
+                setter = { options, enabled -> options.copy(customInfo = enabled) },
+                enabled = { it.novelEntries },
+            ),
+            Entry(
+                label = KMR.strings.saved_searches_feeds,
+                getter = BackupOptions::savedSearchesFeeds,
+                setter = { options, enabled -> options.copy(savedSearchesFeeds = enabled) },
+            ),
+        )
+
+        val fullLibraryOptions = persistentListOf(
             Entry(
                 label = MR.strings.manga,
                 getter = BackupOptions::libraryEntries,
