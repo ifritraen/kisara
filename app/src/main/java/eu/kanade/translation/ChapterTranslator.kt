@@ -209,7 +209,10 @@ class ChapterTranslator(
 
     fun queueChapter(manga: Manga, chapter: Chapter) {
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
-        if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.ogTitle, source) != null) return
+        val existing = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.ogTitle, source)
+        if (existing != null && existing.exists()) {
+            existing.delete()
+        }
         if (queueState.value.any { it.chapter.id == chapter.id }) return
         val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
         val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
@@ -319,11 +322,11 @@ class ChapterTranslator(
                                 totalPages = streams.size,
                                 step = "Loading page ${index + 1}...",
                             )
-                            val pageTmpFile = translationMangaDir.createFile("tmp_page_$index")!!
+                            val pageTmpFile = File(context.cacheDir, "trans_tmp_${System.currentTimeMillis()}_${index}.bin")
                             try {
-                                streamFn().use { pageInput -> pageTmpFile.openOutputStream().use { out -> pageInput.copyTo(out) } }
+                                streamFn().use { pageInput -> pageTmpFile.outputStream().use { out -> pageInput.copyTo(out) } }
                                 val fullBitmap = try {
-                                    pageTmpFile.openInputStream().use { BitmapFactory.decodeStream(it) }
+                                    pageTmpFile.inputStream().use { BitmapFactory.decodeStream(it) }
                                 } catch (e: Throwable) {
                                     TranslationReport.log("ERROR", "OCR", "Failed to decode page ${index + 1}", e)
                                     null

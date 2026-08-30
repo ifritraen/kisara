@@ -110,9 +110,9 @@ internal class DownloadPageLoader(
                 } else {
                     null
                 }
-                if (superResFile != null && superResFile.exists()) {
+                if (superResFile != null && superResFile.exists() && superResFile.length() > 0) {
                     superResFile.openInputStream()!!
-                } else if (colorizedFile != null && colorizedFile.exists()) {
+                } else if (colorizedFile != null && colorizedFile.exists() && colorizedFile.length() > 0) {
                     colorizedFile.openInputStream()!!
                 } else {
                     context.contentResolver.openInputStream(page.uri ?: Uri.EMPTY)!!

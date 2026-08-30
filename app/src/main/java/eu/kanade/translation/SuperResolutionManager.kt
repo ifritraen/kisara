@@ -175,10 +175,17 @@ class SuperResolutionManager(
                                 upscaledBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
                                 outputStream.flush()
                             }
+                            if (outFile.length() == 0L) {
+                                outFile.delete()
+                            }
                             if (upscaledBitmap != inputBitmap) {
                                 upscaledBitmap.recycle()
                             }
                             inputBitmap.recycle()
+                        } else {
+                            if (outFile.length() == 0L) {
+                                outFile.delete()
+                            }
                         }
                     }
                 }
@@ -234,7 +241,7 @@ class SuperResolutionManager(
     ): Boolean {
         val source = sourceManager.get(sourceId) ?: return false
         val chapterDir = findChapterDir(chapterName, chapterScanlator, mangaTitle, source)
-        return chapterDir?.exists() == true && chapterDir.listFiles()?.isNotEmpty() == true
+        return chapterDir?.exists() == true && chapterDir.listFiles()?.any { it.length() > 0 } == true
     }
 
     fun getSuperResolutionPageFile(
@@ -245,7 +252,7 @@ class SuperResolutionManager(
         pageName: String,
     ): UniFile? {
         val chapterDir = findChapterDir(chapterName, scanlator, mangaTitle, source)
-        return chapterDir?.findFile(pageName)
+        return chapterDir?.findFile(pageName)?.takeIf { it.exists() && it.length() > 0 }
     }
 
     internal fun findChapterDir(chapterName: String, scanlator: String?, mangaTitle: String, source: Source): UniFile? {
