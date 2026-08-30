@@ -4,6 +4,7 @@ import androidx.compose.material3.FabPosition
 import com.materialkolor.PaletteStyle
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.domain.ui.model.AppWakeLockMode
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
 import tachiyomi.core.common.preference.PreferenceStore
@@ -47,6 +48,8 @@ class UiPreferences(
     fun preloadLibraryColor() = preferenceStore.getBoolean("pref_preload_library_color_key", true)
 
     fun activeMediaType() = preferenceStore.getEnum("pref_active_media_type_key", eu.kanade.domain.ui.model.MediaType.MANGA)
+
+    fun appWakeLockMode() = preferenceStore.getEnum("pref_app_wake_lock_mode_key", AppWakeLockMode.READER_PLAYER_ONLY)
     // KMK <--
 
     fun relativeTime() = preferenceStore.getBoolean("relative_time_v2", true)

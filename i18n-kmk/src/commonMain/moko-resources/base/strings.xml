@@ -3440,4 +3440,10 @@
     <string name="player_deband_grain">Deband Grain</string>
     <string name="player_motion_interpolation">Motion Interpolation</string>
     <string name="player_warm_tint">Eye Care Warm Tint</string>
+    <string name="pref_category_display_screen">Display &amp; Screen</string>
+    <string name="pref_app_wake_lock_title">Keep Screen Awake (Wake Lock)</string>
+    <string name="pref_app_wake_lock_summary">Prevent screen from sleeping while using the app</string>
+    <string name="pref_app_wake_lock_off">Off (System Timeout)</string>
+    <string name="pref_app_wake_lock_reader_player">Reader &amp; Player Only</string>
+    <string name="pref_app_wake_lock_full_app">Full App Everywhere</string>
 </resources>

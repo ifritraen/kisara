@@ -281,6 +281,18 @@ class MainActivity : BaseActivity() {
             // KMK <--
         }
 
+        // KMK --> Keep Screen Awake (Wake Lock)
+        uiPreferences.appWakeLockMode().changes()
+            .onEach { mode ->
+                if (mode == eu.kanade.domain.ui.model.AppWakeLockMode.FULL_APP) {
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+            .launchIn(lifecycleScope)
+        // KMK <--
+
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
         if (!isTaskRoot) {
             finish()

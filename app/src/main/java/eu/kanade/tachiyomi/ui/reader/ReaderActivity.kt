@@ -1805,7 +1805,12 @@ class ReaderActivity : BaseActivity() {
                 .onEach { setDisplayProfile(it) }
                 .launchIn(lifecycleScope)
 
-            readerPreferences.keepScreenOn().changes()
+            combine(
+                readerPreferences.keepScreenOn().changes(),
+                Injekt.get<eu.kanade.domain.ui.UiPreferences>().appWakeLockMode().changes(),
+            ) { readerKeepOn, wakeLockMode ->
+                readerKeepOn || wakeLockMode != eu.kanade.domain.ui.model.AppWakeLockMode.OFF
+            }
                 .onEach(::setKeepScreenOn)
                 .launchIn(lifecycleScope)
 
