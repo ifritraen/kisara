@@ -73,6 +73,28 @@ class NHentaiSearchMetadata : RaisedSearchMetadata() {
             }
         }
 
+        val desc = buildString {
+            japaneseTitle?.takeIf { it.isNotBlank() }?.let { append("Japanese: ").append(it).append("\n") }
+            englishTitle?.takeIf { it.isNotBlank() && it != title }?.let { append("English: ").append(it).append("\n") }
+            shortTitle?.takeIf { it.isNotBlank() && it != title }?.let { append("Pretty: ").append(it).append("\n") }
+            nhId?.let { append("ID: #").append(it).append("\n") }
+            uploadDate?.let {
+                val formatted = MetadataUtil.EX_DATE_FORMAT.format(
+                    ZonedDateTime.ofInstant(Instant.ofEpochSecond(it), ZoneId.systemDefault()),
+                )
+                append("Uploaded: ").append(formatted).append("\n")
+            }
+            favoritesCount?.takeIf { it > 0 }?.let { append("Favorites: ").append(it).append("\n") }
+            if (pageImagePreviewUrls.isNotEmpty()) {
+                append("Pages: ").append(pageImagePreviewUrls.size).append("\n")
+            }
+            scanlator?.takeIf { it.isNotBlank() }?.let { append("Scanlator: ").append(it).append("\n") }
+            if (!manga.description.isNullOrBlank()) {
+                if (isNotEmpty()) append("\n")
+                append(manga.description)
+            }
+        }.trim()
+
         return manga.copy(
             url = key ?: manga.url,
             thumbnail_url = coverImageUrl ?: manga.thumbnail_url,
@@ -81,7 +103,7 @@ class NHentaiSearchMetadata : RaisedSearchMetadata() {
             author = artist ?: manga.artist,
             genre = genres,
             status = status,
-            description = null,
+            description = desc.ifBlank { manga.description },
         )
     }
 

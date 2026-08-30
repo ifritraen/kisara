@@ -28,7 +28,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.CacheControl
+import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import tachiyomi.core.common.util.lang.withIOContext
 
 class NHentai(delegate: HttpSource, val context: Context) :
@@ -65,53 +67,83 @@ class NHentai(delegate: HttpSource, val context: Context) :
         }
     }
 
+    override fun mangaDetailsRequest(manga: SManga): Request {
+        val nhId = runCatching { NHentaiSearchMetadata.nhUrlToId(manga.url) }.getOrNull()
+        return if (nhId != null) {
+            GET("https://nhentai.net/api/gallery/$nhId", headers)
+        } else {
+            delegate.mangaDetailsRequest(manga)
+        }
+    }
+
     override suspend fun getMangaDetails(manga: SManga): SManga {
-        val response = client.newCall(mangaDetailsRequest(manga)).awaitSuccess()
-        return parseToManga(manga, response)
+        return try {
+            val response = client.newCall(mangaDetailsRequest(manga)).awaitSuccess()
+            parseToManga(manga, response)
+        } catch (e: Exception) {
+            delegate.getMangaDetails(manga)
+        }
     }
 
     override suspend fun parseIntoMetadata(metadata: NHentaiSearchMetadata, input: Response) {
-        if (nhConfig == null) getNhConfig()
-        val jsonResponse = jsonParser.decodeFromString<JsonResponse>(input.body.string())
+        val bodyStr = input.body.string()
+        val jsonResponse = runCatching {
+            jsonParser.decodeFromString<JsonResponse>(bodyStr)
+        }.getOrNull()
 
-        with(metadata) {
-            nhId = jsonResponse.id
+        if (jsonResponse != null) {
+            if (nhConfig == null) getNhConfig()
+            with(metadata) {
+                nhId = jsonResponse.id
 
-            uploadDate = jsonResponse.uploadDate
+                uploadDate = jsonResponse.uploadDate
 
-            favoritesCount = jsonResponse.numFavorites
+                favoritesCount = jsonResponse.numFavorites
 
-            mediaId = jsonResponse.mediaId
+                mediaId = jsonResponse.mediaId
 
-            jsonResponse.title?.let { title ->
-                japaneseTitle = title.japanese
-                shortTitle = title.pretty
-                englishTitle = title.english
+                jsonResponse.title?.let { title ->
+                    japaneseTitle = title.japanese
+                    shortTitle = title.pretty
+                    englishTitle = title.english
+                }
+
+                preferredTitle = this@NHentai.preferredTitle
+
+                coverImageUrl =
+                    jsonResponse.cover?.path?.let { "$thumbServer/$it" }
+                        ?: jsonResponse.thumbnail?.path?.let { "$thumbServer/$it" }
+
+                pageImagePreviewUrls = jsonResponse.pages.mapNotNull { it.thumbnail }
+
+                scanlator = jsonResponse.scanlator?.trimOrNull()
+
+                tags.clear()
+                jsonResponse.tags.filter {
+                    it.type != null && it.name != null
+                }.mapTo(tags) {
+                    RaisedTag(
+                        it.type!!,
+                        it.name!!,
+                        if (it.type == NHentaiSearchMetadata.NHENTAI_CATEGORIES_NAMESPACE) {
+                            RaisedSearchMetadata.TAG_TYPE_VIRTUAL
+                        } else {
+                            NHentaiSearchMetadata.TAG_TYPE_DEFAULT
+                        },
+                    )
+                }
             }
-
-            preferredTitle = this@NHentai.preferredTitle
-
-            coverImageUrl =
-                jsonResponse.cover?.path?.let { "$thumbServer/$it" }
-                    ?: jsonResponse.thumbnail?.path?.let { "$thumbServer/$it" }
-
-            pageImagePreviewUrls = jsonResponse.pages.mapNotNull { it.thumbnail }
-
-            scanlator = jsonResponse.scanlator?.trimOrNull()
-
-            tags.clear()
-            jsonResponse.tags.filter {
-                it.type != null && it.name != null
-            }.mapTo(tags) {
-                RaisedTag(
-                    it.type!!,
-                    it.name!!,
-                    if (it.type == NHentaiSearchMetadata.NHENTAI_CATEGORIES_NAMESPACE) {
-                        RaisedSearchMetadata.TAG_TYPE_VIRTUAL
-                    } else {
-                        NHentaiSearchMetadata.TAG_TYPE_DEFAULT
-                    },
-                )
+        } else {
+            // HTML response fallback from web gallery page
+            try {
+                val reconstructedResponse = input.newBuilder()
+                    .body(bodyStr.toResponseBody(input.body.contentType()))
+                    .build()
+                val delegateManga = delegate.mangaDetailsParse(reconstructedResponse)
+                metadata.shortTitle = delegateManga.title
+                metadata.coverImageUrl = delegateManga.thumbnail_url
+                metadata.scanlator = delegateManga.author
+            } catch (_: Exception) {
             }
         }
     }
