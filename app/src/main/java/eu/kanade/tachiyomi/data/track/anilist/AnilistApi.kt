@@ -989,7 +989,8 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
         isAdult: Boolean?,
         season: String,
         seasonYear: Int,
-        prevSeasons: List<Pair<String, Int>>
+        prevSeasons: List<Pair<String, Int>>,
+        enabledSections: Set<String> = emptySet(),
     ): List<ALHomeSection> {
         return withIOContext {
             val mediaFragment = """
@@ -1000,6 +1001,8 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
             val formatFilter = format?.let { ", format: $it" } ?: ""
             val adultFilter = isAdult?.let { ", isAdult: $it" } ?: ""
             val baseFilter = "$typeFilter$formatFilter$adultFilter"
+
+            val isAll = enabledSections.isEmpty()
 
             val sb = StringBuilder("query {\n")
 
@@ -1013,19 +1016,40 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                 """.trimIndent()).append("\n")
             }
 
-            addSection("trendingMedia", "$baseFilter, sort: TRENDING_DESC")
-            addSection("popularMedia", "$baseFilter, sort: POPULARITY_DESC")
-            addSection("recentMedia", "$baseFilter, sort: ID_DESC")
-            addSection("topRatedMedia", "$baseFilter, sort: SCORE_DESC")
-            addSection("recentlyCompletedMedia", "$baseFilter, status: FINISHED, sort: END_DATE_DESC")
-            addSection("upcomingMedia", "$baseFilter, status: NOT_YET_RELEASED, sort: POPULARITY_DESC")
-            addSection("popularThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC")
-            addSection("topRatedThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: SCORE_DESC")
-
-            prevSeasons.forEachIndexed { i, (s, y) ->
-                addSection("prev${i}Popular", "$baseFilter, season: $s, seasonYear: $y, sort: POPULARITY_DESC")
-                addSection("prev${i}TopRated", "$baseFilter, season: $s, seasonYear: $y, sort: SCORE_DESC")
+            fun addRecSection(alias: String, sort: String) {
+                sb.append("""
+                    $alias: Page(page: 1, perPage: 15) {
+                        recommendations(sort: $sort) {
+                            mediaRecommendation {
+                                $mediaFragment
+                            }
+                        }
+                    }
+                """.trimIndent()).append("\n")
             }
+
+            if (isAll || "trending" in enabledSections) addSection("trendingMedia", "$baseFilter, sort: TRENDING_DESC")
+            if (isAll || "popular" in enabledSections) addSection("popularMedia", "$baseFilter, sort: POPULARITY_DESC")
+            if (isAll || "recent" in enabledSections) addSection("recentMedia", "$baseFilter, sort: ID_DESC")
+            if (isAll || "top_rated" in enabledSections) addSection("topRatedMedia", "$baseFilter, sort: SCORE_DESC")
+            if (isAll || "recently_completed" in enabledSections) addSection("recentlyCompletedMedia", "$baseFilter, status: FINISHED, sort: END_DATE_DESC")
+            if (isAll || "upcoming" in enabledSections) addSection("upcomingMedia", "$baseFilter, status: NOT_YET_RELEASED, sort: POPULARITY_DESC")
+            if (isAll || "popular_season" in enabledSections) addSection("popularThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC")
+            if (isAll || "top_rated_season" in enabledSections) addSection("topRatedThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: SCORE_DESC")
+
+            if (isAll || "prev_popular" in enabledSections) {
+                prevSeasons.forEachIndexed { i, (s, y) ->
+                    addSection("prev${i}Popular", "$baseFilter, season: $s, seasonYear: $y, sort: POPULARITY_DESC")
+                }
+            }
+            if (isAll || "prev_top_rated" in enabledSections) {
+                prevSeasons.forEachIndexed { i, (s, y) ->
+                    addSection("prev${i}TopRated", "$baseFilter, season: $s, seasonYear: $y, sort: SCORE_DESC")
+                }
+            }
+
+            if (isAll || "community_recommendation" in enabledSections) addRecSection("communityRecs", "RATING_DESC")
+            if (isAll || "recommended" in enabledSections) addRecSection("recommendedMedia", "ID_DESC")
 
             sb.append("}")
 
@@ -1045,16 +1069,41 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
             fun extract(key: String, title: String) {
                 val mediaList = data[key]?.jsonObject?.get("media")?.jsonArray
                 if (mediaList != null && mediaList.isNotEmpty()) {
-                    val items = mediaList.map { json.decodeFromJsonElement<ALSearchItem>(it) }
-                    sections.add(ALHomeSection(key, title, items))
+                    val items = mediaList.mapNotNull {
+                        try {
+                            json.decodeFromJsonElement<ALSearchItem>(it)
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    }
+                    if (items.isNotEmpty()) {
+                        sections.add(ALHomeSection(key, title, items))
+                    }
                 }
             }
 
-            extract("trendingMedia", "Trending Now")
-            extract("popularMedia", "All Time Popular")
-            extract("recentMedia", "Recently Added")
-            extract("topRatedMedia", "Highest Rated")
-            extract("recentlyCompletedMedia", "Recently Completed")
+            fun extractRec(key: String, title: String) {
+                val recList = data[key]?.jsonObject?.get("recommendations")?.jsonArray
+                if (recList != null && recList.isNotEmpty()) {
+                    val items = recList.mapNotNull { recElem ->
+                        val mediaRec = recElem.jsonObject["mediaRecommendation"] ?: return@mapNotNull null
+                        try {
+                            json.decodeFromJsonElement<ALSearchItem>(mediaRec)
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    }
+                    if (items.isNotEmpty()) {
+                        sections.add(ALHomeSection(key, title, items))
+                    }
+                }
+            }
+
+            extract("recentMedia", "Recent")
+            extract("trendingMedia", "Trending")
+            extract("topRatedMedia", "Top (High scored)")
+            extract("popularMedia", "Popular")
+            extract("recentlyCompletedMedia", "Recently completed")
             extract("upcomingMedia", "Upcoming")
 
             val seasonTitle = "${season.lowercase().replaceFirstChar { it.uppercase() }} $seasonYear"
@@ -1063,9 +1112,12 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
 
             prevSeasons.forEachIndexed { i, (s, y) ->
                 val prevTitle = "${s.lowercase().replaceFirstChar { it.uppercase() }} $y"
-                extract("prev${i}Popular", "Popular $prevTitle")
-                extract("prev${i}TopRated", "Highest Rated $prevTitle")
+                extract("prev${i}TopRated", "Top (High scored) in $prevTitle")
+                extract("prev${i}Popular", "Most Popular in $prevTitle")
             }
+
+            extractRec("recommendedMedia", "Recommended for you")
+            extractRec("communityRecs", "Community recommendation")
 
             sections
         }

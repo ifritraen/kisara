@@ -108,6 +108,7 @@ class TrackScreenModel(
                 }
 
                 val isAdult = if (uiPreferences.trackTabHideAdult().get()) false else null
+                val enabledSections = uiPreferences.anilistHomeEnabledSections().get()
 
                 val sections = trackerManager.aniList.api.getHomePage(
                     type = type,
@@ -116,7 +117,36 @@ class TrackScreenModel(
                     season = currentSeason.season.anilistName,
                     seasonYear = currentSeason.year,
                     prevSeasons = prevSeasons,
-                )
+                    enabledSections = enabledSections,
+                ).toMutableList()
+
+                // Continue section (According to tracker)
+                if ((enabledSections.isEmpty() || "continue" in enabledSections) && isAniListLoggedIn()) {
+                    try {
+                        val userListResult = trackerManager.aniList.api.getUserMediaList(type)
+                        val continueItems = userListResult.lists
+                            .filter { it.status == "CURRENT" }
+                            .flatMap { it.entries }
+                            .mapNotNull { entry ->
+                                val media = entry.media ?: return@mapNotNull null
+                                ALSearchItem(
+                                    id = media.id,
+                                    title = media.title?.userPreferred ?: "",
+                                    coverImage = media.coverImage?.large,
+                                    format = media.format,
+                                    status = media.status,
+                                    episodes = media.episodes,
+                                    chapters = media.chapters,
+                                    averageScore = media.averageScore,
+                                    genres = media.genres,
+                                    isAdult = media.isAdult,
+                                )
+                            }
+                        if (continueItems.isNotEmpty()) {
+                            sections.add(0, ALHomeSection("continue", "Continue", continueItems))
+                        }
+                    } catch (_: Throwable) {}
+                }
 
                 // Cache items for quick lookups
                 sections.forEach { section ->
@@ -134,6 +164,30 @@ class TrackScreenModel(
                 _state.update { it.copy(isLoadingHome = false) }
             }
         }
+    }
+
+    fun toggleAnilistHomeSection(key: String, isEnabled: Boolean) {
+        val current = uiPreferences.anilistHomeEnabledSections().get().toMutableSet()
+        if (current.isEmpty()) {
+            current.addAll(eu.kanade.tachiyomi.ui.track.anilist.AnilistLandingSections.ALL_SECTIONS.map { it.key })
+        }
+        if (isEnabled) {
+            current.add(key)
+        } else {
+            current.remove(key)
+        }
+        uiPreferences.anilistHomeEnabledSections().set(current)
+        _state.value.currentHomeMediaType?.let { loadAnilistHome(it, forceRefresh = true) }
+    }
+
+    fun selectAllAnilistHomeSections() {
+        uiPreferences.anilistHomeEnabledSections().set(emptySet())
+        _state.value.currentHomeMediaType?.let { loadAnilistHome(it, forceRefresh = true) }
+    }
+
+    fun deselectAllAnilistHomeSections() {
+        uiPreferences.anilistHomeEnabledSections().set(setOf("__none__"))
+        _state.value.currentHomeMediaType?.let { loadAnilistHome(it, forceRefresh = true) }
     }
 
     fun loadAnilistUserList(mediaType: MediaType, forceRefresh: Boolean = false) {

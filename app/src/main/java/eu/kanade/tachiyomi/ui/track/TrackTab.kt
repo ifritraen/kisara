@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TrackChanges
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -53,6 +54,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -111,6 +113,7 @@ import eu.kanade.tachiyomi.ui.track.anilist.AnilistHomeScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistMyListScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistProfileScreen
 import eu.kanade.tachiyomi.ui.track.anilist.AnilistSearchScreen
+import eu.kanade.tachiyomi.ui.track.anilist.AnilistSectionFilterSheet
 import eu.kanade.tachiyomi.ui.track.myanimelist.MALHomeScreen
 import eu.kanade.tachiyomi.ui.track.myanimelist.MALMyListScreen
 import eu.kanade.tachiyomi.ui.track.myanimelist.MALProfileScreen
@@ -254,6 +257,8 @@ object TrackTab : Tab {
         }
 
         val pagerState = rememberPagerState(initialPage = currentPageIndex.coerceIn(0, subTabs.size - 1)) { subTabs.size }
+        var showAnilistSectionFilterSheet by remember { mutableStateOf(false) }
+        val enabledAnilistSections by uiPreferences.anilistHomeEnabledSections().collectAsState()
 
         LaunchedEffect(pagerState.currentPage) {
             currentPageIndex = pagerState.currentPage
@@ -331,7 +336,19 @@ object TrackTab : Tab {
             }
         }
 
-        Scaffold { paddingValues ->
+        Scaffold(
+            floatingActionButton = {
+                if (activeTrackerService == UiPreferences.TrackTabService.ANILIST && pagerState.currentPage == 0) {
+                    FloatingActionButton(
+                        onClick = { showAnilistSectionFilterSheet = true },
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Filter Landing Sections")
+                    }
+                }
+            },
+        ) { paddingValues ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -528,6 +545,16 @@ object TrackTab : Tab {
                         context.openInBrowser(url)
                     }
                 },
+            )
+        }
+
+        if (showAnilistSectionFilterSheet) {
+            AnilistSectionFilterSheet(
+                enabledSections = enabledAnilistSections,
+                onToggleSection = screenModel::toggleAnilistHomeSection,
+                onSelectAll = screenModel::selectAllAnilistHomeSections,
+                onDeselectAll = screenModel::deselectAllAnilistHomeSections,
+                onDismissRequest = { showAnilistSectionFilterSheet = false },
             )
         }
     }

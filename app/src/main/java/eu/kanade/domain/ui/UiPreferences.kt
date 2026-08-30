@@ -272,6 +272,7 @@ class UiPreferences(
     fun animeSearchSources() = preferenceStore.getStringSet("kisara_anime_search_sources", emptySet())
     fun novelSearchSources() = preferenceStore.getStringSet("kisara_novel_search_sources", emptySet())
     fun searchRecentQueries() = preferenceStore.getStringSet("kisara_search_recent_queries", emptySet())
+    fun anilistHomeEnabledSections() = preferenceStore.getStringSet("kisara_anilist_home_enabled_sections", emptySet())
     // KMK <--
 
     // SY <--
