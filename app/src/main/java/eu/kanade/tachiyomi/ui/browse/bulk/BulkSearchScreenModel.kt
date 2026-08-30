@@ -220,6 +220,79 @@ class BulkSearchScreenModel(
         }
     }
 
+    fun addQuery(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank() || state.value.queryResults.any { it.query == trimmed }) return
+        addQueries(listOf(trimmed))
+    }
+
+    fun addQueries(newQueries: List<String>) {
+        val cleanList = newQueries.map { it.trim() }.filter { q -> q.isNotBlank() && state.value.queryResults.none { it.query == q } }
+        if (cleanList.isEmpty()) return
+
+        mutableState.update { state ->
+            val updated = state.queryResults.toMutableList()
+            cleanList.forEach { q ->
+                updated.add(0, QueryResult(query = q, isLoading = true, isFailed = false))
+            }
+            state.copy(queryResults = updated.toImmutableList())
+        }
+
+        screenModelScope.launchIO {
+            val sources = sourceManager.getVisibleCatalogueSources()
+                .filter { sourceIds.contains(it.id) }
+
+            for (query in cleanList) {
+                try {
+                    val allResults = mutableListOf<Pair<Manga, Source>>()
+                    coroutineScope {
+                        val jobs = sources.map { source ->
+                            async {
+                                try {
+                                    val searchResult = source.getSearchManga(1, query, eu.kanade.tachiyomi.source.model.FilterList())
+                                    val domainSource = Source(
+                                        id = source.id,
+                                        lang = source.lang,
+                                        name = source.name,
+                                        supportsLatest = source.supportsLatest,
+                                        isStub = false,
+                                    )
+                                    val filterMangaByBlockedContent = Injekt.get<tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent>()
+                                    val rawMangas = searchResult.mangas.map { smanga ->
+                                        networkToLocalManga(smanga.toDomainManga(source.id))
+                                    }
+                                    val mangas = filterMangaByBlockedContent.filterList(rawMangas)
+                                    synchronized(allResults) {
+                                        mangas.forEach { allResults.add(it to domainSource) }
+                                    }
+                                } catch (e: Exception) {
+                                    // ignore
+                                }
+                            }
+                        }
+                        jobs.awaitAll()
+                    }
+
+                    updateQueryState(query) {
+                        it.copy(
+                            isLoading = false,
+                            isFailed = allResults.isEmpty(),
+                            results = allResults.toImmutableList(),
+                        )
+                    }
+                } catch (e: Exception) {
+                    updateQueryState(query) { it.copy(isLoading = false, isFailed = true) }
+                }
+            }
+        }
+    }
+
+    fun removeQuery(query: String) {
+        mutableState.update { state ->
+            state.copy(queryResults = state.queryResults.filterNot { it.query == query }.toImmutableList())
+        }
+    }
+
     suspend fun getMangaCategoryIds(mangaId: Long): List<Long> {
         return getCategories.await(mangaId).map { it.id }
     }

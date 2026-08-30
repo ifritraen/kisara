@@ -116,6 +116,8 @@ data class BulkSearchScreen(
             state.queryResults.flatMap { it.results.map { pair -> pair.first } }
         }
 
+        var newQueryInput by remember { mutableStateOf("") }
+
         Scaffold(
             contentWindowInsets = WindowInsets(0),
             topBar = {
@@ -185,6 +187,73 @@ data class BulkSearchScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    item(key = "bulk-search-input-header") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = newQueryInput,
+                                onValueChange = { newQueryInput = it },
+                                label = { Text("Add Search Queries") },
+                                placeholder = { Text("Enter series names (separated by newline or comma)") },
+                                shape = RoundedCornerShape(16.dp),
+                                trailingIcon = {
+                                    if (newQueryInput.isNotBlank()) {
+                                        IconButton(
+                                            onClick = {
+                                                val splitQueries = newQueryInput.split("\n", ",")
+                                                    .map { it.trim() }
+                                                    .filter { it.isNotBlank() }
+                                                screenModel.addQueries(splitQueries)
+                                                newQueryInput = ""
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Search,
+                                                contentDescription = "Search Queries",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+
+                    if (state.queryResults.isEmpty()) {
+                        item(key = "bulk-search-empty") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(48.dp),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Instant Multi-Query Bulk Search",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Enter or paste series names above to search across all enabled extensions simultaneously with instant previews.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                )
+                            }
+                        }
+                    }
+
                     items(state.queryResults) { qr ->
                         Column(
                             modifier = Modifier
@@ -219,17 +288,30 @@ data class BulkSearchScreen(
                                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                                     }
                                 }
-                                IconButton(
-                                    onClick = {
-                                        queryToEdit = qr.query
-                                        editQueryText = qr.query
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Edit,
-                                        contentDescription = "Edit Search Query",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            queryToEdit = qr.query
+                                            editQueryText = qr.query
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Edit,
+                                            contentDescription = "Edit Search Query",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            screenModel.removeQuery(qr.query)
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Clear,
+                                            contentDescription = "Remove Query",
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
@@ -434,13 +516,15 @@ fun ResultMangaCard(
     }
 
     Column(
-        modifier = modifier.width(108.dp),
+        modifier = modifier
+            .width(116.dp)
+            .padding(horizontal = 2.dp),
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
         ) {
             MangaCompactGridItem(
-                title = manga.title,
+                title = null,
                 coverData = manga.asMangaCover(),
                 coverBadgeStart = {
                     InLibraryBadge(enabled = isInLibrary)
@@ -494,23 +578,43 @@ fun ResultMangaCard(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = source.name,
-            fontSize = 10.sp,
-            lineHeight = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
+            text = manga.title,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 2.dp),
+            lineHeight = 15.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
         )
-        Text(
-            text = subtitleText,
-            fontSize = 10.sp,
-            lineHeight = 14.sp,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 2.dp),
-        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = source.name,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Text(
+                text = subtitleText,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

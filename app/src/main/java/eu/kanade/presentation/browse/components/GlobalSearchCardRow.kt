@@ -131,20 +131,40 @@ internal fun MangaItem(
     // KMK <--
     manga: Manga? = null,
 ) {
-    Box(
-        modifier = Modifier.width(108.dp),
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier
+            .width(116.dp)
+            .padding(horizontal = 2.dp),
     ) {
-        MangaCompactGridItem(
-            title = title,
-            coverData = cover,
-            coverBadgeStart = {
-                InLibraryBadge(enabled = isFavorite)
-            },
-            isSelected = isSelected,
-            manga = manga,
-            coverAlpha = if (isFavorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
-            onClick = onClick,
-            onLongClick = onLongClick,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(),
+        ) {
+            MangaCompactGridItem(
+                title = null,
+                coverData = cover,
+                coverBadgeStart = {
+                    InLibraryBadge(enabled = isFavorite)
+                },
+                isSelected = isSelected,
+                manga = manga,
+                coverAlpha = if (isFavorite) CommonMangaItemDefaults.BrowseFavoriteCoverAlpha else 1f,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+        }
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            lineHeight = 15.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
         )
     }
 }
