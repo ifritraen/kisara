@@ -148,7 +148,7 @@ fun LibraryContent(
                 else -> pagerState.currentPage
             }
             if (targetPage != pagerState.currentPage) {
-                pagerState.scrollToPage(targetPage)
+                pagerState.animateScrollToPage(targetPage)
             }
         }
 
@@ -436,6 +436,7 @@ fun LibraryContent(
                     },
                     onLongClickManga = onToggleRangeSelection,
                     onClickContinueReading = onContinueReadingClicked,
+                    userScrollEnabled = true,
                 )
             }
         }

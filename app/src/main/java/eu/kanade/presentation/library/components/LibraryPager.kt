@@ -45,7 +45,7 @@ fun LibraryPager(
     onClickManga: (Category, LibraryManga) -> Unit,
     onLongClickManga: (Category, LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
-    userScrollEnabled: Boolean = false,
+    userScrollEnabled: Boolean = true,
 ) {
     // KMK --> ponytail: retain scroll positions across tab switches
     val scrollPositions = remember { mutableMapOf<Pair<Long, LibraryDisplayMode>, Pair<Int, Int>>() }
