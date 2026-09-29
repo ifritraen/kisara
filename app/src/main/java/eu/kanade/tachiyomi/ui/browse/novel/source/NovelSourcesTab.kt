@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
@@ -53,6 +54,7 @@ fun Screen.novelSourcesTab(): TabContent {
         ),
         content = { contentPadding, snackbarHostState ->
             val scope = rememberCoroutineScope()
+            val context = androidx.compose.ui.platform.LocalContext.current
             NovelSourcesScreen(
                 state = state,
                 contentPadding = contentPadding,
@@ -75,7 +77,12 @@ fun Screen.novelSourcesTab(): TabContent {
                         }
                         groups.values.firstOrNull { it.contains(source.id) } ?: listOf(source.id)
                     }
-                    navigator.push(BrowseNovelSourcePagerScreen(source.id, sourceIds, listing.query))
+                    val query = if (listing == eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreenModel.Listing.Popular && source.supportsLatest) {
+                        tachiyomi.domain.source.novel.interactor.GetRemoteNovel.QUERY_LATEST
+                    } else {
+                        listing.query
+                    }
+                    navigator.push(BrowseNovelSourcePagerScreen(source.id, sourceIds, query))
                 },
                 onClickPin = screenModel::togglePin,
                 onLongClickItem = screenModel::showSourceDialog,
@@ -116,6 +123,29 @@ fun Screen.novelSourcesTab(): TabContent {
                         }
                         screenModel.closeDialog()
                     },
+                    // KMK -->
+                    onClickInstallMiniApp = {
+                        val isMiniInstalled = eu.kanade.tachiyomi.ui.mini.MiniModeManager.isSourceInstalled(dialog.source.id)
+                        if (isMiniInstalled) {
+                            eu.kanade.tachiyomi.ui.mini.MiniModeManager.releaseSlot(context, dialog.source.id)
+                        } else {
+                            val slot = eu.kanade.tachiyomi.ui.mini.MiniModeManager.assignSlot(context, dialog.source.id, dialog.source.name)
+                            if (slot == null) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    context.stringResource(tachiyomi.i18n.kmk.KMR.strings.mini_mode_slots_full),
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                        screenModel.closeDialog()
+                    },
+                    isMiniInstalled = eu.kanade.tachiyomi.ui.mini.MiniModeManager.isSourceInstalled(dialog.source.id),
+                    onClickAddToHome = {
+                        eu.kanade.tachiyomi.ui.mini.MiniModeManager.offerPinnedShortcut(context, dialog.source.id, dialog.source.name)
+                        screenModel.closeDialog()
+                    },
+                    // KMK <--
                     onDismiss = screenModel::closeDialog,
                 )
             }

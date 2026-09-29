@@ -145,7 +145,7 @@ class PaddleOcrDetector(
         // Normalize using standard ImageNet mean/std
         val mean = floatArrayOf(0.485f, 0.456f, 0.406f)
         val std = floatArrayOf(0.229f, 0.224f, 0.225f)
-        val buf = FloatBuffer.allocate(3 * h * w)
+        val buf = eu.kanade.tachiyomi.data.ai.AiBufferUtils.allocateDirectFloatBuffer(3 * h * w)
 
         for (c in 0..2) {
             for (px in pixels) {

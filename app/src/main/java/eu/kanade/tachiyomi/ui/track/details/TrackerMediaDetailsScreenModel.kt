@@ -2,19 +2,23 @@ package eu.kanade.tachiyomi.ui.track.details
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.entries.anime.interactor.UpdateAnime
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.ui.track.TrackSeriesItem
+import eu.kanade.tachiyomi.ui.track.matcher.TrackerMediaChapterItem
+import eu.kanade.tachiyomi.ui.track.matcher.TrackerSourceItem
 import eu.kanade.tachiyomi.ui.track.matcher.TrackerSourceMatcher
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.category.anime.interactor.SetAnimeCategories
 import tachiyomi.domain.category.interactor.SetMangaCategories
-import tachiyomi.domain.chapter.model.Chapter
-import tachiyomi.domain.manga.interactor.GetManga
-import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -22,29 +26,30 @@ import uy.kohesive.injekt.api.get
 // KMK -->
 data class TrackerMediaDetailsState(
     val isMatching: Boolean = true,
-    val activeSource: CatalogueSource? = null,
-    val matchedManga: Manga? = null,
-    val chapters: List<Chapter> = emptyList(),
+    val activeSourceId: Long? = null,
+    val activeSourceName: String? = null,
+    val matchedEntryId: Long? = null,
+    val chapters: List<TrackerMediaChapterItem> = emptyList(),
     val inLibrary: Boolean = false,
     val matchError: String? = null,
     val prioritizedSourceIds: List<Long> = emptyList(),
-    val allInstalledSources: List<CatalogueSource> = emptyList(),
+    val allInstalledSources: List<TrackerSourceItem> = emptyList(),
     val chapterSearchQuery: String = "",
     val isSortAscending: Boolean = false,
 ) {
-    val filteredChapters: List<Chapter>
+    val filteredChapters: List<TrackerMediaChapterItem>
         get() {
             var list = chapters
             if (chapterSearchQuery.isNotBlank()) {
                 val q = chapterSearchQuery.trim().lowercase()
                 list = list.filter {
-                    it.name.lowercase().contains(q) || it.chapterNumber.toString().contains(q)
+                    it.name.lowercase().contains(q) || it.number.toString().contains(q)
                 }
             }
             return if (isSortAscending) {
-                list.sortedBy { it.chapterNumber }
+                list.sortedBy { it.number }
             } else {
-                list.sortedByDescending { it.chapterNumber }
+                list.sortedByDescending { it.number }
             }
         }
 }
@@ -54,12 +59,21 @@ class TrackerMediaDetailsScreenModel(
     val mediaType: MediaType,
     private val uiPreferences: UiPreferences = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
-    private val getManga: GetManga = Injekt.get(),
+    private val animeSourceManager: AnimeSourceManager = Injekt.get(),
+    private val novelSourceManager: NovelSourceManager = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
+    private val updateAnime: UpdateAnime = Injekt.get(),
+    private val updateNovel: UpdateNovel = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
+    private val setAnimeCategories: SetAnimeCategories = Injekt.get(),
+    private val setNovelCategories: SetNovelCategories = Injekt.get(),
 ) : StateScreenModel<TrackerMediaDetailsState>(TrackerMediaDetailsState()) {
 
-    private val matcher = TrackerSourceMatcher()
+    private val matcher = TrackerSourceMatcher(
+        sourceManager = sourceManager,
+        animeSourceManager = animeSourceManager,
+        novelSourceManager = novelSourceManager,
+    )
 
     init {
         loadSourcesAndMatch()
@@ -89,36 +103,45 @@ class TrackerMediaDetailsScreenModel(
 
     fun loadSourcesAndMatch() {
         screenModelScope.launchIO {
-            val installed = sourceManager.getOnlineSources()
-                .filterIsInstance<CatalogueSource>()
+            val installedSources: List<TrackerSourceItem> = when (mediaType) {
+                MediaType.ANIME -> animeSourceManager.getCatalogueSources().map {
+                    TrackerSourceItem(it.id, it.name, it.lang)
+                }
+                MediaType.NOVEL -> novelSourceManager.getCatalogueSources().map {
+                    TrackerSourceItem(it.id, it.name, it.lang)
+                }
+                MediaType.MANGA -> sourceManager.getOnlineSources()
+                    .filterIsInstance<CatalogueSource>()
+                    .map { TrackerSourceItem(it.id, it.name, it.lang) }
+            }
 
             val storedIds = getStoredPriorityIds()
             val priorityIds = if (storedIds.isNotEmpty()) {
-                storedIds.filter { id -> installed.any { it.id == id } }
+                storedIds.filter { id -> installedSources.any { it.id == id } }
             } else {
-                installed.take(5).map { it.id }
+                installedSources.take(5).map { it.id }
             }
 
             mutableState.update {
                 it.copy(
                     isMatching = true,
                     prioritizedSourceIds = priorityIds,
-                    allInstalledSources = installed,
+                    allInstalledSources = installedSources,
                     matchError = null,
                 )
             }
 
-            val result = matcher.matchAndFetch(series.title, priorityIds)
+            val result = matcher.matchAndFetch(series.title, priorityIds, mediaType)
             when (result) {
                 is TrackerSourceMatcher.MatchResult.Success -> {
-                    val isFav = result.manga.favorite
                     mutableState.update {
                         it.copy(
                             isMatching = false,
-                            activeSource = result.source,
-                            matchedManga = result.manga,
-                            chapters = result.chapters,
-                            inLibrary = isFav,
+                            activeSourceId = result.sourceId,
+                            activeSourceName = result.sourceName,
+                            matchedEntryId = result.entryId,
+                            chapters = result.items,
+                            inLibrary = result.isFavorite,
                             matchError = null,
                         )
                     }
@@ -127,8 +150,9 @@ class TrackerMediaDetailsScreenModel(
                     mutableState.update {
                         it.copy(
                             isMatching = false,
-                            activeSource = null,
-                            matchedManga = null,
+                            activeSourceId = null,
+                            activeSourceName = null,
+                            matchedEntryId = null,
                             chapters = emptyList(),
                             matchError = "No match found in prioritized sources.",
                         )
@@ -138,8 +162,9 @@ class TrackerMediaDetailsScreenModel(
                     mutableState.update {
                         it.copy(
                             isMatching = false,
-                            activeSource = null,
-                            matchedManga = null,
+                            activeSourceId = null,
+                            activeSourceName = null,
+                            matchedEntryId = null,
                             chapters = emptyList(),
                             matchError = result.error.message ?: "Failed to match source",
                         )
@@ -152,16 +177,17 @@ class TrackerMediaDetailsScreenModel(
     fun selectSpecificSource(sourceId: Long) {
         screenModelScope.launchIO {
             mutableState.update { it.copy(isMatching = true, matchError = null) }
-            val result = matcher.fetchFromSpecificSource(sourceId, series.title)
+            val result = matcher.fetchFromSpecificSource(sourceId, series.title, mediaType)
             when (result) {
                 is TrackerSourceMatcher.MatchResult.Success -> {
                     mutableState.update {
                         it.copy(
                             isMatching = false,
-                            activeSource = result.source,
-                            matchedManga = result.manga,
-                            chapters = result.chapters,
-                            inLibrary = result.manga.favorite,
+                            activeSourceId = result.sourceId,
+                            activeSourceName = result.sourceName,
+                            matchedEntryId = result.entryId,
+                            chapters = result.items,
+                            inLibrary = result.isFavorite,
                             matchError = null,
                         )
                     }
@@ -170,8 +196,9 @@ class TrackerMediaDetailsScreenModel(
                     mutableState.update {
                         it.copy(
                             isMatching = false,
-                            activeSource = null,
-                            matchedManga = null,
+                            activeSourceId = null,
+                            activeSourceName = null,
+                            matchedEntryId = null,
                             chapters = emptyList(),
                             matchError = "Series not found on this source.",
                         )
@@ -181,8 +208,9 @@ class TrackerMediaDetailsScreenModel(
                     mutableState.update {
                         it.copy(
                             isMatching = false,
-                            activeSource = null,
-                            matchedManga = null,
+                            activeSourceId = null,
+                            activeSourceName = null,
+                            matchedEntryId = null,
                             chapters = emptyList(),
                             matchError = result.error.message ?: "Error fetching from source",
                         )
@@ -208,14 +236,22 @@ class TrackerMediaDetailsScreenModel(
     }
 
     fun toggleLibraryBookmark() {
-        val manga = state.value.matchedManga ?: return
+        val entryId = state.value.matchedEntryId ?: return
         val newFav = !state.value.inLibrary
         screenModelScope.launchIO {
-            if (newFav) {
-                updateManga.awaitUpdateFavorite(manga.id, true)
-                setMangaCategories.await(manga.id, emptyList())
-            } else {
-                updateManga.awaitUpdateFavorite(manga.id, false)
+            when (mediaType) {
+                MediaType.ANIME -> {
+                    updateAnime.awaitUpdateFavorite(entryId, newFav)
+                    if (newFav) setAnimeCategories.await(entryId, emptyList())
+                }
+                MediaType.NOVEL -> {
+                    updateNovel.awaitUpdateFavorite(entryId, newFav)
+                    if (newFav) setNovelCategories.await(entryId, emptyList())
+                }
+                MediaType.MANGA -> {
+                    updateManga.awaitUpdateFavorite(entryId, newFav)
+                    if (newFav) setMangaCategories.await(entryId, emptyList())
+                }
             }
             mutableState.update { it.copy(inLibrary = newFav) }
         }

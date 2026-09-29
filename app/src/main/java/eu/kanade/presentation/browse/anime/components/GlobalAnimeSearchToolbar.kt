@@ -1,5 +1,6 @@
 package eu.kanade.presentation.browse.anime.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -247,5 +248,45 @@ fun GlobalAnimeSearchToolbar(
             )
         }
         HorizontalDivider()
+    }
+}
+
+@Composable
+fun MinimalGlobalAnimeSearchToolbar(
+    searchQuery: String?,
+    progress: Int,
+    total: Int,
+    navigateUp: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior,
+    onOpenSearchSheet: () -> Unit,
+) {
+    Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+        Box {
+            AppBar(
+                title = if (searchQuery.isNullOrBlank()) "Global Anime Search" else searchQuery,
+                navigateUp = navigateUp,
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    AppBarActions(
+                        actions = persistentListOf(
+                            AppBar.Action(
+                                title = "Search Sheet",
+                                icon = Icons.Outlined.Layers,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = onOpenSearchSheet,
+                            ),
+                        ),
+                    )
+                },
+            )
+            if (progress in 1..<total) {
+                LinearProgressIndicator(
+                    progress = { progress.toFloat() / total },
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(),
+                )
+            }
+        }
     }
 }

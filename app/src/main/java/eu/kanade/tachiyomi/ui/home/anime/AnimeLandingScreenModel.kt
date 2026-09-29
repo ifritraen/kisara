@@ -75,6 +75,7 @@ class AnimeLandingScreenModel(
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val networkToLocalAnime: NetworkToLocalAnime = Injekt.get(),
     private val getTrackerRecommendations: GetTrackerRecommendations = Injekt.get(),
+    private val getTrackerContinueReading: eu.kanade.domain.manga.interactor.GetTrackerContinueReading = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
 ) : StateScreenModel<AnimeLandingScreenModel.State>(State()) {
 
@@ -134,12 +135,13 @@ class AnimeLandingScreenModel(
 
         // 5. Load Tracker Recommendations & Feed Cache
         loadTrackerRecommendations(force = false)
+        loadTrackerContinue(force = false)
         loadFeedCache()
         triggerBackgroundFeedFetch(force = false)
     }
 
     private fun extractTopTags(library: List<tachiyomi.domain.library.anime.LibraryAnime>): List<String> {
-        return library.flatMap { item ->
+        val extracted = library.flatMap { item ->
             item.anime.genre.orEmpty()
                 .flatMap { it.split(",", ";", "/").map(String::trim) }
                 .filter { it.isNotBlank() }
@@ -148,8 +150,14 @@ class AnimeLandingScreenModel(
             .eachCount()
             .entries
             .sortedByDescending { it.value }
-            .take(10)
+            .take(15)
             .map { it.key }
+
+        return if (extracted.isNotEmpty()) {
+            extracted
+        } else {
+            listOf("Action", "Romance", "Fantasy", "Comedy", "Sci-Fi", "Adventure", "Drama", "Mystery", "Supernatural", "Slice of Life", "Isekai", "Shounen")
+        }
     }
 
     fun loadSpotlightSuggestions() {
@@ -158,7 +166,6 @@ class AnimeLandingScreenModel(
                 sourceManager.isInitialized.first { it }
                 val library = getLibraryAnime.await()
                 val topTags = extractTopTags(library)
-                val topTag = topTags.firstOrNull()
 
                 val sources = sourceManager.getCatalogueSources()
                 val suggestions = mutableListOf<Anime>()
@@ -166,7 +173,7 @@ class AnimeLandingScreenModel(
                 val favoriteTitles = library.map { it.anime.title.lowercase().trim() }.toSet()
                 val favoriteIds = library.map { it.anime.id }.toSet()
 
-                for (tag in topTags.take(3)) {
+                for (tag in topTags.take(10)) {
                     val jobs = sources.take(4).map { source ->
                         async {
                             try {
@@ -184,7 +191,7 @@ class AnimeLandingScreenModel(
                     })
                 }
 
-                if (suggestions.isEmpty()) {
+                if (suggestions.size < 10) {
                     val jobs = sources.take(4).map { source ->
                         async {
                             try {
@@ -202,12 +209,12 @@ class AnimeLandingScreenModel(
                     })
                 }
 
-                val finalSpotlight = suggestions.distinctBy { it.id }.shuffled().take(10)
+                val finalSpotlight = suggestions.distinctBy { it.id }.shuffled().take(15)
                 if (finalSpotlight.isNotEmpty()) {
                     mutableState.update {
                         it.copy(
                             spotlightAnime = finalSpotlight.toImmutableList(),
-                            spotlightTagName = topTag?.let { tag -> "Spotlight: $tag" },
+                            spotlightTagName = null,
                         )
                     }
                     fetchMissingSpotlightDetails(finalSpotlight)
@@ -273,6 +280,23 @@ class AnimeLandingScreenModel(
                 }
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Failed to load anime tracker recommendations" }
+            }
+        }
+    }
+
+    fun loadTrackerContinue(force: Boolean = false) {
+        screenModelScope.launchIO {
+            try {
+                val cached = getTrackerContinueReading.getCached(MediaType.ANIME)
+                if (cached.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerContinue = cached.toImmutableList()) }
+                }
+                val fresh = getTrackerContinueReading.fetch(MediaType.ANIME, force = force)
+                if (fresh.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerContinue = fresh.toImmutableList()) }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Failed to load anime tracker continue items" }
             }
         }
     }
@@ -533,6 +557,7 @@ class AnimeLandingScreenModel(
         val updates: ImmutableList<AnimeUpdatesWithRelations> = persistentListOf(),
         val libraryRandom: ImmutableList<Anime> = persistentListOf(),
         val trackerRecommendations: ImmutableList<TrackerRecommendation> = persistentListOf(),
+        val trackerContinue: ImmutableList<eu.kanade.domain.manga.interactor.TrackerContinueItem> = persistentListOf(),
         val feed: ImmutableList<CachedFeedAnime> = persistentListOf(),
         val isFeedRefreshing: Boolean = false,
         val dialog: Dialog? = null,

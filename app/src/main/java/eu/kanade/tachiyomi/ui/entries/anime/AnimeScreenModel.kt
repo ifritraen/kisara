@@ -45,8 +45,11 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.torrent.service.TorrentServerService
+import eu.kanade.tachiyomi.data.track.AnimeTracker
 import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
+import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.anime.isSourceForTorrents
 import eu.kanade.tachiyomi.ui.entries.anime.track.AnimeTrackItem
@@ -93,6 +96,7 @@ import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.anime.interactor.GetAnimeWithEpisodesAndSeasons
 import tachiyomi.domain.entries.anime.interactor.GetDuplicateLibraryAnime
+import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.anime.interactor.SetAnimeEpisodeFlags
 import tachiyomi.domain.entries.anime.interactor.SetAnimeSeasonFlags
 import tachiyomi.domain.entries.anime.model.Anime
@@ -140,6 +144,7 @@ class AnimeScreenModel(
     private val downloadCache: AnimeDownloadCache = Injekt.get(),
     private val getAnimeAndEpisodesAndSeasons: GetAnimeWithEpisodesAndSeasons = Injekt.get(),
     private val getDuplicateLibraryAnime: GetDuplicateLibraryAnime = Injekt.get(),
+    private val getLibraryAnime: GetLibraryAnime = Injekt.get(),
     private val setAnimeEpisodeFlags: SetAnimeEpisodeFlags = Injekt.get(),
     private val setAnimeDefaultEpisodeFlags: SetAnimeDefaultEpisodeFlags = Injekt.get(),
     private val setAnimeSeasonFlags: SetAnimeSeasonFlags = Injekt.get(),
@@ -486,6 +491,11 @@ class AnimeScreenModel(
             // Start observe tracking since it only needs animeId
             observeTrackers()
 
+            screenModelScope.launchIO {
+                val duplicates = getSmartDuplicateLibraryAnime(anime)
+                updateSuccessState { it.copy(duplicateCount = duplicates.size) }
+            }
+
             // Fetch info-episodes when needed
             if (screenModelScope.isActive) {
                 val fetchFromSourceTasks = listOf(
@@ -645,11 +655,13 @@ class AnimeScreenModel(
                 // Add to library
                 // First, check if duplicate exists if callback is provided
                 if (checkDuplicate) {
-                    val duplicate = getDuplicateLibraryAnime.await(anime).getOrNull(0)
+                    val duplicates = getSmartDuplicateLibraryAnime(anime)
+                    val duplicate = duplicates.firstOrNull()
                     if (duplicate != null) {
                         updateSuccessState {
                             it.copy(
                                 dialog = Dialog.DuplicateAnime(anime, duplicate),
+                                duplicateCount = duplicates.size,
                             )
                         }
                         return@launchIO
@@ -1958,25 +1970,62 @@ class AnimeScreenModel(
             }
             val boundTrack = existingTracks.firstOrNull { it.trackerId == primaryTracker.id }
             val trackDetails = try {
+                val animeTracker = primaryTracker as? AnimeTracker
                 if (boundTrack != null) {
-                    primaryTracker.searchById(boundTrack.remoteId.toString())
+                    val searchResults = animeTracker?.searchAnime(boundTrack.title) ?: emptyList()
+                    val match = searchResults.firstOrNull { it.remote_id == boundTrack.remoteId }
+                        ?: searchResults.firstOrNull()
+                    match?.let {
+                        TrackSearch().apply {
+                            remote_id = it.remote_id
+                            title = it.title
+                            total_chapters = it.total_episodes
+                            cover_url = it.cover_url
+                            summary = it.summary
+                            publishing_status = it.publishing_status
+                            publishing_type = it.publishing_type
+                            start_date = it.start_date
+                            tracking_url = it.tracking_url
+                        }
+                    }
                 } else {
                     val currentAnime = successState?.anime ?: getAnimeAndEpisodesAndSeasons.awaitAnime(animeId)
                     if (currentAnime != null) {
-                        val searchResults = primaryTracker.search(currentAnime.title)
+                        val searchResults = animeTracker?.searchAnime(currentAnime.title) ?: emptyList()
                         val match = searchResults.firstOrNull { it.title.equals(currentAnime.title, ignoreCase = true) }
                             ?: searchResults.firstOrNull()
                         if (match != null) {
-                            primaryTracker.searchById(match.remote_id.toString())
+                            TrackSearch().apply {
+                                remote_id = match.remote_id
+                                title = match.title
+                                total_chapters = match.total_episodes
+                                cover_url = match.cover_url
+                                summary = match.summary
+                                publishing_status = match.publishing_status
+                                publishing_type = match.publishing_type
+                                start_date = match.start_date
+                                tracking_url = match.tracking_url
+                            }
                         } else {
                             // Fallback to MyAnimeList if AniList returns null
-                            val fallbackTracker = trackerManager.myAnimeList
-                            if (fallbackTracker.isLoggedIn && fallbackTracker.id != primaryTracker.id) {
-                                val fallbackResults = fallbackTracker.search(currentAnime.title)
+                            val fallbackTracker = trackerManager.myAnimeList as? AnimeTracker
+                            val fallbackService = fallbackTracker as? Tracker
+                            if (fallbackTracker != null && fallbackService != null && fallbackService.id != primaryTracker.id) {
+                                val fallbackResults = fallbackTracker.searchAnime(currentAnime.title)
                                 val fallbackMatch = fallbackResults.firstOrNull { it.title.equals(currentAnime.title, ignoreCase = true) }
                                     ?: fallbackResults.firstOrNull()
                                 if (fallbackMatch != null) {
-                                    fallbackTracker.searchById(fallbackMatch.remote_id.toString())
+                                    TrackSearch().apply {
+                                        remote_id = fallbackMatch.remote_id
+                                        title = fallbackMatch.title
+                                        total_chapters = fallbackMatch.total_episodes
+                                        cover_url = fallbackMatch.cover_url
+                                        summary = fallbackMatch.summary
+                                        publishing_status = fallbackMatch.publishing_status
+                                        publishing_type = fallbackMatch.publishing_type
+                                        start_date = fallbackMatch.start_date
+                                        tracking_url = fallbackMatch.tracking_url
+                                    }
                                 } else null
                             } else null
                         }
@@ -2056,6 +2105,37 @@ class AnimeScreenModel(
         updateSuccessState { it.copy(dialog = Dialog.FullImages) }
     }
 
+    private suspend fun getSmartDuplicateLibraryAnime(anime: Anime): List<Anime> {
+        val direct = try { getDuplicateLibraryAnime.await(anime) } catch (_: Exception) { emptyList() }
+        val allLibrary = try { getLibraryAnime.await() } catch (_: Exception) { emptyList() }
+        val currentClean = eu.kanade.tachiyomi.util.MangaTitleParser.cleanForDuplicate(anime.title)
+        val currentTracks = try { getTracks.await(anime.id) } catch (_: Exception) { emptyList() }
+
+        val extraDuplicates = allLibrary.filter { item ->
+            val other = item.anime
+            if (other.id == anime.id) return@filter false
+            if (direct.any { it.id == other.id }) return@filter false
+
+            val otherClean = eu.kanade.tachiyomi.util.MangaTitleParser.cleanForDuplicate(other.title)
+            if (currentClean.isNotEmpty() && otherClean.isNotEmpty() &&
+                (currentClean == otherClean || currentClean.contains(otherClean) || otherClean.contains(currentClean))
+            ) {
+                return@filter true
+            }
+
+            if (currentTracks.isNotEmpty()) {
+                val otherTracks = try { getTracks.await(other.id) } catch (_: Exception) { emptyList() }
+                if (currentTracks.any { t1 -> otherTracks.any { t2 -> t1.trackerId == t2.trackerId && t1.remoteId == t2.remoteId } }) {
+                    return@filter true
+                }
+            }
+
+            false
+        }.map { it.anime }
+
+        return (direct + extraDuplicates).distinctBy { it.id }
+    }
+
     fun showMigrateDialog(duplicate: Anime) {
         val anime = successState?.anime ?: return
         updateSuccessState { it.copy(dialog = Dialog.Migrate(newAnime = anime, oldAnime = duplicate)) }
@@ -2097,6 +2177,7 @@ class AnimeScreenModel(
             val downloadedOnly: Boolean = false,
             val newEpisodeIds: Set<Long> = emptySet(),
             val trackingCount: Int = 0,
+            val duplicateCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
             val isRefreshingData: Boolean = false,
             val dialog: Dialog? = null,

@@ -305,6 +305,7 @@ private val settingScreens = listOf(
     // <-- AM (CONNECTIONS)
     // KMK -->
     SettingsAiToolsScreen,
+    SettingsColorizerScreen,
     SettingsTranslationScreen,
     SettingsKisaraScreen,
     eu.kanade.tachiyomi.ui.more.logbook.LogbookTabScreen(),

@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.tachiyomi.source.CatalogueSource
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -78,6 +79,7 @@ class LandingScreenModel(
     private val updateManga: UpdateManga = Injekt.get(),
     private val filterMangaByBlockedContent: tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent = Injekt.get(),
     private val getTrackerRecommendations: eu.kanade.domain.manga.interactor.GetTrackerRecommendations = Injekt.get(),
+    private val getTrackerContinueReading: eu.kanade.domain.manga.interactor.GetTrackerContinueReading = Injekt.get(),
 ) : StateScreenModel<LandingScreenModel.State>(State()) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -87,8 +89,9 @@ class LandingScreenModel(
         // 1. Load feed cache immediately
         loadFeedCache()
 
-        // 2. Load tracker recommendations immediately
+        // 2. Load tracker recommendations & continue reading immediately
         loadTrackerRecommendations(force = false)
+        loadTrackerContinue(force = false)
 
         // 3. Subscribe to suggestions (dynamically filtered against active library)
         screenModelScope.launch {
@@ -163,6 +166,23 @@ class LandingScreenModel(
                 }
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Failed to load tracker recommendations" }
+            }
+        }
+    }
+
+    fun loadTrackerContinue(force: Boolean = false) {
+        screenModelScope.launchIO {
+            try {
+                val cached = getTrackerContinueReading.getCached(MediaType.MANGA)
+                if (cached.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerContinue = cached.toImmutableList()) }
+                }
+                val fresh = getTrackerContinueReading.fetch(MediaType.MANGA, force = force)
+                if (fresh.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerContinue = fresh.toImmutableList()) }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Failed to load tracker continue reading" }
             }
         }
     }
@@ -426,6 +446,7 @@ class LandingScreenModel(
         val updates: ImmutableList<UpdatesWithRelations> = emptyList<UpdatesWithRelations>().toImmutableList(),
         val libraryRandom: ImmutableList<Manga> = emptyList<Manga>().toImmutableList(),
         val trackerRecommendations: ImmutableList<eu.kanade.domain.manga.interactor.TrackerRecommendation> = emptyList<eu.kanade.domain.manga.interactor.TrackerRecommendation>().toImmutableList(),
+        val trackerContinue: ImmutableList<eu.kanade.domain.manga.interactor.TrackerContinueItem> = emptyList<eu.kanade.domain.manga.interactor.TrackerContinueItem>().toImmutableList(),
         val feed: ImmutableList<CachedFeedManga> = emptyList<CachedFeedManga>().toImmutableList(),
         val isFeedRefreshing: Boolean = false,
         val isLoading: Boolean = true,

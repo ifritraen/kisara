@@ -4,8 +4,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -26,8 +29,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -35,22 +41,29 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.core.util.ifSourcesLoaded
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.BrowseSourceContent
 import eu.kanade.presentation.browse.MissingSourceScreen
-import eu.kanade.presentation.browse.components.BrowseSourceToolbar
+import eu.kanade.presentation.browse.components.BrowseSourceActionsSheet
+import eu.kanade.presentation.browse.components.BrowseSourceBulkActionDock
+import eu.kanade.presentation.browse.components.BrowseSourceFloatingDock
+import eu.kanade.presentation.browse.components.BrowseSourceSearchSheet
 import eu.kanade.presentation.browse.components.BulkFavoriteDialogs
 import eu.kanade.presentation.browse.components.RemoveMangaDialog
 import eu.kanade.presentation.browse.components.SavedSearchCreateDialog
 import eu.kanade.presentation.browse.components.SavedSearchDeleteDialog
+import eu.kanade.presentation.browse.components.SourceIcon
+import eu.kanade.presentation.browse.components.SourcePickerBottomSheet
+import eu.kanade.presentation.browse.components.SourcePickerItem
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
-import eu.kanade.presentation.components.BulkSelectionToolbar
 import eu.kanade.presentation.components.LocalHazeState
 import eu.kanade.presentation.manga.DuplicateMangaDialog
 import eu.kanade.presentation.more.settings.screen.SettingsEhScreen
@@ -83,7 +96,9 @@ import mihon.presentation.core.util.collectAsLazyPagingItems
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.source.model.StubSource
+import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -162,6 +177,10 @@ data class BrowseSourceScreen(
         val uriHandler = LocalUriHandler.current
         val snackbarHostState = remember { SnackbarHostState() }
 
+        var showActionsSheet by remember { mutableStateOf(false) }
+        var showSearchSheet by remember { mutableStateOf(false) }
+        var showSourcePickerSheet by remember { mutableStateOf(false) }
+
         val onHelpClick = { uriHandler.openUri(LocalSource.HELP_URL) }
         val onWebViewClick = f@{
             val source = screenModel.source as? HttpSource ?: return@f
@@ -198,226 +217,240 @@ data class BrowseSourceScreen(
         CompositionLocalProvider(LocalHazeState provides hazeState) {
             Scaffold(
                 modifier = Modifier.then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
-                topBar = {
-                    Column(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface)
-                            .pointerInput(Unit) {},
-                    ) {
-                        // KMK -->
-                        if (bulkFavoriteState.selectionMode) {
-                            BulkSelectionToolbar(
-                                selectedCount = bulkFavoriteState.selection.size,
-                                isRunning = bulkFavoriteState.isRunning,
-                                onClickClearSelection = bulkFavoriteScreenModel::toggleSelectionMode,
-                                onChangeCategoryClick = bulkFavoriteScreenModel::addFavorite,
-                                onSelectAll = {
-                                    mangaList.itemSnapshotList.items
-                                        .map { it.value.first }
-                                        .forEach { bulkFavoriteScreenModel.select(it) }
-                                },
-                                onReverseSelection = {
-                                    mangaList.itemSnapshotList.items
-                                        .map { it.value.first }
-                                        .let { bulkFavoriteScreenModel.reverseSelection(it) }
-                                },
-                            )
-                        } else {
-                            // KMK <--
-                            BrowseSourceToolbar(
-                                searchQuery = state.toolbarQuery,
-                                onSearchQueryChange = screenModel::setToolbarQuery,
-                                source = screenModel.source,
-                                displayMode = screenModel.displayMode
-                                    // KMK -->
-                                    .takeIf {
-                                        !screenModel.source.isEhBasedSource() || !screenModel.ehentaiBrowseDisplayMode
-                                    },
-                                // KMK <--
-                                onDisplayModeChange = { screenModel.displayMode = it },
-                                navigateUp = navigateUp,
-                                onWebViewClick = onWebViewClick,
-                                onHelpClick = onHelpClick,
-                                // KMK -->
-                                onToggleIncognito = screenModel::toggleIncognitoMode,
-                                onSettingsClick = {
-                                    when {
-                                        screenModel.source.isEhBasedSource() && isHentaiEnabled ->
-                                            navigator.push(SettingsEhScreen)
-                                        screenModel.source.anyIs<ConfigurableSource>() ->
-                                            navigator.push(SourcePreferencesScreen(sourceId))
-                                        else -> {}
-                                    }
-                                }.takeIf { isConfigurableSource },
-                                // KMK <--
-                                onSearch = screenModel::search,
-                                // KMK -->
-                                toggleSelectionMode = bulkFavoriteScreenModel::toggleSelectionMode,
-                                isRunning = bulkFavoriteState.isRunning,
-                                // KMK <--
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = MaterialTheme.padding.small),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                        ) {
-                            FilterChip(
-                                selected = state.listing == Listing.Popular,
-                                onClick = {
-                                    screenModel.resetFilters()
-                                    screenModel.setListing(Listing.Popular)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Favorite,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(FilterChipDefaults.IconSize),
-                                    )
-                                },
-                                label = {
-                                    Text(text = stringResource(MR.strings.popular))
-                                },
-                            )
-                            if ((screenModel.source as CatalogueSource).supportsLatest) {
-                                FilterChip(
-                                    selected = state.listing == Listing.Latest,
-                                    onClick = {
-                                        screenModel.resetFilters()
-                                        screenModel.setListing(Listing.Latest)
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.NewReleases,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .size(FilterChipDefaults.IconSize),
-                                        )
-                                    },
-                                    label = {
-                                        Text(text = stringResource(MR.strings.latest))
-                                    },
-                                )
-                            }
-                            if (/* SY --> */ state.filterable /* SY <-- */) {
-                                FilterChip(
-                                    selected = state.listing is Listing.Search &&
-                                        // KMK -->
-                                        (state.listing as Listing.Search).savedSearchId == null,
-                                    // KMK <--
-                                    onClick = screenModel::openFilterSheet,
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.FilterList,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .size(FilterChipDefaults.IconSize),
-                                        )
-                                    },
-                                    label = {
-                                        // SY -->
-                                        Text(
-                                            text = if (state.filters.isNotEmpty()) {
-                                                stringResource(MR.strings.action_filter)
-                                            } else {
-                                                stringResource(MR.strings.action_search)
-                                            },
-                                        )
-                                        // SY <--
-                                    },
-                                )
-                            }
-                            // KMK -->
-                            state.savedSearches.forEach { savedSearch ->
-                                FilterChip(
-                                    selected = state.listing is Listing.Search &&
-                                        (state.listing as Listing.Search).savedSearchId == savedSearch.id,
-                                    onClick = {
-                                        screenModel.onSavedSearch(savedSearch) {
-                                            context.toast(it)
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            text = savedSearch.name,
-                                        )
-                                    },
-                                )
-                            }
-                            // KMK <--
-                        }
-
-                        HorizontalDivider()
-                    }
-                },
                 snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             ) { paddingValues ->
-                BrowseSourceContent(
-                    source = screenModel.source,
-                    mangaList = mangaList,
-                    columns = screenModel.getColumnsPreference(LocalConfiguration.current.orientation),
-                    // SY -->
-                    ehentaiBrowseDisplayMode = screenModel.ehentaiBrowseDisplayMode,
-                    // SY <--
-                    displayMode = screenModel.displayMode,
-                    snackbarHostState = snackbarHostState,
-                    contentPadding = paddingValues,
-                    onWebViewClick = onWebViewClick,
-                    onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
-                    onLocalSourceHelpClick = onHelpClick,
-                    onMangaClick = { manga ->
-                        // KMK -->
-                        if (bulkFavoriteState.selectionMode) {
-                            bulkFavoriteScreenModel.toggleSelection(manga)
-                        } else {
-                            // KMK <--
-                            navigator.push(
-                                MangaScreen(
-                                    mangaId = manga.id,
-                                    // KMK -->
-                                    // Finding the entry to be merged to, so we don't want to expand description
-                                    // so that user can see the `Merge to another` button
-                                    fromSource = smartSearchConfig == null,
-                                    // KMK <--
-                                    smartSearchConfig = smartSearchConfig,
-                                ),
-                            )
-                        }
-                    },
-                    onMangaLongClick = { manga ->
-                        // KMK -->
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (bulkFavoriteState.selectionMode) {
-                            navigator.push(MangaScreen(manga.id, true))
-                        } else {
-                            // KMK <--
-                            scope.launchIO {
-                                val duplicates = screenModel.getDuplicateLibraryManga(manga)
-                                when {
-                                    manga.favorite -> {
-                                        val categories = screenModel.getCategories()
-                                        val preselectedIds = screenModel.getCategories.await(manga.id).map { it.id }
-                                        screenModel.setDialog(
-                                            BrowseSourceScreenModel.Dialog.ChangeMangaCategory(
-                                                manga,
-                                                categories.mapAsCheckboxState { it.id in preselectedIds }.toImmutableList(),
-                                            ),
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    BrowseSourceContent(
+                        source = screenModel.source,
+                        mangaList = mangaList,
+                        columns = screenModel.getColumnsPreference(LocalConfiguration.current.orientation),
+                        // SY -->
+                        ehentaiBrowseDisplayMode = screenModel.ehentaiBrowseDisplayMode,
+                        // SY <--
+                        displayMode = screenModel.displayMode,
+                        snackbarHostState = snackbarHostState,
+                        contentPadding = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + 84.dp,
+                        ),
+                        onWebViewClick = onWebViewClick,
+                        onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
+                        onLocalSourceHelpClick = onHelpClick,
+                        onMangaClick = { manga ->
+                            // KMK -->
+                            if (bulkFavoriteState.selectionMode) {
+                                bulkFavoriteScreenModel.toggleSelection(manga)
+                            } else {
+                                // KMK <--
+                                navigator.push(
+                                    MangaScreen(
+                                        mangaId = manga.id,
+                                        // KMK -->
+                                        // Finding the entry to be merged to, so we don't want to expand description
+                                        // so that user can see the `Merge to another` button
+                                        fromSource = smartSearchConfig == null,
+                                        // KMK <--
+                                        smartSearchConfig = smartSearchConfig,
+                                    ),
+                                )
+                            }
+                        },
+                        onMangaLongClick = { manga ->
+                            // KMK -->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (bulkFavoriteState.selectionMode) {
+                                navigator.push(MangaScreen(manga.id, true))
+                            } else {
+                                // KMK <--
+                                scope.launchIO {
+                                    val duplicates = screenModel.getDuplicateLibraryManga(manga)
+                                    when {
+                                        manga.favorite -> {
+                                            val categories = screenModel.getCategories()
+                                            val preselectedIds = screenModel.getCategories.await(manga.id).map { it.id }
+                                            screenModel.setDialog(
+                                                BrowseSourceScreenModel.Dialog.ChangeMangaCategory(
+                                                    manga,
+                                                    categories.mapAsCheckboxState { it.id in preselectedIds }.toImmutableList(),
+                                                ),
+                                            )
+                                        }
+                                        duplicates.isNotEmpty() -> screenModel.setDialog(
+                                            BrowseSourceScreenModel.Dialog.AddDuplicateManga(manga, duplicates),
                                         )
+                                        else -> screenModel.addFavorite(manga)
                                     }
-                                    duplicates.isNotEmpty() -> screenModel.setDialog(
-                                        BrowseSourceScreenModel.Dialog.AddDuplicateManga(manga, duplicates),
-                                    )
-                                    else -> screenModel.addFavorite(manga)
                                 }
                             }
+                        },
+                        // KMK -->
+                        selection = bulkFavoriteState.selection,
+                        // KMK <--
+                    )
+
+                    // Floating Dock Overlay at bottom
+                    if (bulkFavoriteState.selectionMode) {
+                        BrowseSourceBulkActionDock(
+                            selectedCount = bulkFavoriteState.selection.size,
+                            isRunning = bulkFavoriteState.isRunning,
+                            onSelectAll = {
+                                mangaList.itemSnapshotList.items
+                                    .map { it.value.first }
+                                    .forEach { bulkFavoriteScreenModel.select(it) }
+                            },
+                            onReverseSelection = {
+                                mangaList.itemSnapshotList.items
+                                    .map { it.value.first }
+                                    .let { bulkFavoriteScreenModel.reverseSelection(it) }
+                            },
+                            onChangeCategoryClick = bulkFavoriteScreenModel::addFavorite,
+                            onClearSelection = bulkFavoriteScreenModel::toggleSelectionMode,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 16.dp),
+                        )
+                    } else {
+                        val savedSearchesPairs = remember(state.savedSearches) {
+                            state.savedSearches.map { it.id to it.name }
+                        }
+                        val activeSavedSearchId = (state.listing as? Listing.Search)?.savedSearchId
+
+                        BrowseSourceFloatingDock(
+                            sourceName = screenModel.source.name,
+                            isPopularSelected = state.listing == Listing.Popular,
+                            isLatestSelected = state.listing == Listing.Latest,
+                            isFilterSelected = state.listing is Listing.Search && activeSavedSearchId == null,
+                            supportsLatest = (screenModel.source as? CatalogueSource)?.supportsLatest == true,
+                            filterable = state.filterable,
+                            filtersCount = state.filters.size,
+                            savedSearches = savedSearchesPairs,
+                            activeSavedSearchId = activeSavedSearchId,
+                            onPopularClick = {
+                                screenModel.resetFilters()
+                                screenModel.setListing(Listing.Popular)
+                            },
+                            onLatestClick = {
+                                screenModel.resetFilters()
+                                screenModel.setListing(Listing.Latest)
+                            },
+                            onFilterClick = screenModel::openFilterSheet,
+                            onSavedSearchClick = { id ->
+                                val saved = state.savedSearches.find { it.id == id }
+                                if (saved != null) {
+                                    screenModel.onSavedSearch(saved) { context.toast(it) }
+                                }
+                            },
+                            onSavedSearchLongClick = { id, _ ->
+                                val saved = state.savedSearches.find { it.id == id }
+                                if (saved != null) {
+                                    screenModel.onSavedSearchPress(saved)
+                                }
+                            },
+                            onSourceSwitchClick = { showSourcePickerSheet = true },
+                            onActionsMenuClick = { showActionsSheet = true },
+                            sourceIcon = {
+                                SourceIcon(
+                                    source = tachiyomi.domain.source.model.Source(
+                                        id = screenModel.source.id,
+                                        lang = screenModel.source.lang,
+                                        name = screenModel.source.name,
+                                        supportsLatest = (screenModel.source as? CatalogueSource)?.supportsLatest == true,
+                                        isStub = false,
+                                    ),
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 16.dp),
+                        )
+                    }
+                }
+            }
+
+            // Bottom Sheets
+            if (showActionsSheet) {
+                BrowseSourceActionsSheet(
+                    sourceName = screenModel.source.name,
+                    displayMode = screenModel.displayMode,
+                    isHttpSource = screenModel.source is HttpSource,
+                    isConfigurableSource = isConfigurableSource,
+                    isIncognito = screenModel.incognitoMode.value,
+                    onDismissRequest = { showActionsSheet = false },
+                    onSearchClick = { showSearchSheet = true },
+                    onDisplayModeClick = {
+                        screenModel.displayMode = when (screenModel.displayMode) {
+                            LibraryDisplayMode.CompactGrid -> LibraryDisplayMode.ComfortableGrid
+                            LibraryDisplayMode.ComfortableGrid -> LibraryDisplayMode.List
+                            LibraryDisplayMode.List -> LibraryDisplayMode.CoverOnlyGrid
+                            else -> LibraryDisplayMode.CompactGrid
                         }
                     },
-                    // KMK -->
-                    selection = bulkFavoriteState.selection,
-                    // KMK <--
+                    onToggleBulkSelection = bulkFavoriteScreenModel::toggleSelectionMode,
+                    onWebViewClick = onWebViewClick,
+                    onSettingsClick = {
+                        when {
+                            screenModel.source.isEhBasedSource() && isHentaiEnabled -> navigator.push(SettingsEhScreen)
+                            screenModel.source.anyIs<ConfigurableSource>() -> navigator.push(SourcePreferencesScreen(sourceId))
+                            else -> {}
+                        }
+                    },
+                    onToggleIncognito = screenModel::toggleIncognitoMode,
+                    onHelpClick = onHelpClick,
+                )
+            }
+
+            if (showSearchSheet) {
+                val savedSearchesPairs = remember(state.savedSearches) {
+                    state.savedSearches.map { it.id to it.name }
+                }
+                BrowseSourceSearchSheet(
+                    sourceName = screenModel.source.name,
+                    initialQuery = state.toolbarQuery,
+                    savedSearches = savedSearchesPairs,
+                    onDismissRequest = { showSearchSheet = false },
+                    onSearch = { query ->
+                        screenModel.setToolbarQuery(query)
+                        screenModel.search(query = query)
+                    },
+                    onSelectSavedSearch = { id ->
+                        val saved = state.savedSearches.find { it.id == id }
+                        if (saved != null) {
+                            screenModel.onSavedSearch(saved) { context.toast(it) }
+                        }
+                    },
+                )
+            }
+
+            if (showSourcePickerSheet) {
+                val sourceManager = remember { Injekt.get<SourceManager>() }
+                val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
+                val pinnedSources by sourcePreferences.pinnedSources().collectAsState()
+                val availableSources = remember(sourceManager, pinnedSources) {
+                    sourceManager.getCatalogueSources().map { s ->
+                        SourcePickerItem(
+                            id = s.id,
+                            name = s.name,
+                            lang = s.lang,
+                            isPinned = s.id.toString() in pinnedSources,
+                        )
+                    }
+                }
+                SourcePickerBottomSheet(
+                    currentSourceId = sourceId,
+                    sources = availableSources,
+                    onDismissRequest = { showSourcePickerSheet = false },
+                    onSelectSource = { newSourceId ->
+                        navigator.replace(
+                            BrowseSourceScreen(
+                                sourceId = newSourceId,
+                                listingQuery = null,
+                                smartSearchConfig = smartSearchConfig,
+                            ),
+                        )
+                    },
                 )
             }
 

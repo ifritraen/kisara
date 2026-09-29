@@ -27,13 +27,13 @@ import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreen.SmartSearchConfig
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreenModel.Listing
-import eu.kanade.tachiyomi.ui.browse.source.feed.SourceFeedScreen
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import exh.ui.smartsearch.SmartSearchScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
@@ -113,8 +113,14 @@ fun Screen.sourcesTab(
                     val screen = when {
                         // Search selected source for entries to merge or for the recommending entry
                         smartSearchConfig != null -> SmartSearchScreen(source.id, smartSearchConfig)
-                        listing == Listing.Popular && screenModel.useNewSourceNavigation -> SourceFeedScreen(source.id)
-                        else -> BrowseSourceScreen(source.id, listing.query)
+                        else -> {
+                            val query = if (listing == Listing.Popular && source.supportsLatest) {
+                                tachiyomi.domain.source.interactor.GetRemoteManga.QUERY_LATEST
+                            } else {
+                                listing.query
+                            }
+                            BrowseSourceScreen(source.id, query)
+                        }
                     }
                     navigator.push(screen)
                     // SY <--
@@ -132,6 +138,10 @@ fun Screen.sourcesTab(
             when (val dialog = state.dialog) {
                 is SourcesScreenModel.Dialog.SourceLongClick -> {
                     val source = dialog.source
+                    // KMK -->
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val isMiniInstalled = eu.kanade.tachiyomi.ui.mini.MiniModeManager.isSourceInstalled(source.id)
+                    // KMK <--
                     SourceOptionsDialog(
                         source = source,
                         onClickPin = {
@@ -167,6 +177,26 @@ fun Screen.sourcesTab(
                         },
                         onClickUninstall = {
                             screenModel.uninstallExtension(source)
+                            screenModel.closeDialog()
+                        },
+                        onClickInstallMiniApp = {
+                            if (isMiniInstalled) {
+                                eu.kanade.tachiyomi.ui.mini.MiniModeManager.releaseSlot(context, source)
+                            } else {
+                                val slot = eu.kanade.tachiyomi.ui.mini.MiniModeManager.assignSlot(context, source)
+                                if (slot == null) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        context.stringResource(tachiyomi.i18n.kmk.KMR.strings.mini_mode_slots_full),
+                                        android.widget.Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
+                            screenModel.closeDialog()
+                        },
+                        isMiniInstalled = isMiniInstalled,
+                        onClickAddToHome = {
+                            eu.kanade.tachiyomi.ui.mini.MiniModeManager.offerPinnedShortcut(context, source)
                             screenModel.closeDialog()
                         },
                         // KMK <--

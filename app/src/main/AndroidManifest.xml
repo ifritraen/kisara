@@ -441,6 +441,168 @@
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             tools:remove="screenOrientation" />
+
+        <!-- KMK: Mini Mode Shortcut Activity (for direct home screen pinned shortcuts, unlimited sources) -->
+        <activity
+            android:name=".ui.mini.MiniModeShortcutActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:taskAffinity="${applicationId}.mini"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Tachiyomi" />
+
+        <!-- KMK: Mini Mode Slots (disabled by default; enabled at runtime via PackageManager) -->
+        <activity
+            android:name=".ui.mini.MiniModeSlot1"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini1"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_aka"
+            android:icon="@mipmap/ic_launcher_mini_aka"
+            android:roundIcon="@mipmap/ic_launcher_mini_aka"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot2"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini2"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_ao"
+            android:icon="@mipmap/ic_launcher_mini_ao"
+            android:roundIcon="@mipmap/ic_launcher_mini_ao"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot3"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini3"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_midori"
+            android:icon="@mipmap/ic_launcher_mini_midori"
+            android:roundIcon="@mipmap/ic_launcher_mini_midori"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot4"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini4"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_ki"
+            android:icon="@mipmap/ic_launcher_mini_ki"
+            android:roundIcon="@mipmap/ic_launcher_mini_ki"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot5"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini5"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_murasaki"
+            android:icon="@mipmap/ic_launcher_mini_murasaki"
+            android:roundIcon="@mipmap/ic_launcher_mini_murasaki"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot6"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini6"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_daidai"
+            android:icon="@mipmap/ic_launcher_mini_daidai"
+            android:roundIcon="@mipmap/ic_launcher_mini_daidai"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot7"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini7"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_momoiro"
+            android:icon="@mipmap/ic_launcher_mini_momoiro"
+            android:roundIcon="@mipmap/ic_launcher_mini_momoiro"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot8"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini8"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_mizu"
+            android:icon="@mipmap/ic_launcher_mini_mizu"
+            android:roundIcon="@mipmap/ic_launcher_mini_mizu"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot9"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini9"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_kon"
+            android:icon="@mipmap/ic_launcher_mini_kon"
+            android:roundIcon="@mipmap/ic_launcher_mini_kon"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.mini.MiniModeSlot10"
+            android:exported="true"
+            android:enabled="false"
+            android:taskAffinity="${applicationId}.mini10"
+            android:launchMode="singleTask"
+            android:label="@string/mini_slot_sumi"
+            android:icon="@mipmap/ic_launcher_mini_sumi"
+            android:roundIcon="@mipmap/ic_launcher_mini_sumi"
+            android:theme="@style/Theme.Tachiyomi">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- KMK -->
     </application>
 
 </manifest>

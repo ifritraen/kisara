@@ -3564,6 +3564,8 @@
     <!-- AI Tools Settings -->
     <string name="pref_category_ai_tools">AI &amp; Smart Tools</string>
     <string name="pref_ai_tools_summary">AI Manga Colorizer, Super-Resolution Upscaler, OCR &amp; Translation</string>
+    <string name="pref_category_colorizer">Manga Colorizer</string>
+    <string name="pref_colorizer_summary">On-device AI colorization presets, live tuning &amp; speed tiers</string>
 
     <!-- Updates Subsubtabs -->
     <string name="tab_calendar">Calendar</string>
@@ -3577,4 +3579,21 @@
     <string name="pref_category_suggestions">Suggestions</string>
     <string name="pref_category_blocked_tags">Blocked Tags</string>
     <string name="pref_blocked_tags_summary">Hide manga containing specific tags</string>
+
+    <!-- Global Search Style -->
+    <string name="pref_global_search_style">Global search bar style</string>
+    <string name="pref_global_search_style_top_bar">Top search bar</string>
+    <string name="pref_global_search_style_bottom_sheet">Bottom sheet</string>
+
+    <!-- Continue from Tracker -->
+    <string name="pref_home_section_names_continue_tracker">Continue from Tracker</string>
+
+    <!-- KMK: Mini Mode -->
+    <string name="mini_mode_install_action">Install as Mini App</string>
+    <string name="mini_mode_uninstall_action">Remove Mini App</string>
+    <string name="mini_mode_add_to_home">Add to Home Screen</string>
+    <string name="mini_mode_slots_full">All 10 mini slots are in use. Remove one first.</string>
+    <string name="mini_mode_installed">Installed as Mini App</string>
+    <string name="mini_mode_removed">Mini App removed</string>
+    <!-- KMK -->
 </resources>

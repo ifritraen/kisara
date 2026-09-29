@@ -1,22 +1,13 @@
 package eu.kanade.tachiyomi.ui.browse.novel.source.browse
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Favorite
-import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -25,22 +16,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.presentation.browse.components.BrowseSourceActionsSheet
+import eu.kanade.presentation.browse.components.BrowseSourceFloatingDock
+import eu.kanade.presentation.browse.components.BrowseSourceSearchSheet
+import eu.kanade.presentation.browse.components.SourcePickerBottomSheet
+import eu.kanade.presentation.browse.components.SourcePickerItem
 import eu.kanade.presentation.browse.novel.BrowseNovelSourceContent
 import eu.kanade.presentation.browse.novel.MissingNovelSourceScreen
-import eu.kanade.presentation.browse.novel.components.BrowseNovelSourceToolbar
+import eu.kanade.presentation.browse.novel.components.NovelSourceIcon
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.novel.DuplicateNovelDialog
 import eu.kanade.presentation.util.Screen
@@ -59,12 +58,15 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
-import tachiyomi.core.common.preference.mapAsCheckboxState
 import mihon.presentation.core.util.collectAsLazyPagingItems
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.source.model.SavedSearch
 import tachiyomi.domain.source.novel.model.StubNovelSource
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -124,151 +126,207 @@ data class BrowseNovelSourceScreen(
         }
         val sourceWebUrl = resolveNovelSourceWebUrl(screenModel.source)
 
+        var showActionsSheet by remember { mutableStateOf(false) }
+        var showSearchSheet by remember { mutableStateOf(false) }
+        var showSourcePickerSheet by remember { mutableStateOf(false) }
+
         Scaffold(
-            topBar = {
-                Column(
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface),
-                ) {
-                    BrowseNovelSourceToolbar(
-                        searchQuery = state.toolbarQuery,
-                        onSearchQueryChange = screenModel::setToolbarQuery,
-                        source = screenModel.source,
-                        displayMode = screenModel.displayMode,
-                        onDisplayModeChange = { screenModel.displayMode = it },
-                        navigateUp = navigateUp,
-                        onWebViewClick = sourceWebUrl?.let { url ->
-                            {
-                                navigator.push(
-                                    WebViewScreen(
-                                        url = url,
-                                        initialTitle = screenModel.source.name,
-                                        sourceId = screenModel.source.id,
-                                    ),
-                                )
-                            }
-                        },
-                        onSettingsClick = novelSourcePreferencesScreenOrNull(
-                            sourceId = sourceId,
-                            isSourceConfigurable = state.isSourceConfigurable,
-                        )?.let { screen ->
-                            { navigator.push(screen) }
-                        },
-                        onSearch = screenModel::search,
-                        useAuroraAppBarActions = false,
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = MaterialTheme.padding.small),
-                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                    ) {
-                        FilterChip(
-                            selected = state.listing == BrowseNovelSourceScreenModel.Listing.Popular,
-                            onClick = {
-                                screenModel.resetFilters()
-                                screenModel.setListing(BrowseNovelSourceScreenModel.Listing.Popular)
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Favorite,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                )
-                            },
-                            label = {
-                                Text(text = stringResource(MR.strings.popular))
-                            },
-                        )
-                        if ((screenModel.source as NovelCatalogueSource).supportsLatest) {
-                            FilterChip(
-                                selected = state.listing == BrowseNovelSourceScreenModel.Listing.Latest,
-                                onClick = {
-                                    screenModel.resetFilters()
-                                    screenModel.setListing(BrowseNovelSourceScreenModel.Listing.Latest)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.NewReleases,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                    )
-                                },
-                                label = {
-                                    Text(text = stringResource(MR.strings.latest))
-                                },
-                            )
-                        }
-                        if (state.filters.isNotEmpty()) {
-                            FilterChip(
-                                selected = state.listing is BrowseNovelSourceScreenModel.Listing.Search,
-                                onClick = screenModel::openFilterSheet,
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.FilterList,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                    )
-                                },
-                                label = {
-                                    Text(text = stringResource(MR.strings.action_filter))
-                                },
-                            )
-                        }
-                        state.savedSearches.forEach { (search, isActive) ->
-                            FilterChip(
-                                selected = isActive,
-                                onClick = { screenModel.openSavedSearch(search) },
-                                label = { Text(text = search.name) },
-                            )
-                        }
-                    }
-
-                    HorizontalDivider()
-                }
-            },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         ) { paddingValues ->
             val pagingNovels = screenModel.novelPagerFlowFlow.collectAsLazyPagingItems()
-            BrowseNovelSourceContent(
-                source = screenModel.source,
-                novels = pagingNovels,
-                favoriteNovelUrls = favoriteNovelUrls,
-                displayMode = screenModel.displayMode,
-                snackbarHostState = snackbarHostState,
-                contentPadding = paddingValues,
-                onNovelClick = { novel ->
-                    navigator.push(NovelScreen(novel.id, true))
-                },
-                onNovelLongClick = { novel ->
-                    scope.launchIO {
-                        val duplicateNovel = screenModel.getDuplicateLibraryNovel(novel)
-                        val isFavorite = novel.url in favoriteNovelUrls
-                        when {
-                            isFavorite -> {
-                                val categories = screenModel.getCategories()
-                                val preselectedIds = screenModel.getNovelCategoryIds(novel.id)
-                                screenModel.setDialog(
-                                    BrowseNovelSourceScreenModel.Dialog.ChangeNovelCategory(
-                                        novel = novel,
-                                        initialSelection = categories
-                                            .mapAsCheckboxState { it.id in preselectedIds }
-                                            .toImmutableList(),
-                                    ),
+            Box(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                BrowseNovelSourceContent(
+                    source = screenModel.source,
+                    novels = pagingNovels,
+                    favoriteNovelUrls = favoriteNovelUrls,
+                    displayMode = screenModel.displayMode,
+                    snackbarHostState = snackbarHostState,
+                    contentPadding = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding() + 84.dp,
+                    ),
+                    onNovelClick = { novel ->
+                        navigator.push(NovelScreen(novel.id, true))
+                    },
+                    onNovelLongClick = { novel ->
+                        scope.launchIO {
+                            val duplicateNovel = screenModel.getDuplicateLibraryNovel(novel)
+                            val isFavorite = novel.url in favoriteNovelUrls
+                            when {
+                                isFavorite -> {
+                                    val categories = screenModel.getCategories()
+                                    val preselectedIds = screenModel.getNovelCategoryIds(novel.id)
+                                    screenModel.setDialog(
+                                        BrowseNovelSourceScreenModel.Dialog.ChangeNovelCategory(
+                                            novel = novel,
+                                            initialSelection = categories
+                                                .mapAsCheckboxState { it.id in preselectedIds }
+                                                .toImmutableList(),
+                                        ),
+                                    )
+                                }
+                                duplicateNovel != null -> screenModel.setDialog(
+                                    BrowseNovelSourceScreenModel.Dialog.AddDuplicateNovel(novel, duplicateNovel),
                                 )
+                                else -> screenModel.addFavorite(novel)
                             }
-                            duplicateNovel != null -> screenModel.setDialog(
-                                BrowseNovelSourceScreenModel.Dialog.AddDuplicateNovel(
-                                    novel = novel,
-                                    duplicate = duplicateNovel,
-                                ),
-                            )
-                            else -> screenModel.addFavorite(novel)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                )
+
+                val savedSearchesPairs = remember(state.savedSearches) {
+                    state.savedSearches.map { it.first.id to it.first.name }
+                }
+                val activeSavedSearchId = state.savedSearches.find { it.second }?.first?.id
+
+                BrowseSourceFloatingDock(
+                    sourceName = screenModel.source.name,
+                    isPopularSelected = state.listing == BrowseNovelSourceScreenModel.Listing.Popular,
+                    isLatestSelected = state.listing == BrowseNovelSourceScreenModel.Listing.Latest,
+                    isFilterSelected = state.listing is BrowseNovelSourceScreenModel.Listing.Search && activeSavedSearchId == null,
+                    supportsLatest = (screenModel.source as? NovelCatalogueSource)?.supportsLatest == true,
+                    filterable = state.filters.isNotEmpty(),
+                    filtersCount = state.filters.size,
+                    savedSearches = savedSearchesPairs,
+                    activeSavedSearchId = activeSavedSearchId,
+                    onPopularClick = {
+                        screenModel.resetFilters()
+                        screenModel.setListing(BrowseNovelSourceScreenModel.Listing.Popular)
+                    },
+                    onLatestClick = {
+                        screenModel.resetFilters()
+                        screenModel.setListing(BrowseNovelSourceScreenModel.Listing.Latest)
+                    },
+                    onFilterClick = screenModel::openFilterSheet,
+                    onSavedSearchClick = { id ->
+                        val saved = state.savedSearches.find { it.first.id == id }?.first
+                        if (saved != null) {
+                            screenModel.openSavedSearch(saved)
+                        }
+                    },
+                    onSavedSearchLongClick = { id, _ ->
+                        val saved = state.savedSearches.find { it.first.id == id }?.first
+                        if (saved != null) {
+                            screenModel.setDialog(BrowseNovelSourceScreenModel.Dialog.DeleteSavedSearch(saved))
+                        }
+                    },
+                    onSourceSwitchClick = { showSourcePickerSheet = true },
+                    onActionsMenuClick = { showActionsSheet = true },
+                    sourceIcon = {
+                        NovelSourceIcon(
+                            source = tachiyomi.domain.source.novel.model.Source(
+                                id = screenModel.source.id,
+                                lang = screenModel.source.lang,
+                                name = screenModel.source.name,
+                                supportsLatest = (screenModel.source as? eu.kanade.tachiyomi.novelsource.NovelCatalogueSource)?.supportsLatest ?: false,
+                                isStub = false,
+                            ),
+                            modifier = Modifier.size(28.dp),
+                        )
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp),
+                )
+            }
+        }
+
+        // Bottom Sheets
+        if (showActionsSheet) {
+            val onSettings = novelSourcePreferencesScreenOrNull(
+                sourceId = sourceId,
+                isSourceConfigurable = state.isSourceConfigurable,
+            )?.let { screen ->
+                { navigator.push(screen) }
+            }
+            val onWebView = sourceWebUrl?.let { url ->
+                {
+                    navigator.push(
+                        WebViewScreen(
+                            url = url,
+                            initialTitle = screenModel.source.name,
+                            sourceId = screenModel.source.id,
+                        ),
+                    )
+                }
+            }
+            BrowseSourceActionsSheet(
+                sourceName = screenModel.source.name,
+                displayMode = screenModel.displayMode,
+                isHttpSource = sourceWebUrl != null,
+                isConfigurableSource = onSettings != null,
+                isIncognito = false,
+                onDismissRequest = { showActionsSheet = false },
+                onSearchClick = { showSearchSheet = true },
+                onDisplayModeClick = {
+                    screenModel.displayMode = when (screenModel.displayMode) {
+                        LibraryDisplayMode.CompactGrid -> LibraryDisplayMode.ComfortableGrid
+                        LibraryDisplayMode.ComfortableGrid -> LibraryDisplayMode.List
+                        LibraryDisplayMode.List -> LibraryDisplayMode.CoverOnlyGrid
+                        else -> LibraryDisplayMode.CompactGrid
+                    }
+                },
+                onToggleBulkSelection = {},
+                onWebViewClick = { onWebView?.invoke() },
+                onSettingsClick = { onSettings?.invoke() },
+                onToggleIncognito = {},
+                onHelpClick = {},
+            )
+        }
+
+        if (showSearchSheet) {
+            val savedSearchesPairs = remember(state.savedSearches) {
+                state.savedSearches.map { it.first.id to it.first.name }
+            }
+            BrowseSourceSearchSheet(
+                sourceName = screenModel.source.name,
+                initialQuery = state.toolbarQuery,
+                savedSearches = savedSearchesPairs,
+                onDismissRequest = { showSearchSheet = false },
+                onSearch = { query ->
+                    screenModel.setToolbarQuery(query)
+                    screenModel.search(query = query)
+                },
+                onSelectSavedSearch = { id ->
+                    val saved = state.savedSearches.find { it.first.id == id }?.first
+                    if (saved != null) {
+                        screenModel.openSavedSearch(saved)
                     }
                 },
             )
+        }
+
+        if (showSourcePickerSheet) {
+            val sourceManager = remember { Injekt.get<NovelSourceManager>() }
+            val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
+            val pinnedSources by sourcePreferences.pinnedNovelSources().collectAsState()
+            val availableSources = remember(sourceManager, pinnedSources) {
+                sourceManager.getCatalogueSources().map { s ->
+                    SourcePickerItem(
+                        id = s.id,
+                        name = s.name,
+                        lang = s.lang,
+                        isPinned = s.id.toString() in pinnedSources,
+                    )
+                }
+            }
+            SourcePickerBottomSheet(
+                currentSourceId = sourceId,
+                sources = availableSources,
+                onDismissRequest = { showSourcePickerSheet = false },
+                onSelectSource = { newSourceId ->
+                    navigator.replace(
+                        BrowseNovelSourceScreen(
+                            sourceId = newSourceId,
+                            listingQuery = null,
+                        ),
+                    )
+                },
+            )
+        }
 
             val onDismissRequest = { screenModel.setDialog(null) }
             when (val dialog = state.dialog) {
@@ -377,7 +435,6 @@ data class BrowseNovelSourceScreen(
                 null -> Unit
             }
         }
-    }
 
     suspend fun search(query: String) = queryEvent.send(SearchType.Text(query))
     suspend fun searchGenre(name: String) = queryEvent.send(SearchType.Genre(name))

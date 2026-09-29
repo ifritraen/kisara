@@ -18,6 +18,7 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 
 class GlobalAnimeSearchScreen(
     val searchQuery: String = "",
+    val openSearchOnStart: Boolean = false,
 ) : Screen() {
 
     @Composable
@@ -56,6 +57,7 @@ class GlobalAnimeSearchScreen(
                 onToggleClean = screenModel::toggleSearchClean,
                 onToggleFormat = screenModel::toggleSearchFormat,
                 onToggleFuzzy = screenModel::toggleSearchFuzzy,
+                openSearchOnStart = openSearchOnStart,
             )
         }
     }

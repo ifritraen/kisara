@@ -74,6 +74,9 @@ import tachiyomi.core.common.util.QueryTransformer
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.ui.graphics.luminance
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SearchBottomSheet(
@@ -90,6 +93,8 @@ fun SearchBottomSheet(
     searchFuzzy: Boolean? = null,
     onToggleFuzzy: (() -> Unit)? = null,
     filterContent: (@Composable () -> Unit)? = null,
+    onToggleSelectionMode: (() -> Unit)? = null,
+    isSelectionMode: Boolean = false,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val clipboardManager = LocalClipboardManager.current
@@ -105,13 +110,23 @@ fun SearchBottomSheet(
     val currentText = searchQuery ?: ""
     val parsedQueries = remember(currentText) { parseQueries(currentText) }
 
+    val colorScheme = MaterialTheme.colorScheme
+    val isDark = colorScheme.background.luminance() < 0.5f
+    val containerColor = colorScheme.surface.copy(alpha = if (isDark) 0.88f else 0.92f)
+    val scrimColor = colorScheme.scrim.copy(alpha = 0.32f)
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            )
+        },
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp,
+        containerColor = containerColor,
+        scrimColor = scrimColor,
+        tonalElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
@@ -158,15 +173,32 @@ fun SearchBottomSheet(
                     }
                 }
 
-                IconButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onToggleSelectionMode != null) {
+                        IconButton(
+                            onClick = {
+                                onToggleSelectionMode()
+                                onDismissRequest()
+                            },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Checklist,
+                                contentDescription = "Bulk selection mode",
+                                tint = if (isSelectionMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -178,7 +210,7 @@ fun SearchBottomSheet(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Smart Transform Controls (Clean, Format, Fuzzy)
+            // Smart Transform Controls (Clean, Format, Fuzzy, Bulk)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,6 +218,24 @@ fun SearchBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (onToggleSelectionMode != null) {
+                    FilterChip(
+                        selected = isSelectionMode,
+                        onClick = {
+                            onToggleSelectionMode()
+                            onDismissRequest()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Checklist,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                            )
+                        },
+                        label = { Text("Bulk Select") },
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
                 FilterChip(
                     selected = effectiveClean,
                     onClick = {

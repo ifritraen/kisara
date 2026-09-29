@@ -43,6 +43,7 @@ fun MALMyListScreen(
     onLoginClick: () -> Unit,
     onItemClick: (MALMediaItem) -> Unit,
     modifier: Modifier = Modifier,
+    onItemLongClick: ((MALMediaItem) -> Unit)? = null,
 ) {
     if (!isLoggedIn) {
         Box(
@@ -151,10 +152,15 @@ fun MALMyListScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            items(entries, key = { it.id }) { item ->
+            items(
+                count = entries.size,
+                key = { "mal-mylist-${entries[it].id}-$it" },
+            ) { index ->
+                val item = entries[index]
                 MALMediaCard(
                     item = item,
                     onClick = { onItemClick(item) },
+                    onLongClick = onItemLongClick?.let { { it(item) } },
                     width = 110,
                 )
             }

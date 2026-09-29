@@ -28,6 +28,7 @@ internal fun LibraryList(
     onGlobalSearchClicked: () -> Unit,
     // KMK -->
     listState: LazyListState = rememberLazyListState(),
+    categoryNamesByMangaId: Map<Long, List<String>> = emptyMap(),
     // KMK <--
 ) {
     FastScrollLazyColumn(
@@ -85,6 +86,7 @@ internal fun LibraryList(
                 } else {
                     null
                 },
+                categoryBadges = categoryNamesByMangaId[manga.id].orEmpty(),
                 manga = manga,
             )
         }

@@ -25,6 +25,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import tachiyomi.presentation.core.util.collectAsState
+import eu.kanade.domain.ui.UiPreferences
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+
 // KMK -->
 data class AnilistSectionConfig(
     val key: String,
@@ -32,19 +39,46 @@ data class AnilistSectionConfig(
 )
 
 object AnilistLandingSections {
-    val ALL_SECTIONS = listOf(
-        AnilistSectionConfig("continue", "Continue (According to tracker)"),
-        AnilistSectionConfig("recent", "Recent"),
-        AnilistSectionConfig("trending", "Trending"),
-        AnilistSectionConfig("top_rated", "Top (High scored)"),
-        AnilistSectionConfig("popular", "Popular"),
-        AnilistSectionConfig("recently_completed", "Recently completed"),
-        AnilistSectionConfig("upcoming", "Upcoming"),
-        AnilistSectionConfig("prev_top_rated", "Top (High scored) in previous seasons"),
-        AnilistSectionConfig("prev_popular", "Most Popular in previous seasons"),
-        AnilistSectionConfig("recommended", "Recommended for you"),
-        AnilistSectionConfig("community_recommendation", "Community recommendation"),
-    )
+    fun getSections(
+        season: String = "",
+        seasonYear: Int = 0,
+        prevSeasonCount: Int = 3,
+    ): List<AnilistSectionConfig> {
+        val (calcSeason, calcYear) = if (season.isNotBlank() && seasonYear > 0) {
+            season to seasonYear
+        } else {
+            getCurrentSeasonAndYear()
+        }
+        val seasonTitle = "${calcSeason.lowercase().replaceFirstChar { it.uppercase() }} $calcYear"
+
+        return listOf(
+            AnilistSectionConfig("continue", "Continue (According to tracker)"),
+            AnilistSectionConfig("trending", "Trending"),
+            AnilistSectionConfig("top_rated", "Highest Rated $seasonTitle"),
+            AnilistSectionConfig("popular", "Popular (All time)"),
+            AnilistSectionConfig("popular_season", "Popular $seasonTitle"),
+            AnilistSectionConfig("prev_top_rated", "Top in last $prevSeasonCount seasons"),
+            AnilistSectionConfig("prev_popular", "Popular in last $prevSeasonCount seasons"),
+            AnilistSectionConfig("upcoming", "Upcoming"),
+            AnilistSectionConfig("recently_completed", "Recently completed"),
+            AnilistSectionConfig("recent", "Recent"),
+            AnilistSectionConfig("recommended", "Recommended for you"),
+            AnilistSectionConfig("community_recommendation", "Community recommendation"),
+        )
+    }
+
+    private fun getCurrentSeasonAndYear(): Pair<String, Int> {
+        val cal = java.util.Calendar.getInstance()
+        val year = cal.get(java.util.Calendar.YEAR)
+        val month = cal.get(java.util.Calendar.MONTH) // 0-11
+        val season = when (month) {
+            in 0..2 -> "WINTER"
+            in 3..5 -> "SPRING"
+            in 6..8 -> "SUMMER"
+            else -> "FALL"
+        }
+        return season to year
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,6 +91,11 @@ fun AnilistSectionFilterSheet(
     onDismissRequest: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val prevSeasonCount by uiPreferences.trackTabPreviousSeasonsCount().collectAsState()
+    val allSections = remember(prevSeasonCount) {
+        AnilistLandingSections.getSections(prevSeasonCount = prevSeasonCount)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -72,8 +111,9 @@ fun AnilistSectionFilterSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val activeCount = if (enabledSections.isEmpty()) allSections.size else enabledSections.filter { key -> allSections.any { it.key == key } }.size
                 Text(
-                    text = "Landing Sections (${if (enabledSections.isEmpty()) AnilistLandingSections.ALL_SECTIONS.size else enabledSections.size}/${AnilistLandingSections.ALL_SECTIONS.size})",
+                    text = "Landing Sections ($activeCount/${allSections.size})",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -103,7 +143,7 @@ fun AnilistSectionFilterSheet(
                     .heightIn(max = 450.dp)
                     .padding(vertical = 4.dp),
             ) {
-                items(AnilistLandingSections.ALL_SECTIONS, key = { it.key }) { config ->
+                items(allSections, key = { it.key }) { config ->
                     val isChecked = enabledSections.isEmpty() || config.key in enabledSections
                     Row(
                         modifier = Modifier

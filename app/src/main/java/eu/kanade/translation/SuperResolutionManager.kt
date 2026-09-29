@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
@@ -39,6 +41,8 @@ import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+import eu.kanade.translation.model.TranslationReport
 
 /**
  * Manages local on-device batch chapter Super-Resolution using ONNX AI models (Anime4K ACNet / Real-ESRGAN).
@@ -52,9 +56,21 @@ class SuperResolutionManager(
     private val colorizerManager: ColorizerManager = Injekt.get(),
     private val translationPreferences: tachiyomi.domain.translation.TranslationPreferences = Injekt.get(),
 ) {
+    data class Progress(
+        val chapterId: Long,
+        val chapterName: String,
+        val currentPage: Int,
+        val totalPages: Int,
+        val percent: Int = 0,
+        val step: String,
+    )
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _queueState = MutableStateFlow<List<Translation>>(emptyList())
     val queueState = _queueState.asStateFlow()
+
+    private val _progressState = MutableStateFlow<Progress?>(null)
+    val progressState = _progressState.asStateFlow()
 
     private val srEngine by lazy { SuperResolutionEngine() }
     private val modelManager by lazy { AiModelManager(context) }
@@ -88,6 +104,9 @@ class SuperResolutionManager(
 
             next.status = Translation.State.TRANSLATING
             try {
+                TranslationReport.clear()
+                TranslationReport.log("INFO", "SuperResolution", "Starting Super-Resolution for chapter: ${next.chapter.name}")
+
                 // Ensure model is available
                 val prefModelId = translationPreferences.superResolutionModel().get()
                 val modelType = when (prefModelId) {
@@ -95,10 +114,30 @@ class SuperResolutionManager(
                     else -> AiModelManager.ModelType.ANIME4K_ACNET
                 }
 
+                _progressState.value = Progress(
+                    chapterId = next.chapter.id,
+                    chapterName = next.chapter.name,
+                    currentPage = 0,
+                    totalPages = 0,
+                    percent = 0,
+                    step = "Checking AI model (${modelType.displayName})...",
+                )
+                TranslationReport.log("INFO", "SuperResolution", "Selected model: ${modelType.displayName}")
+
                 var modelFile = modelManager.getModelFile(modelType)
                 if (!modelFile.exists() || modelFile.length() < modelType.minSize) {
+                    TranslationReport.log("INFO", "SuperResolution", "Model not found locally, downloading ${modelType.displayName}...")
+                    _progressState.value = Progress(
+                        chapterId = next.chapter.id,
+                        chapterName = next.chapter.name,
+                        currentPage = 0,
+                        totalPages = 0,
+                        percent = 0,
+                        step = "Downloading model ${modelType.displayName}...",
+                    )
                     val downloaded = modelManager.downloadModel(modelType)
                     if (!downloaded) {
+                        TranslationReport.log("WARNING", "SuperResolution", "Download failed for ${modelType.displayName}, attempting fallback...")
                         val fallbackType = if (modelType != AiModelManager.ModelType.ANIME4K_ACNET) {
                             AiModelManager.ModelType.ANIME4K_ACNET
                         } else {
@@ -112,11 +151,15 @@ class SuperResolutionManager(
                 }
 
                 if (!modelFile.exists()) {
-                    throw IllegalStateException("No valid Super-Resolution AI model found.")
+                    val err = "No valid Super-Resolution AI model found."
+                    TranslationReport.log("ERROR", "SuperResolution", err)
+                    throw IllegalStateException(err)
                 }
+                TranslationReport.log("INFO", "SuperResolution", "AI model ready: ${modelFile.name} (${modelFile.length() / 1024 / 1024}MB)")
 
                 val scale = translationPreferences.superResolutionScale().get().coerceIn(2, 4)
                 val useNnapi = translationPreferences.superResolutionUseNnapi().get()
+                TranslationReport.log("INFO", "SuperResolution", "Config: scale=${scale}x, useNnapi=$useNnapi")
 
                 // Locate source chapter directory (prioritizing Colorized directory if already colorized)
                 val colorizedChapterDir = colorizerManager.findChapterDir(
@@ -135,13 +178,17 @@ class SuperResolutionManager(
                 )
 
                 val inputDir = if (colorizedChapterDir != null && colorizedChapterDir.exists() && colorizedChapterDir.listFiles()?.isNotEmpty() == true) {
+                    TranslationReport.log("INFO", "SuperResolution", "Using colorized chapter images as input")
                     colorizedChapterDir
                 } else {
+                    TranslationReport.log("INFO", "SuperResolution", "Using raw downloaded chapter images as input")
                     rawChapterDir
                 }
 
                 if (inputDir == null || !inputDir.exists()) {
-                    throw IllegalStateException("Downloaded chapter files not found.")
+                    val err = "Downloaded chapter files not found."
+                    TranslationReport.log("ERROR", "SuperResolution", err)
+                    throw IllegalStateException(err)
                 }
 
                 val mangaDir = getMangaDir(next.manga.ogTitle, next.source)
@@ -153,51 +200,94 @@ class SuperResolutionManager(
                 val pages = getChapterPages(inputDir)
 
                 if (pages.isEmpty()) {
-                    throw IllegalStateException("No image files in source chapter.")
+                    val err = "No image files found in source chapter."
+                    TranslationReport.log("ERROR", "SuperResolution", err)
+                    throw IllegalStateException(err)
                 }
+                TranslationReport.log("INFO", "SuperResolution", "Loaded ${pages.size} pages to upscale")
 
                 for ((idx, pagePair) in pages.withIndex()) {
                     ensureActive()
                     val pageName = pagePair.first.substringAfterLast("/")
+                    val pageStart = System.currentTimeMillis()
+                    val basePercent = (idx * 100) / pages.size.coerceAtLeast(1)
+
+                    _progressState.value = Progress(
+                        chapterId = next.chapter.id,
+                        chapterName = next.chapter.name,
+                        currentPage = idx + 1,
+                        totalPages = pages.size,
+                        percent = basePercent,
+                        step = "Loading page ${idx + 1}/${pages.size} ($pageName)...",
+                    )
+                    TranslationReport.log("INFO", "SuperResolution", "Processing page ${idx + 1}/${pages.size} ($pageName)")
+
                     val outFile = outChapterDir.findFile(pageName) ?: outChapterDir.createFile(pageName) ?: continue
 
                     pagePair.second().use { inputStream ->
                         val inputBitmap = BitmapFactory.decodeStream(inputStream)
                         if (inputBitmap != null) {
+                            TranslationReport.log("INFO", "SuperResolution", "Page ${idx + 1} dimensions: ${inputBitmap.width}x${inputBitmap.height}")
+
                             val upscaledBitmap = srEngine.upscale(
                                 inputBitmap = inputBitmap,
                                 modelFile = modelFile,
                                 scale = scale,
                                 useNnapi = useNnapi,
+                                onTileProgress = { currentTile, totalTiles ->
+                                    val tileFraction = currentTile.toFloat() / totalTiles.coerceAtLeast(1).toFloat()
+                                    val overallPercent = (basePercent + (tileFraction * (100f / pages.size))).toInt().coerceIn(0, 100)
+                                    _progressState.value = Progress(
+                                        chapterId = next.chapter.id,
+                                        chapterName = next.chapter.name,
+                                        currentPage = idx + 1,
+                                        totalPages = pages.size,
+                                        percent = overallPercent,
+                                        step = "Upscaling page ${idx + 1}/${pages.size} (Tile $currentTile/$totalTiles)...",
+                                    )
+                                },
                             )
 
                             outFile.openOutputStream()?.use { outputStream ->
                                 upscaledBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
                                 outputStream.flush()
                             }
-                            if (outFile.length() == 0L) {
-                                outFile.delete()
-                            }
                             if (upscaledBitmap != inputBitmap) {
                                 upscaledBitmap.recycle()
                             }
                             inputBitmap.recycle()
+
+                            val pageElapsed = System.currentTimeMillis() - pageStart
+                            TranslationReport.log("INFO", "SuperResolution", "Page ${idx + 1}/${pages.size} upscaled in ${pageElapsed}ms")
                         } else {
-                            if (outFile.length() == 0L) {
-                                outFile.delete()
-                            }
+                            TranslationReport.log("WARNING", "SuperResolution", "Could not decode bitmap for page ${idx + 1}")
                         }
                     }
                 }
 
+                _progressState.value = Progress(
+                    chapterId = next.chapter.id,
+                    chapterName = next.chapter.name,
+                    currentPage = pages.size,
+                    totalPages = pages.size,
+                    percent = 100,
+                    step = "Super-Resolution complete!",
+                )
+                TranslationReport.log("INFO", "SuperResolution", "Super-Resolution finished successfully for chapter: ${next.chapter.name}")
                 next.status = Translation.State.TRANSLATED
             } catch (e: CancellationException) {
+                TranslationReport.log("WARNING", "SuperResolution", "Super-Resolution cancelled for chapter: ${next.chapter.name}")
                 next.status = Translation.State.NOT_TRANSLATED
                 throw e
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Super-Resolution failed" }
+                TranslationReport.log("ERROR", "SuperResolution", "Super-Resolution failed: ${e.message}", e)
                 next.status = Translation.State.ERROR
+                withContext(Dispatchers.Main) {
+                    context.toast(e.message ?: "Super-Resolution failed")
+                }
             } finally {
+                _progressState.value = null
                 synchronized(_queueState) {
                     _queueState.value = _queueState.value - next
                 }
@@ -241,7 +331,7 @@ class SuperResolutionManager(
     ): Boolean {
         val source = sourceManager.get(sourceId) ?: return false
         val chapterDir = findChapterDir(chapterName, chapterScanlator, mangaTitle, source)
-        return chapterDir?.exists() == true && chapterDir.listFiles()?.any { it.length() > 0 } == true
+        return chapterDir?.exists() == true && chapterDir.listFiles()?.any { it.isFile } == true
     }
 
     fun getSuperResolutionPageFile(

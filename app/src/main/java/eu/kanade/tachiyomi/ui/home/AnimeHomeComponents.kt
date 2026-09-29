@@ -69,7 +69,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.manga.interactor.toTrackSeriesItem
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.cards.HomeSectionCardStyle
 import eu.kanade.presentation.components.cards.KisaraHomeSectionCard
@@ -396,6 +398,7 @@ fun AnimeLandingContent(
         onRefresh = {
             screenModel.triggerBackgroundFeedFetch(force = true)
             screenModel.loadTrackerRecommendations(force = true)
+            screenModel.loadTrackerContinue(force = true)
             screenModel.loadSpotlightSuggestions()
         },
     ) {
@@ -467,6 +470,62 @@ fun AnimeLandingContent(
 
                         item {
                             SeeAllEndCard(width = 80.dp, height = 120.dp, onClick = { HomeTab.showSubTab(4) })
+                        }
+                    }
+                }
+            }
+
+            // 2b. Continue from Tracker
+            if (state.trackerContinue.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        title = stringResource(KMR.strings.pref_home_section_names_continue_tracker),
+                        onClickMore = { HomeTab.showSubTab(2) },
+                    )
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        items(
+                            items = state.trackerContinue,
+                            key = { "anime-tracker-continue-${it.id}" },
+                        ) { trackerItem ->
+                            val epSubtitle = if (trackerItem.lastWatchedEpisode != null && trackerItem.lastWatchedEpisode > 0) {
+                                val maxEp = if (trackerItem.totalEpisodes != null && trackerItem.totalEpisodes > 0) " / ${trackerItem.totalEpisodes}" else ""
+                                "Ep. ${trackerItem.lastWatchedEpisode.toInt()}$maxEp"
+                            } else {
+                                trackerItem.status ?: "Watching"
+                            }
+
+                            KisaraHomeSectionCard(
+                                style = HomeSectionCardStyle.DEFAULT,
+                                title = trackerItem.title,
+                                subtitle = trackerItem.sourceName,
+                                coverData = trackerItem.coverUrl,
+                                progress = if (trackerItem.totalEpisodes != null && trackerItem.totalEpisodes > 0 && trackerItem.lastWatchedEpisode != null) {
+                                    (trackerItem.lastWatchedEpisode / trackerItem.totalEpisodes).coerceIn(0f, 1f)
+                                } else null,
+                                chapterName = epSubtitle,
+                                coverTitleStyle = coverTitleStyleKey,
+                                onClick = {
+                                    navigator.push(
+                                        eu.kanade.tachiyomi.ui.track.details.TrackerMediaDetailsScreen(
+                                            series = trackerItem.toTrackSeriesItem(MediaType.ANIME),
+                                            mediaType = MediaType.ANIME,
+                                        ),
+                                    )
+                                },
+                                onResume = {
+                                    navigator.push(
+                                        eu.kanade.tachiyomi.ui.track.details.TrackerMediaDetailsScreen(
+                                            series = trackerItem.toTrackSeriesItem(MediaType.ANIME),
+                                            mediaType = MediaType.ANIME,
+                                        ),
+                                    )
+                                },
+                            )
                         }
                     }
                 }

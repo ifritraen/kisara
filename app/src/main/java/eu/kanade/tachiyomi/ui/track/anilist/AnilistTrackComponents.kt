@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.track.anilist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,12 +52,16 @@ fun AnilistMediaCard(
     item: ALSearchItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     width: Int = 120,
 ) {
     Card(
         modifier = modifier
             .width(width.dp)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
     ) {
@@ -163,6 +168,7 @@ fun AnilistSectionCarousel(
     items: List<ALSearchItem>,
     onItemClick: (ALSearchItem) -> Unit,
     onViewAllClick: (() -> Unit)? = null,
+    onItemLongClick: ((ALSearchItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) return
@@ -202,10 +208,15 @@ fun AnilistSectionCarousel(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(items, key = { it.id }) { item ->
+            items(
+                count = items.size,
+                key = { "anilist-carousel-$title-${items[it].id}-$it" },
+            ) { index ->
+                val item = items[index]
                 AnilistMediaCard(
                     item = item,
                     onClick = { onItemClick(item) },
+                    onLongClick = onItemLongClick?.let { { it(item) } },
                 )
             }
         }

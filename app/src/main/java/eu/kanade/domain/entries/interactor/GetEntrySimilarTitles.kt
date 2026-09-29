@@ -110,6 +110,8 @@ class GetEntrySimilarTitles(
                       nodes {
                         mediaRecommendation {
                           id
+                          type
+                          format
                           title {
                             userPreferred
                             romaji
@@ -134,6 +136,8 @@ class GetEntrySimilarTitles(
                       nodes {
                         mediaRecommendation {
                           id
+                          type
+                          format
                           title {
                             userPreferred
                             romaji
@@ -150,7 +154,7 @@ class GetEntrySimilarTitles(
                 """.trimIndent()
             }
 
-            var list = parseAniListRecommendations(query)
+            var list = parseAniListRecommendations(query, expectedType = "ANIME")
             if (list.isEmpty() && cleanTitle.isNotBlank()) {
                 // Secondary AniList Page search fallback
                 val searchEscaped = cleanTitle.take(30).replace("\"", "\\\"")
@@ -195,6 +199,8 @@ class GetEntrySimilarTitles(
                       nodes {
                         mediaRecommendation {
                           id
+                          type
+                          format
                           title {
                             userPreferred
                             romaji
@@ -219,6 +225,8 @@ class GetEntrySimilarTitles(
                       nodes {
                         mediaRecommendation {
                           id
+                          type
+                          format
                           title {
                             userPreferred
                             romaji
@@ -235,14 +243,14 @@ class GetEntrySimilarTitles(
                 """.trimIndent()
             }
 
-            var list = parseAniListRecommendations(query)
+            var list = parseAniListRecommendations(query, expectedType = "MANGA", expectedFormat = "NOVEL")
             if (list.isEmpty() && cleanTitle.isNotBlank()) {
                 // Secondary AniList Page search fallback
                 val searchEscaped = cleanTitle.take(30).replace("\"", "\\\"")
                 val pageQuery = """
                 query {
                   Page(perPage: 12) {
-                    media(search: "$searchEscaped", type: MANGA, sort: POPULARITY_DESC) {
+                    media(search: "$searchEscaped", type: MANGA, format: NOVEL, sort: POPULARITY_DESC) {
                       id
                       title {
                         userPreferred
@@ -265,7 +273,11 @@ class GetEntrySimilarTitles(
         }
     }
 
-    private suspend fun parseAniListRecommendations(graphqlQuery: String): List<SuggestionItem> {
+    private suspend fun parseAniListRecommendations(
+        graphqlQuery: String,
+        expectedType: String? = null,
+        expectedFormat: String? = null,
+    ): List<SuggestionItem> {
         return try {
             val payload = buildJsonObject {
                 put("query", graphqlQuery)
@@ -286,6 +298,22 @@ class GetEntrySimilarTitles(
             val list = mutableListOf<SuggestionItem>()
             nodes.forEach { node ->
                 val rec = node.jsonObject["mediaRecommendation"]?.jsonObject ?: return@forEach
+
+                val recType = rec["type"]?.jsonPrimitive?.content
+                val recFormat = rec["format"]?.jsonPrimitive?.content
+                val isAnimeFormat = recFormat in listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC")
+
+                val isValid = when {
+                    expectedType == "ANIME" -> (recType == null || recType.equals("ANIME", ignoreCase = true)) &&
+                        (recType?.equals("ANIME", ignoreCase = true) == true || isAnimeFormat)
+                    expectedFormat == "NOVEL" -> (recType == null || recType.equals("MANGA", ignoreCase = true)) &&
+                        recFormat?.equals("NOVEL", ignoreCase = true) == true
+                    expectedType == "MANGA" -> (recType == null || recType.equals("MANGA", ignoreCase = true)) &&
+                        !isAnimeFormat && recFormat?.equals("NOVEL", ignoreCase = true) != true
+                    else -> true
+                }
+                if (!isValid) return@forEach
+
                 val titleObj = rec["title"]?.jsonObject
                 val title = titleObj?.get("userPreferred")?.jsonPrimitive?.content
                     ?: titleObj?.get("english")?.jsonPrimitive?.content

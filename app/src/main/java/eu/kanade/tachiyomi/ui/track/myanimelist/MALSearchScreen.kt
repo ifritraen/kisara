@@ -46,6 +46,7 @@ fun MALSearchScreen(
     activeMediaType: MediaType,
     onItemClick: (MALMediaItem) -> Unit,
     modifier: Modifier = Modifier,
+    onItemLongClick: ((MALMediaItem) -> Unit)? = null,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         // Search Input Bar
@@ -120,10 +121,15 @@ fun MALSearchScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            items(results, key = { it.id }) { item ->
+            items(
+                count = results.size,
+                key = { "mal-search-${results[it].id}-$it" },
+            ) { index ->
+                val item = results[index]
                 MALMediaCard(
                     item = item,
                     onClick = { onItemClick(item) },
+                    onLongClick = onItemLongClick?.let { { it(item) } },
                     width = 110,
                 )
             }

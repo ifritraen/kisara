@@ -61,6 +61,7 @@ fun AnilistSearchScreen(
     activeMediaType: MediaType,
     onItemClick: (ALSearchItem) -> Unit,
     modifier: Modifier = Modifier,
+    onItemLongClick: ((ALSearchItem) -> Unit)? = null,
 ) {
     val sortOptions = listOf(
         "TRENDING_DESC" to "Trending",
@@ -104,20 +105,14 @@ fun AnilistSearchScreen(
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         )
 
-        // Sort Chips Row
+        // Sort Options Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 2.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "Sort:",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             sortOptions.forEach { (sortKey, label) ->
                 val isSelected = selectedSort == sortKey
                 FilterChip(
@@ -126,34 +121,31 @@ fun AnilistSearchScreen(
                         onSortSelected(sortKey)
                         onSearch()
                     },
-                    label = { Text(text = label) },
+                    label = { Text(label) },
                 )
             }
         }
 
-        // Genre Filter Chips Row (if available)
+        // Genre Filter Chips Row
         if (genres.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    text = "Genre:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FilterChip(
-                    selected = selectedGenre == null,
+                ElevatedAssistChip(
                     onClick = {
                         onGenreSelected(null)
                         onSearch()
                     },
-                    label = { Text(text = "All") },
+                    label = { Text("All Genres") },
+                    leadingIcon = if (selectedGenre == null) {
+                        { Icon(Icons.Outlined.FilterList, contentDescription = null) }
+                    } else null,
                 )
+
                 genres.forEach { genre ->
                     val isSelected = selectedGenre == genre
                     FilterChip(
@@ -162,7 +154,7 @@ fun AnilistSearchScreen(
                             onGenreSelected(if (isSelected) null else genre)
                             onSearch()
                         },
-                        label = { Text(text = genre) },
+                        label = { Text(genre) },
                     )
                 }
             }
@@ -207,10 +199,15 @@ fun AnilistSearchScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            items(results, key = { it.id }) { item ->
+            items(
+                count = results.size,
+                key = { "anilist-search-${results[it].id}-$it" },
+            ) { index ->
+                val item = results[index]
                 AnilistMediaCard(
                     item = item,
                     onClick = { onItemClick(item) },
+                    onLongClick = onItemLongClick?.let { { it(item) } },
                     width = 110,
                 )
             }

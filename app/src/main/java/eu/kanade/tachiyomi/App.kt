@@ -227,6 +227,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         scope.launchIO {
             Injekt.get<DatabaseHandler>() // Warm up SQLite database connection
             MangaCoverMetadata.load()
+            eu.kanade.tachiyomi.data.ai.ResourceMonitor.start()
         }
         // KMK <--
 
@@ -364,6 +365,9 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     // KMK <--
 
     override fun onStart(owner: LifecycleOwner) {
+        // KMK --> Mini Mode: skip sync and Discord when launched from a mini slot
+        if (eu.kanade.tachiyomi.ui.mini.MiniModeActivity.isMiniModeActive) return
+        // KMK <--
         SecureActivityDelegate.onApplicationStart()
 
         val syncPreferences: SyncPreferences = Injekt.get()

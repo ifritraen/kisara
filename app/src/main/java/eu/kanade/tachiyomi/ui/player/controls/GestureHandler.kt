@@ -192,12 +192,15 @@ fun GestureHandler(
                 }
             }
             .pointerInput(longPressAction, areControlsLocked) {
-                if (areControlsLocked || longPressAction != LongPressGesture.PlaybackSpeed) return@pointerInput
+                if (areControlsLocked || longPressAction == LongPressGesture.None) return@pointerInput
                 awaitPointerEventScope {
                     var startingX = 0f
                     var startingY = 0f
                     var initialSpeed = 2.0f
                     var hasLocked = false
+                    var downTime = 0L
+                    var isLongPressTriggered = false
+
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val changes = event.changes
@@ -207,10 +210,42 @@ fun GestureHandler(
                             startingY = downChange.position.y
                             hasLocked = false
                             isSpeedLocked = false
+                            isLongPressTriggered = false
+                            downTime = System.currentTimeMillis()
                             initialSpeed = gesturePreferences.longPressCustomSpeed().get()
                         }
+
+                        val activeChange = changes.firstOrNull { it.pressed }
+                        if (activeChange != null && !isLongPressTriggered && downTime > 0L) {
+                            val elapsed = System.currentTimeMillis() - downTime
+                            val distX = Math.abs(activeChange.position.x - startingX)
+                            val distY = Math.abs(activeChange.position.y - startingY)
+                            val touchSlop = 18.dp.toPx()
+
+                            if (distX > touchSlop || distY > touchSlop) {
+                                // Moved significantly before long press -> cancel long press tracking
+                                downTime = 0L
+                            } else if (elapsed >= 300L) {
+                                // Long-press threshold reached!
+                                isLongPressTriggered = true
+                                if (longPressAction == LongPressGesture.PlaybackSpeed) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    isLongPressing = true
+                                    viewModel.preGesturePlaybackSpeed.update { viewModel.playbackSpeed.value }
+                                    viewModel.gesturePlaybackSpeed.update { initialSpeed }
+                                    viewModel.isDynamicSpeedActive.update { true }
+                                    viewModel.hideControls()
+                                    viewModel.rampPlaybackSpeed(initialSpeed)
+                                } else if (longPressAction == LongPressGesture.Screenshot) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    isLongPressing = true
+                                    viewModel.pause()
+                                    viewModel.sheetShown.update { Sheets.Screenshot }
+                                }
+                            }
+                        }
+
                         if (viewModel.isDynamicSpeedActive.value) {
-                            val activeChange = changes.firstOrNull { it.pressed }
                             if (activeChange != null) {
                                 val currentX = activeChange.position.x
                                 val currentY = activeChange.position.y
@@ -259,6 +294,8 @@ fun GestureHandler(
                                     viewModel.rampPlaybackSpeed(originalSpeed)
                                 }
                                 isSpeedLocked = false
+                                downTime = 0L
+                                isLongPressTriggered = false
                             }
                         }
                     }
@@ -388,6 +425,8 @@ fun GestureHandler(
                             isSpeedDragging = true
                             startingSpeed = viewModel.playbackSpeed.value
                             startingX = offset.x
+                            hudActionText = "${startingSpeed}x"
+                            viewModel.playerUpdate.update { PlayerUpdates.Speed }
                             viewModel.hideControls()
                         } else {
                             // Bottom Half: Timeline Position Seek!
@@ -403,6 +442,8 @@ fun GestureHandler(
                     onDragEnd = {
                         if (isSpeedDragging) {
                             isSpeedDragging = false
+                            hudActionText = "Speed: ${viewModel.playbackSpeed.value}x"
+                            viewModel.playerUpdate.update { PlayerUpdates.Speed }
                         } else {
                             // Exact demux seek on pointer release
                             viewModel.seekTo(targetPosition, precise = true)
@@ -414,6 +455,8 @@ fun GestureHandler(
                     onDragCancel = {
                         if (isSpeedDragging) {
                             isSpeedDragging = false
+                            hudActionText = "Speed: ${viewModel.playbackSpeed.value}x"
+                            viewModel.playerUpdate.update { PlayerUpdates.Speed }
                         } else {
                             viewModel.gestureSeekAmount.update { null }
                             viewModel.hideSeekBar()
@@ -426,6 +469,7 @@ fun GestureHandler(
                         val stepPx = 30.dp.toPx()
                         val steps = (deltaX / stepPx).toInt()
                         val newSpeed = (startingSpeed + steps * 0.1f).coerceIn(0.2f, 6.0f).let { Math.round(it * 10f) / 10f }
+                        hudActionText = "${newSpeed}x"
                         if (viewModel.playbackSpeed.value != newSpeed) {
                             viewModel.playbackSpeed.update { newSpeed }
                             playerPreferences.playerSpeed().set(newSpeed)
@@ -451,8 +495,8 @@ fun GestureHandler(
                     }
                 }
             }
-            .pointerInput(areControlsLocked) {
-                if (!gestureVolumeBrightness || areControlsLocked) return@pointerInput
+            .pointerInput(areControlsLocked, isDynamicSpeedActive) {
+                if (!gestureVolumeBrightness || areControlsLocked || isDynamicSpeedActive) return@pointerInput
                 var startingY = 0f
                 var mpvVolumeStartingY = 0f
                 var originalVolume = currentVolume

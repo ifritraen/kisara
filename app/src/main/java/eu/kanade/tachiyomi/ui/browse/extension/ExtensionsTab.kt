@@ -35,7 +35,6 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsScreen
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
-import eu.kanade.tachiyomi.ui.browse.source.feed.SourceFeedScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
@@ -185,14 +184,9 @@ fun extensionsTab(
                 onOpenExtension = { extension ->
                     val source = extension.sources.firstOrNull()
                     if (source != null) {
-                        val uiPreferences = Injekt.get<UiPreferences>()
-                        val useNewSourceNavigation = uiPreferences.useNewSourceNavigation().get()
-                        val screen = if (useNewSourceNavigation) {
-                            SourceFeedScreen(source.id)
-                        } else {
-                            BrowseSourceScreen(source.id, GetRemoteManga.QUERY_POPULAR)
-                        }
-                        navigator.push(screen)
+                        val supportsLatest = (source as? eu.kanade.tachiyomi.source.CatalogueSource)?.supportsLatest == true
+                        val query = if (supportsLatest) GetRemoteManga.QUERY_LATEST else GetRemoteManga.QUERY_POPULAR
+                        navigator.push(BrowseSourceScreen(source.id, query))
                     } else {
                         navigator.push(ExtensionDetailsScreen(extension.pkgName))
                     }
@@ -208,26 +202,12 @@ fun extensionsTab(
                 onUpdateJar = extensionsScreenModel::updateJarExtension,
                 onBrowseAvailableJar = { extension ->
                     extensionsScreenModel.browseAvailableJar(context, extension) { sourceId ->
-                        val uiPreferences = Injekt.get<UiPreferences>()
-                        val useNewSourceNavigation = uiPreferences.useNewSourceNavigation().get()
-                        val screen = if (useNewSourceNavigation) {
-                            SourceFeedScreen(sourceId)
-                        } else {
-                            BrowseSourceScreen(sourceId, GetRemoteManga.QUERY_POPULAR)
-                        }
-                        navigator.push(screen)
+                        navigator.push(BrowseSourceScreen(sourceId, GetRemoteManga.QUERY_LATEST))
                     }
                 },
                 onBrowseAvailableExtension = { extension ->
                     extensionsScreenModel.browseAvailableExtension(extension) { sourceId ->
-                        val uiPreferences = Injekt.get<UiPreferences>()
-                        val useNewSourceNavigation = uiPreferences.useNewSourceNavigation().get()
-                        val screen = if (useNewSourceNavigation) {
-                            SourceFeedScreen(sourceId)
-                        } else {
-                            BrowseSourceScreen(sourceId, GetRemoteManga.QUERY_POPULAR)
-                        }
-                        navigator.push(screen)
+                        navigator.push(BrowseSourceScreen(sourceId, GetRemoteManga.QUERY_LATEST))
                     }
                 },
                 onSelectTag = extensionsScreenModel::setSelectedTag,

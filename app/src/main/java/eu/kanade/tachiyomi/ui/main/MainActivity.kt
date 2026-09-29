@@ -35,12 +35,16 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -235,6 +239,7 @@ class MainActivity : BaseActivity() {
 
         super.onCreate(savedInstanceState)
         enforceHighRefreshRate()
+        eu.kanade.tachiyomi.data.ai.ResourceMonitor.start()
 
         // KMK --> ponytail: await preference migrations without blocking the main thread (Tadami parity)
         if (isLaunch) {
@@ -307,17 +312,70 @@ class MainActivity : BaseActivity() {
         setComposeContent {
             val context = LocalContext.current
             val translationManager = remember { Injekt.get<eu.kanade.translation.TranslationManager>() }
+            val colorizerManager = remember { Injekt.get<eu.kanade.translation.ColorizerManager>() }
+            val superResolutionManager = remember { Injekt.get<eu.kanade.translation.SuperResolutionManager>() }
+
             val translationProgress by translationManager.progressState.collectAsState()
+            val colorizerProgress by colorizerManager.progressState.collectAsState()
+            val superResolutionProgress by superResolutionManager.progressState.collectAsState()
+
+            val activeAiProgress = when {
+                translationProgress != null -> {
+                    val p = translationProgress!!
+                    Triple(
+                        "TRANSLATION",
+                        p.step to "${p.currentPage}/${p.totalPages}",
+                        Triple(
+                            if (p.totalPages > 0) p.currentPage.toFloat() / p.totalPages.toFloat() else 0f,
+                            {
+                                val active = translationManager.getQueuedTranslationOrNull(p.chapterId)
+                                if (active != null) translationManager.cancelQueuedTranslation(active)
+                            },
+                            Icons.Default.Translate,
+                        ),
+                    )
+                }
+                colorizerProgress != null -> {
+                    val p = colorizerProgress!!
+                    Triple(
+                        "COLORIZER",
+                        p.step to if (p.totalPages > 0) "${p.currentPage}/${p.totalPages}" else "",
+                        Triple(
+                            p.percent / 100f,
+                            {
+                                val active = colorizerManager.getQueuedColorizerOrNull(p.chapterId)
+                                if (active != null) colorizerManager.cancelQueuedColorizer(active)
+                            },
+                            Icons.Default.Palette,
+                        ),
+                    )
+                }
+                superResolutionProgress != null -> {
+                    val p = superResolutionProgress!!
+                    Triple(
+                        "SUPER_RES",
+                        p.step to if (p.totalPages > 0) "${p.currentPage}/${p.totalPages}" else "",
+                        Triple(
+                            p.percent / 100f,
+                            {
+                                val active = superResolutionManager.getQueuedSuperResolutionOrNull(p.chapterId)
+                                if (active != null) superResolutionManager.cancelQueuedSuperResolution(active)
+                            },
+                            Icons.Default.AutoAwesome,
+                        ),
+                    )
+                }
+                else -> null
+            }
 
             val hazeState = remember { HazeState() }
-            var forceShowDetails by remember { mutableStateOf(false) }
-            val isOnMangaPage = navigator?.lastItem is eu.kanade.tachiyomi.ui.manga.MangaScreen
+            var isMinimized by remember { mutableStateOf(false) }
             var dragOffsetX by remember { mutableStateOf(0f) }
             var dragOffsetY by remember { mutableStateOf(0f) }
 
-            LaunchedEffect(translationProgress) {
-                if (translationProgress == null) {
-                    forceShowDetails = false
+            LaunchedEffect(activeAiProgress == null) {
+                if (activeAiProgress == null) {
+                    isMinimized = false
                     dragOffsetX = 0f
                     dragOffsetY = 0f
                 }
@@ -440,132 +498,11 @@ class MainActivity : BaseActivity() {
                                 .then(if (frostedGlass) Modifier.hazeSource(hazeState) else Modifier),
                         )
 
-                        // Translation Progress Overlay Banner (floating card / ball)
-                        translationProgress?.let { progress ->
-                            if (isOnMangaPage || forceShowDetails) {
-                                androidx.compose.material3.Card(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                                        .padding(bottom = contentPadding.calculateBottomPadding())
-                                        .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
-                                        .pointerInput(Unit) {
-                                            detectDragGestures { change, dragAmount ->
-                                                change.consume()
-                                                dragOffsetX += dragAmount.x
-                                                dragOffsetY += dragAmount.y
-                                            }
-                                        }
-                                        .widthIn(max = 400.dp)
-                                        .fillMaxWidth()
-                                        .hazeEffect(
-                                            state = hazeState,
-                                            style = HazeStyle(
-                                                backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
-                                                tint = HazeDefaults.tint(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)),
-                                                blurRadius = 15.dp,
-                                            ),
-                                        ),
-                                    shape = MaterialTheme.shapes.medium,
-                                    colors = androidx.compose.material3.CardDefaults.cardColors(
-                                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    ),
-                                    border = BorderStroke(
-                                        width = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                    ),
-                                ) {
-                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = progress.step,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier.weight(1f),
-                                                maxLines = 1,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                            )
-                                            Text(
-                                                text = "${progress.currentPage}/${progress.totalPages}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier.padding(horizontal = 8.dp),
-                                            )
-                                            val activeTranslation = remember(progress.chapterId) {
-                                                translationManager.getQueuedTranslationOrNull(progress.chapterId)
-                                            }
-                                            if (activeTranslation != null) {
-                                                androidx.compose.material3.IconButton(
-                                                    onClick = {
-                                                        translationManager.cancelQueuedTranslation(activeTranslation)
-                                                        forceShowDetails = false
-                                                    },
-                                                    modifier = Modifier.size(24.dp),
-                                                ) {
-                                                    androidx.compose.material3.Icon(
-                                                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
-                                                        contentDescription = "Cancel Translation",
-                                                        modifier = Modifier.size(16.dp),
-                                                        tint = MaterialTheme.colorScheme.error,
-                                                    )
-                                                }
-                                            }
-                                            if (forceShowDetails && !isOnMangaPage) {
-                                                androidx.compose.material3.IconButton(
-                                                    onClick = { forceShowDetails = false },
-                                                    modifier = Modifier.size(24.dp),
-                                                ) {
-                                                    androidx.compose.material3.Icon(
-                                                        imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
-                                                        contentDescription = "Minimize Progress",
-                                                        modifier = Modifier.size(20.dp),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        androidx.compose.material3.LinearProgressIndicator(
-                                            progress = { progress.currentPage.toFloat() / progress.totalPages.toFloat() },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 16.dp + contentPadding.calculateTopPadding(), end = 16.dp)
-                                        .size(40.dp)
-                                        .clickable { forceShowDetails = true }
-                                        .border(
-                                            width = 0.5.dp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                            shape = CircleShape,
-                                        )
-                                        .hazeEffect(
-                                            state = hazeState,
-                                            style = HazeStyle(
-                                                backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                                                tint = HazeDefaults.tint(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
-                                                blurRadius = 15.dp,
-                                            ),
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    androidx.compose.material3.CircularProgressIndicator(
-                                        progress = { progress.currentPage.toFloat() / progress.totalPages.toFloat() },
-                                        modifier = Modifier.fillMaxSize().padding(4.dp),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        strokeWidth = 2.dp,
-                                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                                    )
-                                    androidx.compose.material3.Icon(
-                                        imageVector = androidx.compose.material.icons.Icons.Default.Translate,
-                                        contentDescription = "Show Translation Progress",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            }
-                        }
+                        // AI Pipeline Progress Overlay Banner (floating frosted glass card / bubble)
+                        eu.kanade.presentation.components.FloatingAiProgressOverlay(
+                            hazeState = hazeState,
+                            modifier = Modifier.padding(bottom = contentPadding.calculateBottomPadding()),
+                        )
 
                         // Draw navigation bar scrim when needed
                         if (remember { isNavigationBarNeedsScrim() }) {

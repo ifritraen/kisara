@@ -44,6 +44,7 @@ fun AnilistMyListScreen(
     onLoginClick: () -> Unit,
     onItemClick: (ALSearchItem) -> Unit,
     modifier: Modifier = Modifier,
+    onItemLongClick: ((ALSearchItem) -> Unit)? = null,
 ) {
     if (!isLoggedIn) {
         Box(
@@ -148,10 +149,15 @@ fun AnilistMyListScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            items(filteredEntries, key = { it.id }) { entry ->
+            items(
+                count = filteredEntries.size,
+                key = { "anilist-mylist-${filteredEntries[it].id}-$it" },
+            ) { index ->
+                val entry = filteredEntries[index]
                 AnilistMediaCard(
                     item = entry.media,
                     onClick = { onItemClick(entry.media) },
+                    onLongClick = onItemLongClick?.let { { it(entry.media) } },
                     width = 110,
                 )
             }

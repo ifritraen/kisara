@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +68,7 @@ import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.cards.KisaraNormalCard
 import eu.kanade.presentation.components.cards.NormalCardStyle
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.library.components.CategoryBadge
 import eu.kanade.presentation.library.components.ColorizedBadge
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.LanguageBadge
@@ -126,6 +128,25 @@ fun NovelLibraryContent(
             .mapValues { entry -> entry.value.sortedBy { it.order } }
     }
 
+    val isSearching = !searchQuery.isNullOrBlank()
+    val categoryMap = remember(categories) { categories.associateBy { it.id } }
+    val categoryNamesByNovelId = remember(categories, getItemsForCategory, isSearching) {
+        if (!isSearching) {
+            emptyMap<Long, List<String>>()
+        } else {
+            val map = mutableMapOf<Long, MutableList<String>>()
+            categories.forEach { cat ->
+                val parent = cat.parentId?.let { categoryMap[it] }
+                val label = if (parent != null) "${parent.name} > ${cat.name}" else cat.name
+                val items = getItemsForCategory(cat)
+                items.forEach { item ->
+                    map.getOrPut(item.id) { mutableListOf() }.add(label)
+                }
+            }
+            map.mapValues { it.value.distinct() }
+        }
+    }
+
     Column(
         modifier = Modifier.padding(
             top = contentPadding.calculateTopPadding(),
@@ -160,12 +181,15 @@ fun NovelLibraryContent(
 
         LaunchedEffect(pagerState) {
             snapshotFlow { pagerState.currentPage }.collect {
+                if (showParentFilters) {
+                    onSubcategorySelected(null)
+                }
                 onChangeCurrentPage(it)
             }
         }
 
         val scope = rememberCoroutineScope()
-        if (showPageTabs && tabCategories.isNotEmpty() && (tabCategories.size > 1 || !tabCategories.first().isSystemCategory)) {
+        if (showPageTabs && !isSearching && tabCategories.isNotEmpty() && (tabCategories.size > 1 || !tabCategories.first().isSystemCategory)) {
             LibraryTabs(
                 categories = tabCategories,
                 pagerState = pagerState,
@@ -179,13 +203,27 @@ fun NovelLibraryContent(
         val activeParent = if (currentCategory?.parentId == null) currentCategory else parentCategories.find { it.id == currentCategory.parentId }
         val currentSubcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
 
-        if (showSubcategories && currentSubcategories.isNotEmpty()) {
+        val subLazyRowState = rememberLazyListState()
+        LaunchedEffect(activeSubcategoryId, currentSubcategories.size) {
+            if (currentSubcategories.isNotEmpty()) {
+                val activeIndex = if (activeSubcategoryId == null) {
+                    0
+                } else {
+                    val idx = currentSubcategories.indexOfFirst { it.id == activeSubcategoryId }
+                    if (idx != -1) idx + 1 else 0
+                }
+                subLazyRowState.animateScrollToItem(activeIndex)
+            }
+        }
+
+        if (showSubcategories && !isSearching && currentSubcategories.isNotEmpty()) {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     LazyRow(
+                        state = subLazyRowState,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -261,20 +299,31 @@ fun NovelLibraryContent(
                 }
             }
 
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-            ) { page ->
-                val category = tabCategories.getOrNull(page) ?: return@HorizontalPager
-                val items = wrappedGetItemsForCategory(category)
+            val onItemClick: (NovelLibraryItem) -> Unit = { item ->
+                if (selection.isNotEmpty()) {
+                    onToggleSelection(item)
+                } else {
+                    onNovelClicked(item)
+                }
+            }
+            val onItemLongClick: (NovelLibraryItem) -> Unit = { item ->
+                if (selection.isNotEmpty()) {
+                    onToggleRangeSelection(item)
+                } else {
+                    onToggleSelection(item)
+                }
+            }
+            val bottomPadding = contentPadding.calculateBottomPadding()
 
-                if (items.isEmpty()) {
+            if (isSearching) {
+                val allMatchingItems = remember(categories, getItemsForCategory, searchQuery) {
+                    categories.flatMap { getItemsForCategory(it) }
+                        .distinctBy { it.id }
+                }
+
+                if (allMatchingItems.isEmpty()) {
                     EmptyScreen(
-                        stringRes = if (searchQuery.isNullOrEmpty() && !hasActiveFilters) {
-                            MR.strings.information_empty_category
-                        } else {
-                            MR.strings.information_no_entries_found
-                        },
+                        stringRes = MR.strings.information_no_entries_found,
                         modifier = Modifier.fillMaxSize(),
                         actions = buildList {
                             if (hasActiveFilters) {
@@ -286,7 +335,7 @@ fun NovelLibraryContent(
                                     ),
                                 )
                             }
-                            if (!searchQuery.isNullOrEmpty() && onGlobalSearchClicked != null) {
+                            if (onGlobalSearchClicked != null) {
                                 add(
                                     EmptyScreenAction(
                                         stringRes = MR.strings.action_global_search_query,
@@ -297,91 +346,186 @@ fun NovelLibraryContent(
                             }
                         }.toImmutableList(),
                     )
-                    return@HorizontalPager
-                }
-
-                val bottomPadding = contentPadding.calculateBottomPadding()
-
-                val onItemClick: (NovelLibraryItem) -> Unit = { item ->
-                    if (selection.isNotEmpty()) {
-                        onToggleSelection(item)
-                    } else {
-                        onNovelClicked(item)
-                    }
-                }
-                val onItemLongClick: (NovelLibraryItem) -> Unit = { item ->
-                    if (selection.isNotEmpty()) {
-                        onToggleRangeSelection(item)
-                    } else {
-                        onToggleSelection(item)
-                    }
-                }
-
-                when (displayMode) {
-                    LibraryDisplayMode.List -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp),
-                        ) {
-                            items(items, key = { it.id }) { item ->
-                                NovelLibraryListItem(
-                                    item = item,
-                                    isSelected = selection.any { it.id == item.id },
-                                    showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
-                                    showUnreadBadge = showUnreadBadge,
-                                    showLanguageBadge = showLanguageBadge,
-                                    sourceLanguage = sourceLanguageByNovelId[item.id],
-                                    onClick = { onItemClick(item) },
-                                    onLongClick = { onItemLongClick(item) },
-                                )
+                } else {
+                    when (displayMode) {
+                        LibraryDisplayMode.List -> {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp),
+                            ) {
+                                items(allMatchingItems, key = { it.id }) { item ->
+                                    NovelLibraryListItem(
+                                        item = item,
+                                        isSelected = selection.any { it.id == item.id },
+                                        showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
+                                        showUnreadBadge = showUnreadBadge,
+                                        showLanguageBadge = showLanguageBadge,
+                                        sourceLanguage = sourceLanguageByNovelId[item.id],
+                                        categoryBadges = categoryNamesByNovelId[item.id].orEmpty(),
+                                        onClick = { onItemClick(item) },
+                                        onLongClick = { onItemLongClick(item) },
+                                    )
+                                }
+                            }
+                        }
+                        LibraryDisplayMode.ComfortableGrid,
+                        LibraryDisplayMode.ComfortableGridPanorama -> {
+                            val gridColumns = if (columns == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columns)
+                            LazyVerticalGrid(
+                                columns = gridColumns,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp, start = 8.dp, end = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(allMatchingItems, key = { it.id }) { item ->
+                                    NovelLibraryComfortableGridItem(
+                                        item = item,
+                                        isSelected = selection.any { it.id == item.id },
+                                        showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
+                                        showUnreadBadge = showUnreadBadge,
+                                        showLanguageBadge = showLanguageBadge,
+                                        sourceLanguage = sourceLanguageByNovelId[item.id],
+                                        categoryBadges = categoryNamesByNovelId[item.id].orEmpty(),
+                                        onClick = { onItemClick(item) },
+                                        onLongClick = { onItemLongClick(item) },
+                                    )
+                                }
+                            }
+                        }
+                        LibraryDisplayMode.CompactGrid,
+                        LibraryDisplayMode.CoverOnlyGrid -> {
+                            val gridColumns = if (columns == 0) GridCells.Adaptive(100.dp) else GridCells.Fixed(columns)
+                            LazyVerticalGrid(
+                                columns = gridColumns,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp, start = 8.dp, end = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(allMatchingItems, key = { it.id }) { item ->
+                                    NovelLibraryGridItem(
+                                        item = item,
+                                        isSelected = selection.any { it.id == item.id },
+                                        showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
+                                        showUnreadBadge = showUnreadBadge,
+                                        showLanguageBadge = showLanguageBadge,
+                                        sourceLanguage = sourceLanguageByNovelId[item.id],
+                                        categoryBadges = categoryNamesByNovelId[item.id].orEmpty(),
+                                        onClick = { onItemClick(item) },
+                                        onLongClick = { onItemLongClick(item) },
+                                    )
+                                }
                             }
                         }
                     }
-                    LibraryDisplayMode.ComfortableGrid,
-                    LibraryDisplayMode.ComfortableGridPanorama -> {
-                        val gridColumns = if (columns == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columns)
-                        LazyVerticalGrid(
-                            columns = gridColumns,
+                }
+            } else {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    val category = tabCategories.getOrNull(page) ?: return@HorizontalPager
+                    val items = wrappedGetItemsForCategory(category)
+
+                    if (items.isEmpty()) {
+                        EmptyScreen(
+                            stringRes = if (searchQuery.isNullOrEmpty() && !hasActiveFilters) {
+                                MR.strings.information_empty_category
+                            } else {
+                                MR.strings.information_no_entries_found
+                            },
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp, start = 8.dp, end = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(items, key = { it.id }) { item ->
-                                NovelLibraryComfortableGridItem(
-                                    item = item,
-                                    isSelected = selection.any { it.id == item.id },
-                                    showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
-                                    showUnreadBadge = showUnreadBadge,
-                                    showLanguageBadge = showLanguageBadge,
-                                    sourceLanguage = sourceLanguageByNovelId[item.id],
-                                    onClick = { onItemClick(item) },
-                                    onLongClick = { onItemLongClick(item) },
-                                )
+                            actions = buildList {
+                                if (hasActiveFilters) {
+                                    add(
+                                        EmptyScreenAction(
+                                            stringRes = MR.strings.action_reset,
+                                            icon = Icons.Default.Refresh,
+                                            onClick = onClearFilters,
+                                        ),
+                                    )
+                                }
+                                if (!searchQuery.isNullOrEmpty() && onGlobalSearchClicked != null) {
+                                    add(
+                                        EmptyScreenAction(
+                                            stringRes = MR.strings.action_global_search_query,
+                                            icon = Icons.Default.Search,
+                                            onClick = onGlobalSearchClicked,
+                                        ),
+                                    )
+                                }
+                            }.toImmutableList(),
+                        )
+                        return@HorizontalPager
+                    }
+
+                    when (displayMode) {
+                        LibraryDisplayMode.List -> {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp),
+                            ) {
+                                items(items, key = { it.id }) { item ->
+                                    NovelLibraryListItem(
+                                        item = item,
+                                        isSelected = selection.any { it.id == item.id },
+                                        showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
+                                        showUnreadBadge = showUnreadBadge,
+                                        showLanguageBadge = showLanguageBadge,
+                                        sourceLanguage = sourceLanguageByNovelId[item.id],
+                                        onClick = { onItemClick(item) },
+                                        onLongClick = { onItemLongClick(item) },
+                                    )
+                                }
                             }
                         }
-                    }
-                    LibraryDisplayMode.CompactGrid,
-                    LibraryDisplayMode.CoverOnlyGrid -> {
-                        val gridColumns = if (columns == 0) GridCells.Adaptive(100.dp) else GridCells.Fixed(columns)
-                        LazyVerticalGrid(
-                            columns = gridColumns,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp, start = 8.dp, end = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(items, key = { it.id }) { item ->
-                                NovelLibraryGridItem(
-                                    item = item,
-                                    isSelected = selection.any { it.id == item.id },
-                                    showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
-                                    showUnreadBadge = showUnreadBadge,
-                                    showLanguageBadge = showLanguageBadge,
-                                    sourceLanguage = sourceLanguageByNovelId[item.id],
-                                    onClick = { onItemClick(item) },
-                                    onLongClick = { onItemLongClick(item) },
-                                )
+                        LibraryDisplayMode.ComfortableGrid,
+                        LibraryDisplayMode.ComfortableGridPanorama -> {
+                            val gridColumns = if (columns == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columns)
+                            LazyVerticalGrid(
+                                columns = gridColumns,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp, start = 8.dp, end = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(items, key = { it.id }) { item ->
+                                    NovelLibraryComfortableGridItem(
+                                        item = item,
+                                        isSelected = selection.any { it.id == item.id },
+                                        showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
+                                        showUnreadBadge = showUnreadBadge,
+                                        showLanguageBadge = showLanguageBadge,
+                                        sourceLanguage = sourceLanguageByNovelId[item.id],
+                                        onClick = { onItemClick(item) },
+                                        onLongClick = { onItemLongClick(item) },
+                                    )
+                                }
+                            }
+                        }
+                        LibraryDisplayMode.CompactGrid,
+                        LibraryDisplayMode.CoverOnlyGrid -> {
+                            val gridColumns = if (columns == 0) GridCells.Adaptive(100.dp) else GridCells.Fixed(columns)
+                            LazyVerticalGrid(
+                                columns = gridColumns,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = bottomPadding + 16.dp, top = 8.dp, start = 8.dp, end = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(items, key = { it.id }) { item ->
+                                    NovelLibraryGridItem(
+                                        item = item,
+                                        isSelected = selection.any { it.id == item.id },
+                                        showDownloadBadge = showDownloadBadge && downloadedNovelIds.contains(item.id),
+                                        showUnreadBadge = showUnreadBadge,
+                                        showLanguageBadge = showLanguageBadge,
+                                        sourceLanguage = sourceLanguageByNovelId[item.id],
+                                        onClick = { onItemClick(item) },
+                                        onLongClick = { onItemLongClick(item) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -400,6 +544,7 @@ private fun NovelLibraryComfortableGridItem(
     showUnreadBadge: Boolean,
     showLanguageBadge: Boolean,
     sourceLanguage: String?,
+    categoryBadges: List<String> = emptyList(),
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -467,6 +612,7 @@ private fun NovelLibraryComfortableGridItem(
             coverBadgeStart = finalBadgeStart,
             coverBadgeEnd = finalBadgeEnd,
             coverTitleStyle = coverTitleStyleKey,
+            categoryBadges = categoryBadges,
             onClick = onClick,
             onLongClick = onLongClick,
         )
@@ -498,6 +644,7 @@ private fun NovelLibraryGridItem(
     showUnreadBadge: Boolean,
     showLanguageBadge: Boolean,
     sourceLanguage: String?,
+    categoryBadges: List<String> = emptyList(),
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -565,6 +712,7 @@ private fun NovelLibraryGridItem(
             coverBadgeStart = finalBadgeStart,
             coverBadgeEnd = finalBadgeEnd,
             coverTitleStyle = coverTitleStyleKey,
+            categoryBadges = categoryBadges,
             onClick = onClick,
             onLongClick = onLongClick,
         )
@@ -596,6 +744,7 @@ private fun NovelLibraryListItem(
     showUnreadBadge: Boolean,
     showLanguageBadge: Boolean,
     sourceLanguage: String?,
+    categoryBadges: List<String> = emptyList(),
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -666,6 +815,17 @@ private fun NovelLibraryListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (categoryBadges.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    categoryBadges.take(3).forEach { badge ->
+                        CategoryBadge(badge)
+                    }
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -178,6 +179,8 @@ fun AnimeActionRow(
     onEditCategory: (() -> Unit)?,
     onDubbingClicked: (() -> Unit)? = null,
     selectedDubbing: String? = null,
+    duplicateCount: Int = 0,
+    onDuplicateClicked: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val defaultActionButtonColor = MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA)
@@ -262,6 +265,15 @@ fun AnimeActionRow(
                         defaultActionButtonColor
                     },
                     onClick = onDubbingClicked,
+                )
+            }
+
+            if (duplicateCount > 0 && onDuplicateClicked != null) {
+                AnimeActionButton(
+                    title = stringResource(KMR.strings.label_duplicate),
+                    icon = Icons.Outlined.ContentCopy,
+                    color = MaterialTheme.colorScheme.primary,
+                    onClick = onDuplicateClicked,
                 )
             }
         }

@@ -247,6 +247,10 @@ data object NovelLibraryTab : Tab {
             if (activeCategory?.parentId != null) activeCategory.id else null
         }
 
+        LaunchedEffect(activeParent?.id, activeSubcategoryId) {
+            eu.kanade.tachiyomi.ui.library.LibraryTab.activeCategoryFlow.value = Pair(activeParent?.id, activeSubcategoryId)
+        }
+
         var showCategoryBar by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
@@ -564,11 +568,32 @@ data object NovelLibraryTab : Tab {
                             searchQuery = state.searchQuery,
                             selection = state.selection,
                             contentPadding = adjustedContentPadding,
-                            currentPage = { screenModel.activeCategoryIndex },
+                            currentPage = {
+                                if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
+                                    val activeParentId = state.categories.getOrNull(screenModel.activeCategoryIndex)?.let {
+                                        if (it.parentId == null) it.id else it.parentId
+                                    }
+                                    parentCategories.indexOfFirst { it.id == activeParentId }.coerceAtLeast(0)
+                                } else {
+                                    screenModel.activeCategoryIndex.coerceIn(0, state.categories.lastIndex.coerceAtLeast(0))
+                                }
+                            },
                             hasActiveFilters = state.hasActiveFilters,
                             showPageTabs = (showTopTabBar || !state.searchQuery.isNullOrEmpty()) && topBarVisible,
                             onClearFilters = screenModel::resetFilters,
-                            onChangeCurrentPage = { screenModel.activeCategoryIndex = it },
+                            onChangeCurrentPage = { page ->
+                                if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
+                                    val parentCat = parentCategories.getOrNull(page)
+                                    if (parentCat != null) {
+                                        val dbIndex = state.categories.indexOfFirst { it.id == parentCat.id }
+                                        if (dbIndex != -1) {
+                                            screenModel.activeCategoryIndex = dbIndex
+                                        }
+                                    }
+                                } else {
+                                    screenModel.activeCategoryIndex = page
+                                }
+                            },
                             onCategoryLongSelected = screenModel::selectAll,
                             onNovelClicked = { item ->
                                 if (item is NovelLibraryItem.Series) {

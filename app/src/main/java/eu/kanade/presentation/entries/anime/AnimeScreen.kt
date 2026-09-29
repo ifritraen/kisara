@@ -200,6 +200,7 @@ fun AnimeScreen(
     onWebViewClicked: (() -> Unit)?,
     onWebViewLongClicked: (() -> Unit)?,
     onTrackingClicked: (() -> Unit)?,
+    onDuplicateClicked: (() -> Unit)? = null,
 
     // For tags menu
     onTagSearch: (String) -> Unit,
@@ -299,6 +300,7 @@ fun AnimeScreen(
             onWebViewClicked = onWebViewClicked,
             onWebViewLongClicked = onWebViewLongClicked,
             onTrackingClicked = onTrackingClicked,
+            onDuplicateClicked = onDuplicateClicked,
             onTagSearch = onTagSearch,
             onCopyTagToClipboard = onCopyTagToClipboard,
             onFilterClicked = onFilterButtonClicked,
@@ -347,6 +349,7 @@ fun AnimeScreen(
             onWebViewClicked = onWebViewClicked,
             onWebViewLongClicked = onWebViewLongClicked,
             onTrackingClicked = onTrackingClicked,
+            onDuplicateClicked = onDuplicateClicked,
             onTagSearch = onTagSearch,
             onCopyTagToClipboard = onCopyTagToClipboard,
             onFilterButtonClicked = onFilterButtonClicked,
@@ -402,6 +405,7 @@ private fun AnimeScreenSmallImpl(
     onWebViewClicked: (() -> Unit)?,
     onWebViewLongClicked: (() -> Unit)?,
     onTrackingClicked: (() -> Unit)?,
+    onDuplicateClicked: (() -> Unit)? = null,
 
     // For tags menu
     onTagSearch: (String) -> Unit,
@@ -701,6 +705,8 @@ private fun AnimeScreenSmallImpl(
                                 onEditCategory = onEditCategoryClicked,
                                 onDubbingClicked = onDubbingClicked,
                                 selectedDubbing = selectedDubbing,
+                                duplicateCount = state.duplicateCount,
+                                onDuplicateClicked = onDuplicateClicked,
                             )
                         }
 
@@ -959,6 +965,7 @@ fun AnimeScreenLargeImpl(
     onWebViewClicked: (() -> Unit)?,
     onWebViewLongClicked: (() -> Unit)?,
     onTrackingClicked: (() -> Unit)?,
+    onDuplicateClicked: (() -> Unit)? = null,
 
     // For tags menu
     onTagSearch: (String) -> Unit,
@@ -1199,6 +1206,8 @@ fun AnimeScreenLargeImpl(
                                 onEditCategory = onEditCategoryClicked,
                                 onDubbingClicked = onDubbingClicked,
                                 selectedDubbing = selectedDubbing,
+                                duplicateCount = state.duplicateCount,
+                                onDuplicateClicked = onDuplicateClicked,
                             )
                             if (state.trackerDetails != null) {
                                 TrackerDetailsCard(trackDetails = state.trackerDetails)

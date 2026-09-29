@@ -81,7 +81,13 @@ internal class ArchivePageLoader(
                 .toList()
             pages.forEachIndexed { i, page ->
                 list.getOrNull(i)?.name?.let { entryName ->
-                    page.translation = translations[entryName]
+                    val matchedTranslation = translations[entryName]
+                        ?: translations.entries.firstOrNull { it.key.equals(entryName, ignoreCase = true) || it.key.substringBeforeLast(".") == entryName.substringBeforeLast(".") }?.value
+                        ?: translations.entries.firstOrNull { entry ->
+                            val digits = entry.key.filter { it.isDigit() }.toIntOrNull()
+                            digits != null && (digits == i + 1 || digits == i)
+                        }?.value
+                    page.translation = matchedTranslation
                     page.translationKey = entryName
                     val superResFile = superResolutionManager.getSuperResolutionPageFile(
                         chapterName = chapterName,
@@ -156,7 +162,13 @@ internal class ArchivePageLoader(
                     // SY <--
                     status = Page.State.Ready
                     // KMK -->
-                    translation = translations[entry.name]
+                    val matchedTranslation = translations[entry.name]
+                        ?: translations.entries.firstOrNull { it.key.equals(entry.name, ignoreCase = true) || it.key.substringBeforeLast(".") == entry.name.substringBeforeLast(".") }?.value
+                        ?: translations.entries.firstOrNull { tEntry ->
+                            val digits = tEntry.key.filter { it.isDigit() }.toIntOrNull()
+                            digits != null && (digits == i + 1 || digits == i)
+                        }?.value
+                    translation = matchedTranslation
                     translationKey = entry.name
                     // KMK <--
                 }

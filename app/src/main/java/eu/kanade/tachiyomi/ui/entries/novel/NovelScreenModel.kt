@@ -199,6 +199,8 @@ class NovelScreenModel(
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
+    private val getDuplicateLibraryNovel: tachiyomi.domain.entries.novel.interactor.GetDuplicateLibraryNovel = Injekt.get(),
+    private val getLibraryNovel: tachiyomi.domain.entries.novel.interactor.GetLibraryNovel = Injekt.get(),
     private val refreshNovelTracks: RefreshNovelTracks = Injekt.get(),
     private val trackNovelChapter: TrackNovelChapter = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
@@ -407,6 +409,16 @@ class NovelScreenModel(
                             )
                         }
                     }
+                }
+        }
+
+        screenModelScope.launchIO {
+            state.dropWhile { it !is State.Success }
+                .take(1)
+                .collectLatest { success ->
+                    val novel = (success as State.Success).novel
+                    val duplicates = getSmartDuplicateLibraryNovel(novel)
+                    updateSuccessState { it.copy(duplicateCount = duplicates.size) }
                 }
         }
 
@@ -1359,6 +1371,37 @@ class NovelScreenModel(
         return
     }
 
+    private suspend fun getSmartDuplicateLibraryNovel(novel: Novel): List<Novel> {
+        val direct = try { getDuplicateLibraryNovel.await(novel) } catch (_: Exception) { emptyList() }
+        val allLibrary = try { getLibraryNovel.await() } catch (_: Exception) { emptyList() }
+        val currentClean = eu.kanade.tachiyomi.util.MangaTitleParser.cleanForDuplicate(novel.title)
+        val currentTracks = try { getTracks.await(novel.id) } catch (_: Exception) { emptyList() }
+
+        val extraDuplicates = allLibrary.filter { item ->
+            val other = item.novel
+            if (other.id == novel.id) return@filter false
+            if (direct.any { it.id == other.id }) return@filter false
+
+            val otherClean = eu.kanade.tachiyomi.util.MangaTitleParser.cleanForDuplicate(other.title)
+            if (currentClean.isNotEmpty() && otherClean.isNotEmpty() &&
+                (currentClean == otherClean || currentClean.contains(otherClean) || otherClean.contains(currentClean))
+            ) {
+                return@filter true
+            }
+
+            if (currentTracks.isNotEmpty()) {
+                val otherTracks = try { getTracks.await(other.id) } catch (_: Exception) { emptyList() }
+                if (currentTracks.any { t1 -> otherTracks.any { t2 -> t1.trackerId == t2.trackerId && t1.remoteId == t2.remoteId } }) {
+                    return@filter true
+                }
+            }
+
+            false
+        }.map { it.novel }
+
+        return (direct + extraDuplicates).distinctBy { it.id }
+    }
+
     fun toggleFavorite() {
         val novel = successState?.novel ?: return
         screenModelScope.launchIO {
@@ -1370,6 +1413,8 @@ class NovelScreenModel(
                         dateAdded = 0L,
                     ),
                 )
+                val duplicates = getSmartDuplicateLibraryNovel(novel)
+                updateSuccessState { it.copy(duplicateCount = duplicates.size) }
                 return@launchIO
             }
 
@@ -1383,6 +1428,9 @@ class NovelScreenModel(
             if (!added) return@launchIO
 
             setNovelDefaultChapterFlags.await(novel)
+
+            val duplicates = getSmartDuplicateLibraryNovel(novel)
+            updateSuccessState { it.copy(duplicateCount = duplicates.size) }
 
             val categories = getCategories()
             val defaultCategoryId = libraryPreferences.defaultNovelCategory().get().toLong()
@@ -2747,6 +2795,7 @@ class NovelScreenModel(
             val isRefreshingData: Boolean,
             val dialog: Dialog?,
             val trackingCount: Int = 0,
+            val duplicateCount: Int = 0,
             val hasLoggedInTrackers: Boolean = false,
             val suggestions: eu.kanade.tachiyomi.data.suggestions.SuggestionState = eu.kanade.tachiyomi.data.suggestions.SuggestionState.Disabled,
             val selectedChapterIds: Set<Long> = emptySet(),

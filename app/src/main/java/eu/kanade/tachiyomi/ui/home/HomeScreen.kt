@@ -35,6 +35,9 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import kotlin.math.abs
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
@@ -61,6 +64,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import eu.kanade.domain.ui.model.MediaType
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Label
@@ -77,8 +82,10 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shuffle
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.TravelExplore
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined._18UpRating
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -264,6 +271,16 @@ object HomeScreen : Screen() {
         var hoveredButtonKey by remember { mutableStateOf<String?>(null) }
         var popupSelectedCategoryId by remember { mutableStateOf<Long?>(null) }
         var popupSelectedSubcategoryId by remember { mutableStateOf<Long?>(null) }
+
+        LaunchedEffect(Unit) {
+            eu.kanade.tachiyomi.ui.library.LibraryTab.activeCategoryFlow.collect { (parentId, subId) ->
+                if (parentId != null) {
+                    popupSelectedCategoryId = parentId
+                }
+                popupSelectedSubcategoryId = subId
+            }
+        }
+
         var categoryToEdit by remember { mutableStateOf<Category?>(null) }
         val categoriesState by produceState<List<Category>>(emptyList(), activeMediaType) {
             when (activeMediaType) {
@@ -397,27 +414,6 @@ object HomeScreen : Screen() {
                                                     NavigationBarItem(
                                                         tab = it,
                                                         alwaysShowLabel = alwaysShowLabel && bottomBarHeight >= 56,
-                                                        subTabButtonBounds = subTabButtonBounds,
-                                                        onHover = { key ->
-                                                            hoveredButtonKey = key
-                                                            if (key != null) {
-                                                                if (key.startsWith("Library_sub_")) {
-                                                                    val subId = key.removePrefix("Library_sub_").toLongOrNull()
-                                                                    if (subId != null) {
-                                                                        popupSelectedSubcategoryId = subId
-                                                                    }
-                                                                } else if (key.startsWith("Library_")) {
-                                                                    val catId = key.removePrefix("Library_").toLongOrNull()
-                                                                    if (catId != null) {
-                                                                        popupSelectedCategoryId = catId
-                                                                        popupSelectedSubcategoryId = null
-                                                                    }
-                                                                }
-                                                            }
-                                                        },
-                                                        onHold = { hold ->
-                                                            activeSubTabPopup = if (hold) it else null
-                                                        },
                                                     )
                                                 }
                                         }
@@ -471,6 +467,7 @@ object HomeScreen : Screen() {
 
                                         if (!gestureTriggered && abs(totalDx) > swipeThresholdPx && abs(totalDx) > abs(totalDy) * 1.5f) {
                                             gestureTriggered = true
+                                            change.consume()
                                             val swipeLeft = totalDx < 0f
                                             val currentTab = tabNavigator.current
 
@@ -536,6 +533,8 @@ object HomeScreen : Screen() {
                                                     }
                                                 }
                                             }
+                                        } else if (gestureTriggered) {
+                                            change.consume()
                                         }
                                     }
                                 }
@@ -611,11 +610,20 @@ object HomeScreen : Screen() {
                                         is LibraryTab -> true
                                         is HomeTab -> HomeTab.currentPageIndex in 1..5
                                         is BrowseTab -> BrowseTab.currentPageIndex in 0..3
+                                        is eu.kanade.tachiyomi.ui.track.TrackTab -> true
                                         else -> false
                                     }
 
                                     // 2. Determine which sub-tab popup is active
                                     val alwaysShowSubTabsTrack by uiPreferences.alwaysShowSubTabsTrack().collectAsState()
+                                    val mangaService by uiPreferences.trackTabMangaService().collectAsState()
+                                    val animeService by uiPreferences.trackTabAnimeService().collectAsState()
+                                    val novelService by uiPreferences.trackTabNovelService().collectAsState()
+                                    val activeTrackerService = when (activeMediaType) {
+                                        MediaType.ANIME -> animeService
+                                        MediaType.NOVEL -> novelService
+                                        MediaType.MANGA -> mangaService
+                                    }
                                     val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
                                     val categoryBarPinnedPref = remember { libraryPreferences.categoryBarPinned() }
                                     val isCategoryBarPinned by categoryBarPinnedPref.collectAsState()
@@ -671,38 +679,58 @@ object HomeScreen : Screen() {
                                                         categoriesState
                                                     }
 
+                                                    val parentCategoryListState = rememberLazyListState()
+                                                    val subcategoryListState = rememberLazyListState()
+
+                                                    LaunchedEffect(selectedParentId, tabCategories) {
+                                                        val targetIndex = tabCategories.indexOfFirst { it.id == selectedParentId }
+                                                        if (targetIndex != -1) {
+                                                            parentCategoryListState.animateScrollToItem(targetIndex)
+                                                        }
+                                                    }
+
+                                                    LaunchedEffect(popupSelectedSubcategoryId, subcategories) {
+                                                        val targetIndex = if (popupSelectedSubcategoryId == null) 0 else {
+                                                            val idx = subcategories.indexOfFirst { it.id == popupSelectedSubcategoryId }
+                                                            if (idx != -1) idx + 1 else 0
+                                                        }
+                                                        subcategoryListState.animateScrollToItem(targetIndex)
+                                                    }
+
                                                     Column(
                                                         verticalArrangement = Arrangement.spacedBy(4.dp),
                                                     ) {
                                                         // Subcategories Row (if present) - Rendered ABOVE Parent Categories
                                                         if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
-                                                            Row(
-                                                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                            LazyRow(
+                                                                state = subcategoryListState,
                                                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                                 verticalAlignment = Alignment.CenterVertically,
                                                             ) {
                                                                 // "All" button
-                                                                SubTabButton(
-                                                                    text = "All",
-                                                                    selected = popupSelectedSubcategoryId == null,
-                                                                    onLongClick = {
-                                                                        parentCategories.firstOrNull { it.id == selectedParentId }?.let { editCategory(it) }
-                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
-                                                                    },
-                                                                ) {
-                                                                    popupSelectedSubcategoryId = null
-                                                                    tabNavigator.current = LibraryTab
-                                                                    selectedParentId?.let { pId ->
-                                                                        val parentIndex = categoriesState.indexOfFirst { it.id == pId }
-                                                                        if (parentIndex != -1) {
-                                                                            LibraryTab.selectCategoryEvent.trySend(parentIndex)
+                                                                item(key = "sub_all") {
+                                                                    SubTabButton(
+                                                                        text = "All",
+                                                                        selected = popupSelectedSubcategoryId == null,
+                                                                        onLongClick = {
+                                                                            parentCategories.firstOrNull { it.id == selectedParentId }?.let { editCategory(it) }
+                                                                            if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
+                                                                        },
+                                                                    ) {
+                                                                        popupSelectedSubcategoryId = null
+                                                                        tabNavigator.current = LibraryTab
+                                                                        selectedParentId?.let { pId ->
+                                                                            val parentIndex = categoriesState.indexOfFirst { it.id == pId }
+                                                                            if (parentIndex != -1) {
+                                                                                LibraryTab.selectCategoryEvent.trySend(parentIndex)
+                                                                            }
                                                                         }
+                                                                        LibraryTab.selectSubcategoryEvent.trySend(null)
+                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                     }
-                                                                    LibraryTab.selectSubcategoryEvent.trySend(null)
-                                                                    if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                 }
 
-                                                                subcategories.forEach { sub ->
+                                                                items(subcategories, key = { it.id }) { sub ->
                                                                     val key = "Library_sub_${sub.id}"
                                                                     SubTabButton(
                                                                         text = sub.visualName,
@@ -732,43 +760,49 @@ object HomeScreen : Screen() {
 
                                                         // Parent Categories Row with Pin icon
                                                         Row(
-                                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
                                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                             verticalAlignment = Alignment.CenterVertically,
                                                         ) {
-                                                            tabCategories.forEach { category ->
-                                                                val key = "Library_${category.id}"
-                                                                SubTabButton(
-                                                                    text = category.visualName,
-                                                                    selected = selectedParentId == category.id,
-                                                                    hovered = hoveredButtonKey == key,
-                                                                    onLongClick = {
-                                                                        editCategory(category)
-                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
-                                                                    },
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                            popupSelectedCategoryId = category.id
-                                                                            popupSelectedSubcategoryId = null
-                                                                            tabNavigator.current = LibraryTab
-                                                                            val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
-                                                                            if (actualIndex != -1) {
-                                                                                LibraryTab.selectCategoryEvent.trySend(actualIndex)
-                                                                            }
-                                                                            LibraryTab.selectSubcategoryEvent.trySend(null)
+                                                            LazyRow(
+                                                                state = parentCategoryListState,
+                                                                modifier = Modifier.weight(1f, fill = false),
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                            ) {
+                                                                items(tabCategories, key = { it.id }) { category ->
+                                                                    val key = "Library_${category.id}"
+                                                                    SubTabButton(
+                                                                        text = category.visualName,
+                                                                        selected = selectedParentId == category.id,
+                                                                        hovered = hoveredButtonKey == key,
+                                                                        onLongClick = {
+                                                                            editCategory(category)
                                                                             if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
+                                                                        },
+                                                                        modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                            subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                popupSelectedCategoryId = category.id
+                                                                                popupSelectedSubcategoryId = null
+                                                                                tabNavigator.current = LibraryTab
+                                                                                val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
+                                                                                if (actualIndex != -1) {
+                                                                                    LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                                                }
+                                                                                LibraryTab.selectSubcategoryEvent.trySend(null)
+                                                                                if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
+                                                                            }
+                                                                        },
+                                                                    ) {
+                                                                        popupSelectedCategoryId = category.id
+                                                                        popupSelectedSubcategoryId = null
+                                                                        tabNavigator.current = LibraryTab
+                                                                        val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
+                                                                        if (actualIndex != -1) {
+                                                                            LibraryTab.selectCategoryEvent.trySend(actualIndex)
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    popupSelectedCategoryId = category.id
-                                                                    popupSelectedSubcategoryId = null
-                                                                    tabNavigator.current = LibraryTab
-                                                                    val actualIndex = categoriesState.indexOfFirst { it.id == category.id }
-                                                                    if (actualIndex != -1) {
-                                                                        LibraryTab.selectCategoryEvent.trySend(actualIndex)
+                                                                        LibraryTab.selectSubcategoryEvent.trySend(null)
+                                                                        if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                     }
-                                                                    LibraryTab.selectSubcategoryEvent.trySend(null)
-                                                                    if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                 }
                                                             }
 
@@ -796,244 +830,370 @@ object HomeScreen : Screen() {
                                                     ) {
                                                         when (activePopup) {
                                                             is HomeTab -> {
-                                                                SubTabButton(
-                                                                    text = "Home",
-                                                                    selected = HomeTab.currentPageIndex == 0,
-                                                                    hovered = hoveredButtonKey == "Home_Landing",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Home_Landing"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                Column(
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                                ) {
+                                                                    // Sub-subtabs Row for Updates (Calendar | Updates | Schedule) rendered ABOVE Home subtabs
+                                                                    if (HomeTab.currentPageIndex == 3) {
+                                                                        val updatesSubTabs = listOf("Calendar" to 0, "Updates" to 1, "Schedule" to 2)
+                                                                        Row(
+                                                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                        ) {
+                                                                            updatesSubTabs.forEach { (title, idx) ->
+                                                                                val key = "Home_Updates_sub_$idx"
+                                                                                SubTabButton(
+                                                                                    text = title,
+                                                                                    selected = eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex == idx,
+                                                                                    hovered = hoveredButtonKey == key,
+                                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                        subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                            tabNavigator.current = HomeTab
+                                                                                            HomeTab.showSubTab(3)
+                                                                                            eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
+                                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                        }
+                                                                                    },
+                                                                                ) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(3)
+                                                                                    eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    // Home Subtabs Row
+                                                                    Row(
+                                                                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                        verticalAlignment = Alignment.CenterVertically,
+                                                                    ) {
+                                                                        SubTabButton(
+                                                                            text = "Home",
+                                                                            selected = HomeTab.currentPageIndex == 0,
+                                                                            hovered = hoveredButtonKey == "Home_Landing",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Home_Landing"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(0)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
                                                                             tabNavigator.current = HomeTab
                                                                             HomeTab.showSubTab(0)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = HomeTab
-                                                                    HomeTab.showSubTab(0)
-                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Feed",
-                                                                    selected = HomeTab.currentPageIndex == 1,
-                                                                    hovered = hoveredButtonKey == "Home_Feed",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Home_Feed"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        SubTabButton(
+                                                                            text = "Feed",
+                                                                            selected = HomeTab.currentPageIndex == 1,
+                                                                            hovered = hoveredButtonKey == "Home_Feed",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Home_Feed"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(1)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
                                                                             tabNavigator.current = HomeTab
                                                                             HomeTab.showSubTab(1)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = HomeTab
-                                                                    HomeTab.showSubTab(1)
-                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Suggestion",
-                                                                    selected = HomeTab.currentPageIndex == 2,
-                                                                    hovered = hoveredButtonKey == "Home_Suggestions",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Home_Suggestions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        SubTabButton(
+                                                                            text = "Suggestion",
+                                                                            selected = HomeTab.currentPageIndex == 2,
+                                                                            hovered = hoveredButtonKey == "Home_Suggestions",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Home_Suggestions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(2)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
                                                                             tabNavigator.current = HomeTab
                                                                             HomeTab.showSubTab(2)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = HomeTab
-                                                                    HomeTab.showSubTab(2)
-                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Updates",
-                                                                    selected = HomeTab.currentPageIndex == 3,
-                                                                    hovered = hoveredButtonKey == "Home_Updates",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Home_Updates"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        SubTabButton(
+                                                                            text = "Updates",
+                                                                            selected = HomeTab.currentPageIndex == 3,
+                                                                            hovered = hoveredButtonKey == "Home_Updates",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Home_Updates"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(3)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
                                                                             tabNavigator.current = HomeTab
                                                                             HomeTab.showSubTab(3)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = HomeTab
-                                                                    HomeTab.showSubTab(3)
-                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "History",
-                                                                    selected = HomeTab.currentPageIndex == 4,
-                                                                    hovered = hoveredButtonKey == "Home_History",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Home_History"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        SubTabButton(
+                                                                            text = "History",
+                                                                            selected = HomeTab.currentPageIndex == 4,
+                                                                            hovered = hoveredButtonKey == "Home_History",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Home_History"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(4)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
                                                                             tabNavigator.current = HomeTab
                                                                             HomeTab.showSubTab(4)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = HomeTab
-                                                                    HomeTab.showSubTab(4)
-                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Favorite",
-                                                                    selected = HomeTab.currentPageIndex == 5,
-                                                                    hovered = hoveredButtonKey == "Home_Favorites",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Home_Favorites"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                        SubTabButton(
+                                                                            text = "Favorite",
+                                                                            selected = HomeTab.currentPageIndex == 5,
+                                                                            hovered = hoveredButtonKey == "Home_Favorites",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Home_Favorites"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = HomeTab
+                                                                                    HomeTab.showSubTab(5)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
                                                                             tabNavigator.current = HomeTab
                                                                             HomeTab.showSubTab(5)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = HomeTab
-                                                                    HomeTab.showSubTab(5)
-                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                    }
                                                                 }
                                                             }
-                                                            is BrowseTab -> {
-                                                                SubTabButton(
-                                                                    text = "Sources",
-                                                                    selected = BrowseTab.currentPageIndex == 0,
-                                                                    hovered = hoveredButtonKey == "Browse_Sources",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Browse_Sources"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                            tabNavigator.current = BrowseTab
-                                                                            BrowseTab.showSource()
-                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                        }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = BrowseTab
-                                                                    BrowseTab.showSource()
-                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Extensions",
-                                                                    selected = BrowseTab.currentPageIndex == 1,
-                                                                    hovered = hoveredButtonKey == "Browse_Extensions",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Browse_Extensions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                            tabNavigator.current = BrowseTab
-                                                                            BrowseTab.showExtension()
-                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                        }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = BrowseTab
-                                                                    BrowseTab.showExtension()
-                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Migration",
-                                                                    selected = BrowseTab.currentPageIndex == 2,
-                                                                    hovered = hoveredButtonKey == "Browse_Migration",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Browse_Migration"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                            tabNavigator.current = BrowseTab
-                                                                            BrowseTab.showMigration()
-                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                        }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = BrowseTab
-                                                                    BrowseTab.showMigration()
-                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Duplicate",
-                                                                    selected = BrowseTab.currentPageIndex == 3,
-                                                                    hovered = hoveredButtonKey == "Browse_Duplicate",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Browse_Duplicate"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                            tabNavigator.current = BrowseTab
-                                                                            BrowseTab.showDuplicate()
-                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                        }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = BrowseTab
-                                                                    BrowseTab.showDuplicate()
-                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                }
-                                                                SubTabButton(
-                                                                    text = "Search",
-                                                                    selected = BrowseTab.currentPageIndex == 4,
-                                                                    hovered = hoveredButtonKey == "Browse_BulkSearch",
-                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                        subTabButtonBounds["Browse_BulkSearch"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                            tabNavigator.current = BrowseTab
-                                                                            BrowseTab.showBulkSearch()
-                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                        }
-                                                                    },
-                                                                ) {
-                                                                    tabNavigator.current = BrowseTab
-                                                                    BrowseTab.showBulkSearch()
-                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
-                                                                }
-                                                            }
-                                                            is eu.kanade.tachiyomi.ui.track.TrackTab -> {
-                                                                val trackSubTabNames = when (activeMediaType) {
-                                                                    MediaType.ANIME -> listOf(
-                                                                        "Trending" to 0,
-                                                                        "This Season" to 1,
-                                                                        "Top 100" to 2,
-                                                                        "Search" to 3,
-                                                                        "Genres & Tags" to 4,
-                                                                        "Studios" to 5,
-                                                                        "My Anime List" to 6,
-                                                                        "Profile" to 7,
-                                                                    )
-                                                                    MediaType.NOVEL -> listOf(
-                                                                        "Novel Releases" to 0,
-                                                                        "Top Novels" to 1,
-                                                                        "Novel Directory" to 2,
-                                                                        "Novel Search" to 3,
-                                                                        "Novel Genres" to 4,
-                                                                        "Publishers" to 5,
-                                                                        "Novel Reviews" to 6,
-                                                                        "My Novel Lists" to 7,
-                                                                        "User CP" to 8,
-                                                                    )
-                                                                    else -> listOf(
-                                                                        "New Releases" to 0,
-                                                                        "Top Recommended" to 1,
-                                                                        "Releases" to 2,
-                                                                        "Series Info" to 3,
-                                                                        "Scanlators" to 4,
-                                                                        "Mangaka" to 5,
-                                                                        "Publishers" to 6,
-                                                                        "Reviews" to 7,
-                                                                        "Genres" to 8,
-                                                                        "Search" to 9,
-                                                                        "My Lists" to 10,
-                                                                        "User CP" to 11,
-                                                                    )
-                                                                }
+                                                            is UpdatesTab -> {
+                                                                val updatesSubTabs = listOf("Calendar" to 0, "Updates" to 1, "Schedule" to 2)
                                                                 Row(
                                                                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                                                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                                                     verticalAlignment = Alignment.CenterVertically,
                                                                 ) {
-                                                                    trackSubTabNames.forEach { (name, idx) ->
+                                                                    updatesSubTabs.forEach { (title, idx) ->
+                                                                        val key = "Updates_sub_$idx"
                                                                         SubTabButton(
-                                                                            text = name,
-                                                                            selected = eu.kanade.tachiyomi.ui.track.TrackTab.currentPageIndex == idx,
-                                                                            hovered = hoveredButtonKey == "Track_$idx",
+                                                                            text = title,
+                                                                            selected = eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex == idx,
+                                                                            hovered = hoveredButtonKey == key,
                                                                             modifier = Modifier.onGloballyPositioned { coordinates ->
-                                                                                subTabButtonBounds["Track_$idx"] = ButtonActionBounds(coordinates.boundsInRoot()) {
-                                                                                    tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
-                                                                                    eu.kanade.tachiyomi.ui.track.TrackTab.showSubTab(idx)
-                                                                                    if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                                subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = UpdatesTab
+                                                                                    eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
+                                                                                    if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                                 }
                                                                             },
                                                                         ) {
-                                                                            tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
-                                                                            eu.kanade.tachiyomi.ui.track.TrackTab.showSubTab(idx)
-                                                                            if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                            tabNavigator.current = UpdatesTab
+                                                                            eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
+                                                                            if (!alwaysShowSubTabsHome) activeSubTabPopup = null
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            is BrowseTab -> {
+                                                                Column(
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                                ) {
+                                                                    // Sub-subtabs Row for SearchTab (Global | Bulk | Advanced) rendered ABOVE Browse subtabs
+                                                                    if (BrowseTab.currentPageIndex == 4) {
+                                                                        val searchSubTabs = listOf("Global" to 0, "Bulk" to 1, "Advanced" to 2)
+                                                                        Row(
+                                                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                        ) {
+                                                                            searchSubTabs.forEach { (title, idx) ->
+                                                                                val key = "Browse_Search_sub_$idx"
+                                                                                SubTabButton(
+                                                                                    text = title,
+                                                                                    selected = eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.currentPageIndex == idx,
+                                                                                    hovered = hoveredButtonKey == key,
+                                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                        subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                            tabNavigator.current = BrowseTab
+                                                                                            BrowseTab.showBulkSearch()
+                                                                                            eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.selectSubTabEvent.trySend(idx)
+                                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                        }
+                                                                                    },
+                                                                                ) {
+                                                                                    tabNavigator.current = BrowseTab
+                                                                                    BrowseTab.showBulkSearch()
+                                                                                    eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.selectSubTabEvent.trySend(idx)
+                                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    // Browse Subtabs Row
+                                                                    Row(
+                                                                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                        verticalAlignment = Alignment.CenterVertically,
+                                                                    ) {
+                                                                        SubTabButton(
+                                                                            text = "Sources",
+                                                                            selected = BrowseTab.currentPageIndex == 0,
+                                                                            hovered = hoveredButtonKey == "Browse_Sources",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Browse_Sources"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = BrowseTab
+                                                                                    BrowseTab.showSource()
+                                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
+                                                                            tabNavigator.current = BrowseTab
+                                                                            BrowseTab.showSource()
+                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                        }
+                                                                        SubTabButton(
+                                                                            text = "Extensions",
+                                                                            selected = BrowseTab.currentPageIndex == 1,
+                                                                            hovered = hoveredButtonKey == "Browse_Extensions",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Browse_Extensions"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = BrowseTab
+                                                                                    BrowseTab.showExtension()
+                                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
+                                                                            tabNavigator.current = BrowseTab
+                                                                            BrowseTab.showExtension()
+                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                        }
+                                                                        SubTabButton(
+                                                                            text = "Migration",
+                                                                            selected = BrowseTab.currentPageIndex == 2,
+                                                                            hovered = hoveredButtonKey == "Browse_Migration",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Browse_Migration"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = BrowseTab
+                                                                                    BrowseTab.showMigration()
+                                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
+                                                                            tabNavigator.current = BrowseTab
+                                                                            BrowseTab.showMigration()
+                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                        }
+                                                                        SubTabButton(
+                                                                            text = "Duplicate",
+                                                                            selected = BrowseTab.currentPageIndex == 3,
+                                                                            hovered = hoveredButtonKey == "Browse_Duplicate",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Browse_Duplicate"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = BrowseTab
+                                                                                    BrowseTab.showDuplicate()
+                                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
+                                                                            tabNavigator.current = BrowseTab
+                                                                            BrowseTab.showDuplicate()
+                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                        }
+                                                                        SubTabButton(
+                                                                            text = "Search",
+                                                                            selected = BrowseTab.currentPageIndex == 4,
+                                                                            hovered = hoveredButtonKey == "Browse_BulkSearch",
+                                                                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                subTabButtonBounds["Browse_BulkSearch"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                    tabNavigator.current = BrowseTab
+                                                                                    BrowseTab.showBulkSearch()
+                                                                                    if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                }
+                                                                            },
+                                                                        ) {
+                                                                            tabNavigator.current = BrowseTab
+                                                                            BrowseTab.showBulkSearch()
+                                                                            if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            is eu.kanade.tachiyomi.ui.track.TrackTab -> {
+                                                                val trackSubTabNames = when (activeTrackerService) {
+                                                                    UiPreferences.TrackTabService.ANILIST, UiPreferences.TrackTabService.MAL -> listOf(
+                                                                        "Home" to 0,
+                                                                        "My List" to 1,
+                                                                        "Search" to 2,
+                                                                        "Profile" to 3,
+                                                                    )
+                                                                    UiPreferences.TrackTabService.MANGA_UPDATES -> listOf(
+                                                                        "Releases" to 0,
+                                                                        "Recommended" to 1,
+                                                                        "Search" to 2,
+                                                                        "Reviews" to 3,
+                                                                    )
+                                                                }
+                                                                Column(
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                                ) {
+                                                                    // Sub-subtabs Row for TrackTab Home (Landing, Trending, etc.) rendered ABOVE Track subtabs
+                                                                    val subSubTitles = eu.kanade.tachiyomi.ui.track.TrackTab.currentSubSubTabTitles
+                                                                    if (eu.kanade.tachiyomi.ui.track.TrackTab.currentPageIndex == 0 && subSubTitles.isNotEmpty()) {
+                                                                        Row(
+                                                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                        ) {
+                                                                            subSubTitles.forEachIndexed { idx, title ->
+                                                                                val key = "Track_sub_$idx"
+                                                                                SubTabButton(
+                                                                                    text = title,
+                                                                                    selected = eu.kanade.tachiyomi.ui.track.TrackTab.currentSubSubTabIndex == idx,
+                                                                                    hovered = hoveredButtonKey == key,
+                                                                                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                        subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                            tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
+                                                                                            eu.kanade.tachiyomi.ui.track.TrackTab.showSubSubTab(idx)
+                                                                                            if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                                        }
+                                                                                    },
+                                                                                ) {
+                                                                                    tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
+                                                                                    eu.kanade.tachiyomi.ui.track.TrackTab.showSubSubTab(idx)
+                                                                                    if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    // Track Subtabs Row
+                                                                    Row(
+                                                                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                        verticalAlignment = Alignment.CenterVertically,
+                                                                    ) {
+                                                                        trackSubTabNames.forEach { (name, idx) ->
+                                                                            SubTabButton(
+                                                                                text = name,
+                                                                                selected = eu.kanade.tachiyomi.ui.track.TrackTab.currentPageIndex == idx,
+                                                                                hovered = hoveredButtonKey == "Track_$idx",
+                                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                    subTabButtonBounds["Track_$idx"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                        tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
+                                                                                        eu.kanade.tachiyomi.ui.track.TrackTab.showSubTab(idx)
+                                                                                        if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                                    }
+                                                                                },
+                                                                            ) {
+                                                                                tabNavigator.current = eu.kanade.tachiyomi.ui.track.TrackTab
+                                                                                eu.kanade.tachiyomi.ui.track.TrackTab.showSubTab(idx)
+                                                                                if (!alwaysShowSubTabsTrack) activeSubTabPopup = null
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
@@ -1249,41 +1409,18 @@ object HomeScreen : Screen() {
                                                             } else {
                                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                                             }
-                                                            var itemGlobalOffset by remember { mutableStateOf(Offset.Zero) }
+                                                            val bgColor = if (selected) {
+                                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                                            } else {
+                                                                Color.Transparent
+                                                            }
                                                             Box(
                                                                 modifier = Modifier
                                                                     .size(bottomBarButtonSize)
                                                                     .clip(CircleShape)
-                                                                    .onGloballyPositioned { coordinates ->
-                                                                        itemGlobalOffset = coordinates.positionInRoot()
-                                                                    }
-                                                                    .subTabBarGestureDetector(
-                                                                        tab = tab,
-                                                                        selected = selected,
-                                                                        itemGlobalOffset = itemGlobalOffset,
-                                                                        subTabButtonBounds = subTabButtonBounds,
-                                                                        scope = scope,
-                                                                        onHover = { key ->
-                                                                            hoveredButtonKey = key
-                                                                            if (key != null) {
-                                                                                if (key.startsWith("Library_sub_")) {
-                                                                                    val subId = key.removePrefix("Library_sub_").toLongOrNull()
-                                                                                    if (subId != null) {
-                                                                                        popupSelectedSubcategoryId = subId
-                                                                                    }
-                                                                                } else if (key.startsWith("Library_")) {
-                                                                                    val catId = key.removePrefix("Library_").toLongOrNull()
-                                                                                    if (catId != null) {
-                                                                                        popupSelectedCategoryId = catId
-                                                                                        popupSelectedSubcategoryId = null
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        },
-                                                                        onHold = { hold ->
-                                                                            activeSubTabPopup = if (hold) tab else null
-                                                                        },
-                                                                        onTap = {
+                                                                    .background(bgColor)
+                                                                    .combinedClickable(
+                                                                        onClick = {
                                                                             if (!selected) {
                                                                                 tabNavigator.current = tab
                                                                             } else {
@@ -1299,7 +1436,7 @@ object HomeScreen : Screen() {
                                                                                 activeSubTabPopup = null
                                                                             }
                                                                         },
-                                                                        onLongPress = {
+                                                                        onLongClick = {
                                                                             if (selected) {
                                                                                 if (tab is HomeTab && !alwaysShowSubTabsHome) {
                                                                                     activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
@@ -1493,8 +1630,8 @@ object HomeScreen : Screen() {
         alwaysShowLabel: Boolean,
         // SY <--
         showLabel: Boolean = true,
-        subTabButtonBounds: Map<String, ButtonActionBounds>,
-        onHover: (String?) -> Unit,
+        subTabButtonBounds: Map<String, ButtonActionBounds> = emptyMap(),
+        onHover: (String?) -> Unit = {},
         onHold: (Boolean) -> Unit = {},
     ) {
         val tabNavigator = LocalTabNavigator.current
@@ -1502,51 +1639,17 @@ object HomeScreen : Screen() {
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
-        val alwaysShowSubTabsHome by uiPreferences.alwaysShowSubTabsHome().collectAsState()
-        val alwaysShowSubTabsBrowse by uiPreferences.alwaysShowSubTabsBrowse().collectAsState()
-        var activeSubTabPopup by remember { mutableStateOf<cafe.adriel.voyager.navigator.tab.Tab?>(null) }
-        var showActionPopup by remember { mutableStateOf(false) }
-
-        var itemGlobalOffset by remember { mutableStateOf(Offset.Zero) }
         val bottomBarHeight = remember { uiPreferences.bottomBarHeight() }.collectAsState().value
         NavigationBarItem(
-            modifier = Modifier
-                .height(bottomBarHeight.dp)
-                .onGloballyPositioned { coordinates ->
-                    itemGlobalOffset = coordinates.positionInRoot()
-                }
-                .subTabBarGestureDetector(
-                    tab = tab,
-                    selected = selected,
-                    itemGlobalOffset = itemGlobalOffset,
-                    subTabButtonBounds = subTabButtonBounds,
-                    scope = scope,
-                    onHover = onHover,
-                    onHold = onHold,
-                    onTap = {
-                        if (!selected) {
-                            tabNavigator.current = tab
-                        } else {
-                            scope.launch { tab.onReselect(navigator) }
-                        }
-                    },
-                    onLongPress = {
-                        if (selected) {
-                            if (tab is HomeTab && !alwaysShowSubTabsHome) {
-                                activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
-                            } else if (tab is BrowseTab && !alwaysShowSubTabsBrowse) {
-                                activeSubTabPopup = if (activeSubTabPopup == tab) null else tab
-                            }
-                        }
-                        if (tab is LibraryTab) {
-                            LibraryTab.toggleCategoryBarEvent.trySend(Unit)
-                        } else if (tab is MoreTab) {
-                            showActionPopup = !showActionPopup
-                        }
-                    },
-                ),
+            modifier = Modifier.height(bottomBarHeight.dp),
             selected = selected,
-            onClick = {},
+            onClick = {
+                if (!selected) {
+                    tabNavigator.current = tab
+                } else {
+                    scope.launch { tab.onReselect(navigator) }
+                }
+            },
             icon = { NavigationIconItem(tab) },
             label = if (showLabel && bottomBarHeight >= 56) {
                 {
@@ -1561,9 +1664,6 @@ object HomeScreen : Screen() {
                 null
             },
             alwaysShowLabel = alwaysShowLabel && bottomBarHeight >= 56,
-            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                indicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-            ),
         )
     }
 
@@ -2288,6 +2388,64 @@ private fun TabActionGroup(
                         Icon(Icons.Default.Check, contentDescription = "Resolve Duplicates", modifier = iconModifier)
                     }
                 }
+                4 -> { // Search (Global | Bulk | Advance)
+                    IconButton(
+                        onClick = {
+                            eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.prevSubTabEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Previous Search Tab", modifier = iconModifier)
+                    }
+                    IconButton(
+                        onClick = {
+                            eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.nextSubTabEvent.trySend(Unit)
+                            onActionExecuted()
+                        },
+                        modifier = buttonModifier,
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Next Search Tab", modifier = iconModifier)
+                    }
+                }
+            }
+        }
+        is eu.kanade.tachiyomi.ui.track.TrackTab -> {
+            IconButton(
+                onClick = {
+                    eu.kanade.tachiyomi.ui.track.TrackTab.searchEvent.trySend(Unit)
+                    onActionExecuted()
+                },
+                modifier = buttonModifier,
+            ) {
+                Icon(Icons.Default.Search, contentDescription = "Search Tracker", modifier = iconModifier)
+            }
+            IconButton(
+                onClick = {
+                    eu.kanade.tachiyomi.ui.track.TrackTab.refreshEvent.trySend(Unit)
+                    onActionExecuted()
+                },
+                modifier = buttonModifier,
+            ) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "Refresh Tracker", modifier = iconModifier)
+            }
+            IconButton(
+                onClick = {
+                    eu.kanade.tachiyomi.ui.track.TrackTab.openSectionFilterEvent.trySend(Unit)
+                    onActionExecuted()
+                },
+                modifier = buttonModifier,
+            ) {
+                Icon(Icons.Outlined.Tune, contentDescription = "Filter Landing Sections", modifier = iconModifier)
+            }
+            IconButton(
+                onClick = {
+                    eu.kanade.tachiyomi.ui.track.TrackTab.switchTrackerServiceEvent.trySend(Unit)
+                    onActionExecuted()
+                },
+                modifier = buttonModifier,
+            ) {
+                Icon(Icons.Outlined.SwapHoriz, contentDescription = "Switch Tracker Service", modifier = iconModifier)
             }
         }
         else -> {}

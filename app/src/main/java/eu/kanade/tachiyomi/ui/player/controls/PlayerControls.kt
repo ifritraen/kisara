@@ -142,6 +142,7 @@ fun PlayerControls(
     val warmNightLight by decoderPreferences.warmNightLightFilter().collectAsStateWithLifecycle()
     val isDynamicSpeedActive by viewModel.isDynamicSpeedActive.collectAsStateWithLifecycle()
     val gesturePlaybackSpeed by viewModel.gesturePlaybackSpeed.collectAsStateWithLifecycle()
+    val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
     val longPressAction by gesturePreferences.longPressGesture().collectAsStateWithLifecycle()
 
     val playerTimeToDisappear by playerPreferences.playerTimeToDisappear().collectAsStateWithLifecycle()
@@ -364,7 +365,8 @@ fun PlayerControls(
                     },
                 ) {
                     when (currentPlayerUpdate) {
-                        // is PlayerUpdates.DoubleSpeed -> DoubleSpeedPlayerUpdate()
+                        is PlayerUpdates.Speed -> TextPlayerUpdate("${playbackSpeed}x")
+                        is PlayerUpdates.DoubleSpeed -> TextPlayerUpdate("2.0x")
                         is PlayerUpdates.AspectRatio -> TextPlayerUpdate(stringResource(aspectRatio.titleRes))
                         is PlayerUpdates.ShowText -> TextPlayerUpdate(
                             (currentPlayerUpdate as PlayerUpdates.ShowText).value,
@@ -589,7 +591,6 @@ fun PlayerControls(
                     )
                 }
                 // Bottom left controls
-                val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {

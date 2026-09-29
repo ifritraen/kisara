@@ -35,10 +35,14 @@ import tachiyomi.presentation.core.components.material.IconButtonTokens
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.secondaryItemAlpha
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material3.ProgressIndicatorDefaults
+
 @Composable
 fun ChapterSuperResolutionIndicator(
     enabled: Boolean,
     superResolutionStateProvider: () -> Translation.State,
+    superResolutionProgressProvider: () -> Int = { 0 },
     onClick: (ChapterTranslationAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,8 +54,9 @@ fun ChapterSuperResolutionIndicator(
         )
         Translation.State.QUEUE, Translation.State.TRANSLATING -> SuperResolvingIndicator(
             enabled = enabled,
-            modifier = modifier,
+            superResolutionProgressProvider = superResolutionProgressProvider,
             onClick = onClick,
+            modifier = modifier,
         )
         Translation.State.TRANSLATED -> SuperResolvedIndicator(
             enabled = enabled,
@@ -96,10 +101,12 @@ private fun NotSuperResolvedIndicator(
 @Composable
 private fun SuperResolvingIndicator(
     enabled: Boolean,
+    superResolutionProgressProvider: () -> Int = { 0 },
     onClick: (ChapterTranslationAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isMenuExpanded by remember { mutableStateOf(false) }
+    val progress = superResolutionProgressProvider()
     Box(
         modifier = modifier
             .size(IconButtonTokens.StateLayerSize)
@@ -112,14 +119,37 @@ private fun SuperResolvingIndicator(
         contentAlignment = Alignment.Center,
     ) {
         val strokeColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val iconColor: Color
 
-        CircularProgressIndicator(
-            modifier = SuperResIndicatorModifier,
-            color = strokeColor,
-            strokeWidth = SuperResIndicatorStrokeWidth,
-            trackColor = Color.Transparent,
-            strokeCap = StrokeCap.Butt,
-        )
+        if (progress <= 0) {
+            iconColor = strokeColor
+            CircularProgressIndicator(
+                modifier = SuperResIndicatorModifier,
+                color = strokeColor,
+                strokeWidth = SuperResIndicatorStrokeWidth,
+                trackColor = Color.Transparent,
+                strokeCap = StrokeCap.Butt,
+            )
+        } else {
+            val animatedProgress by animateFloatAsState(
+                targetValue = progress / 100f,
+                animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
+            )
+            iconColor = if (animatedProgress < 0.5f) {
+                strokeColor
+            } else {
+                MaterialTheme.colorScheme.background
+            }
+            CircularProgressIndicator(
+                progress = { animatedProgress },
+                modifier = SuperResIndicatorModifier,
+                color = strokeColor,
+                strokeWidth = SuperResIndicatorSize / 2,
+                trackColor = Color.Transparent,
+                strokeCap = StrokeCap.Butt,
+                gapSize = 0.dp,
+            )
+        }
 
         DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
             DropdownMenuItem(
@@ -134,7 +164,7 @@ private fun SuperResolvingIndicator(
             imageVector = Icons.Outlined.AutoAwesome,
             contentDescription = null,
             modifier = SuperResolvingIndicatorModifier,
-            tint = strokeColor,
+            tint = iconColor,
         )
     }
 }

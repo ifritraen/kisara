@@ -214,7 +214,7 @@ class MangaOcrEngine(
         // Normalize to ImageNet mean/std (MangaOCR uses standard ViT preprocessing)
         val mean = floatArrayOf(0.5f, 0.5f, 0.5f)
         val std = floatArrayOf(0.5f, 0.5f, 0.5f)
-        val buf = FloatBuffer.allocate(3 * h * w)
+        val buf = eu.kanade.tachiyomi.data.ai.AiBufferUtils.allocateDirectFloatBuffer(3 * h * w)
         for (c in 0..2) {
             for (px in pixels) {
                 val v = when (c) {
@@ -249,6 +249,10 @@ class MangaOcrEngine(
             for (id in ids) {
                 if (id !in idToToken.indices) continue
                 val tok = idToToken[id]
+                if (tok == "[CLS]" || tok == "[SEP]" || tok == "[PAD]" || tok == "[UNK]" ||
+                    tok == "<s>" || tok == "</s>" || tok == "<pad>" || tok == "<unk>") {
+                    continue
+                }
                 if (tok.startsWith("##")) sb.append(tok.substring(2)) else sb.append(tok)
             }
             return sb.toString().trim()
@@ -261,13 +265,14 @@ class MangaOcrEngine(
                 val arr = Array(vocab.length()) { "" }
                 vocab.keys().forEach { k -> arr[vocab.getInt(k)] = k }
                 val added = json.optJSONArray("added_tokens")
-                var bos = 0
-                var eos = 2
+                var bos = if (vocab.has("[CLS]")) vocab.getInt("[CLS]") else 2
+                var eos = if (vocab.has("[SEP]")) vocab.getInt("[SEP]") else 3
                 if (added != null) {
                     for (i in 0 until added.length()) {
                         val tok = added.getJSONObject(i)
-                        if (tok.getString("content") == "<s>") bos = tok.getInt("id")
-                        if (tok.getString("content") == "</s>") eos = tok.getInt("id")
+                        val content = tok.optString("content")
+                        if (content == "[CLS]" || content == "<s>") bos = tok.getInt("id")
+                        if (content == "[SEP]" || content == "</s>") eos = tok.getInt("id")
                     }
                 }
                 return SimpleTokenizer(arr, bos, eos)

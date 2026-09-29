@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
@@ -201,19 +202,19 @@ interface CatalogueSource : Source {
             .filterNot { word -> words.any { it.lowercase() == word } }
             .onEach { words.add(it) }
         if (words.isEmpty()) return
+        val targetWords = words.take(5)
 
         coroutineScope {
             val filterList = getFilterList()
-            words.map { keyword ->
-                launch {
-                    runCatching {
-                        getSearchManga(1, keyword.sanitize(), filterList).mangas
-                    }
-                        .onSuccess { if (it.isNotEmpty()) pushResults(Pair(keyword, it), false) }
-                        .onFailure { e ->
-                            logcat(LogPriority.ERROR, e) { "## getRelatedMangaListBySearch: $e" }
-                        }
+            targetWords.forEach { keyword ->
+                runCatching {
+                    getSearchManga(1, keyword.sanitize(), filterList).mangas
                 }
+                    .onSuccess { if (it.isNotEmpty()) pushResults(Pair(keyword, it), false) }
+                    .onFailure { e ->
+                        logcat(LogPriority.ERROR, e) { "## getRelatedMangaListBySearch: $e" }
+                    }
+                delay(250)
             }
         }
     }

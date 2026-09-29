@@ -64,11 +64,11 @@ class ComicTextDetector(
      */
     fun detect(bitmap: Bitmap): List<Rect> {
         val sess = getSession() ?: return emptyList()
-        val targetDim = 512
+        val targetDim = 1024
 
         val scaled = Bitmap.createScaledBitmap(bitmap, targetDim, targetDim, true)
         val numPixels = targetDim * targetDim
-        val floatBuf = FloatBuffer.allocate(3 * numPixels)
+        val floatBuf = eu.kanade.tachiyomi.data.ai.AiBufferUtils.allocateDirectFloatBuffer(3 * numPixels)
 
         val pixels = IntArray(numPixels)
         scaled.getPixels(pixels, 0, targetDim, 0, 0, targetDim, targetDim)

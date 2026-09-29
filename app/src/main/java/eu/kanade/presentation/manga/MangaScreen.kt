@@ -107,10 +107,12 @@ import eu.kanade.presentation.components.DownloadDropdownMenu
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
+import eu.kanade.presentation.components.SuperResolutionDropdownMenu
 import eu.kanade.presentation.components.TranslationDropdownMenu
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.manga.ColorizerAction
 import eu.kanade.presentation.manga.DownloadAction
+import eu.kanade.presentation.manga.SuperResolutionAction
 import eu.kanade.presentation.manga.TranslationAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.manga.components.ChapterHeader
@@ -227,6 +229,7 @@ fun MangaScreen(
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onTranslateActionClicked: ((TranslationAction) -> Unit)? = null,
     onColorizeActionClicked: ((ColorizerAction) -> Unit)? = null,
+    onSuperResolutionActionClicked: ((SuperResolutionAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditFetchIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -381,6 +384,7 @@ fun MangaScreen(
                     onDownloadActionClicked = onDownloadActionClicked,
                     onTranslateActionClicked = onTranslateActionClicked,
                     onColorizeActionClicked = onColorizeActionClicked,
+                    onSuperResolutionActionClicked = onSuperResolutionActionClicked,
                     onEditCategoryClicked = onEditCategoryClicked,
                     onEditIntervalClicked = onEditFetchIntervalClicked,
                     onMigrateClicked = onMigrateClicked,
@@ -469,6 +473,7 @@ fun MangaScreen(
                     onDownloadActionClicked = onDownloadActionClicked,
                     onTranslateActionClicked = onTranslateActionClicked,
                     onColorizeActionClicked = onColorizeActionClicked,
+                    onSuperResolutionActionClicked = onSuperResolutionActionClicked,
                     onEditCategoryClicked = onEditCategoryClicked,
                     onEditIntervalClicked = onEditFetchIntervalClicked,
                     onMigrateClicked = onMigrateClicked,
@@ -608,6 +613,7 @@ private fun MangaScreenSmallImpl(
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onTranslateActionClicked: ((TranslationAction) -> Unit)?,
     onColorizeActionClicked: ((ColorizerAction) -> Unit)? = null,
+    onSuperResolutionActionClicked: ((SuperResolutionAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -1230,7 +1236,7 @@ private fun MangaScreenSmallImpl(
                                                 expanded = translateMenuExpanded,
                                                 onDismissRequest = { translateMenuExpanded = false },
                                                 onTranslateClicked = { action ->
-                                                    translateMenuExpanded = false
+                                                translateMenuExpanded = false
                                                     onTranslateActionClicked(action)
                                                 },
                                             )
@@ -1257,6 +1263,31 @@ private fun MangaScreenSmallImpl(
                                                 onColorizeClicked = { action ->
                                                     colorizeMenuExpanded = false
                                                     onColorizeActionClicked(action)
+                                                },
+                                            )
+                                        }
+                                    }
+
+                                    // Super-Resolution Button
+                                    if (onSuperResolutionActionClicked != null) {
+                                        var superResMenuExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(
+                                                onClick = { superResMenuExpanded = true },
+                                                modifier = Modifier.size(36.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.AutoAwesome,
+                                                    contentDescription = "Super-Resolution Options",
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                            SuperResolutionDropdownMenu(
+                                                expanded = superResMenuExpanded,
+                                                onDismissRequest = { superResMenuExpanded = false },
+                                                onSuperResolutionClicked = { action ->
+                                                    superResMenuExpanded = false
+                                                    onSuperResolutionActionClicked(action)
                                                 },
                                             )
                                         }
@@ -1391,6 +1422,7 @@ private fun MangaScreenLargeImpl(
     onDownloadActionClicked: ((DownloadAction) -> Unit)?,
     onTranslateActionClicked: ((TranslationAction) -> Unit)?,
     onColorizeActionClicked: ((ColorizerAction) -> Unit)? = null,
+    onSuperResolutionActionClicked: ((SuperResolutionAction) -> Unit)? = null,
     onEditCategoryClicked: (() -> Unit)?,
     onEditIntervalClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
@@ -2091,18 +2123,21 @@ private fun LazyListScope.sharedChapterItems(
                     downloadProgressProvider = { item.downloadProgress },
                     // KMK -->
                     translationStateProvider = { item.translationState },
+                    translationProgressProvider = { item.translationProgress },
                     onTranslationClick = if (onTranslationChapter != null) {
                         { onTranslationChapter(item, it) }
                     } else {
                         null
                     },
                     colorizerStateProvider = { item.colorizerState },
+                    colorizerProgressProvider = { item.colorizerProgress },
                     onColorizeClick = if (onColorizeChapter != null) {
                         { onColorizeChapter(item, it) }
                     } else {
                         null
                     },
                     superResolutionStateProvider = { item.superResolutionState },
+                    superResolutionProgressProvider = { item.superResolutionProgress },
                     onSuperResolutionClick = if (onSuperResolutionChapter != null) {
                         { onSuperResolutionChapter(item, it) }
                     } else {

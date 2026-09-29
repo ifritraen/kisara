@@ -174,6 +174,9 @@ class AnimeScreen(
                     screenModel.showTrackDialog()
                 }
             }.takeIf { successState.anime.fetchType == FetchType.Episodes },
+            onDuplicateClicked = {
+                navigator.push(eu.kanade.tachiyomi.ui.browse.anime.duplicate.DuplicateAnimeScreen(successState.anime.id))
+            },
             onTagSearch = { scope.launch { performGenreSearch(navigator, it, screenModel.source!!) } },
             onGenreClick = { genre -> scope.launch { performGenreSearch(navigator, genre, screenModel.source!!) } },
             onGenreLongClick = null,

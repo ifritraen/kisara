@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Download
@@ -186,6 +187,7 @@ fun NovelScreen(
     onMigrateClicked: (() -> Unit)?,
     onTrackingClicked: () -> Unit,
     trackingCount: Int,
+    onDuplicateClicked: (() -> Unit)? = null,
     onOpenBatchDownloadDialog: (() -> Unit)?,
     onOpenTranslatedDownloadDialog: (() -> Unit)?,
     onOpenEpubExportDialog: (() -> Unit)?,
@@ -778,6 +780,14 @@ fun NovelScreen(
                                         icon = Icons.Outlined.Public,
                                         color = MaterialTheme.colorScheme.primary,
                                         onClick = onWebView,
+                                    )
+                                }
+                                if (state.duplicateCount > 0 && onDuplicateClicked != null) {
+                                    NovelActionButton(
+                                        title = stringResource(KMR.strings.label_duplicate),
+                                        icon = Icons.Outlined.ContentCopy,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        onClick = onDuplicateClicked,
                                     )
                                 }
                             }

@@ -183,7 +183,7 @@ fun GlobalSearchToolbar(
 }
 
 @Composable
-private fun GlobalSearchFilterChipsContent(
+internal fun GlobalSearchFilterChipsContent(
     hideSourceFilter: Boolean,
     sourceFilter: SourceFilter,
     onChangeSearchFilter: (SourceFilter) -> Unit,
@@ -486,6 +486,49 @@ private fun GlobalSearchFilterChipsContent(
                         },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun MinimalGlobalSearchToolbar(
+    searchQuery: String?,
+    progress: Int,
+    total: Int,
+    navigateUp: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior,
+    toggleSelectionMode: () -> Unit,
+    isRunning: Boolean,
+    onOpenSearchSheet: () -> Unit,
+) {
+    Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+        Box {
+            AppBar(
+                title = if (searchQuery.isNullOrBlank()) "Global Search" else searchQuery,
+                navigateUp = navigateUp,
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    AppBarActions(
+                        actions = persistentListOf(
+                            AppBar.Action(
+                                title = "Search Sheet",
+                                icon = Icons.Outlined.Layers,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = onOpenSearchSheet,
+                            ),
+                            bulkSelectionButton(isRunning, toggleSelectionMode),
+                        ),
+                    )
+                },
+            )
+            if (progress in 1..<total) {
+                LinearProgressIndicator(
+                    progress = { progress / total.toFloat() },
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(),
+                )
             }
         }
     }

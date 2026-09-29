@@ -2,6 +2,8 @@
 package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,16 +20,21 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.toast
@@ -85,9 +95,9 @@ object SettingsTranslationScreen : SearchableSettings {
             ),
             getTranslationLangGroup(translationPreferences),
             getTranslatioEngineGroup(translationPreferences),
+            getBubbleDetectionGroup(translationPreferences),
             getOcrGroup(translationPreferences),
             getTranslatioAdvancedGroup(translationPreferences),
-            getColorizerGroup(translationPreferences),
             getSuperResolutionGroup(translationPreferences),
             getDiagnosticGroup(translationPreferences),
         )
@@ -98,8 +108,20 @@ object SettingsTranslationScreen : SearchableSettings {
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
-            title = "Pipeline Health & Active Engine Overview",
+            title = "Hardware & AI Pipeline Overview",
             preferenceItems = persistentListOf(
+                Preference.PreferenceItem.CustomPreference(
+                    title = "Live Hardware Monitor",
+                    content = {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                            eu.kanade.presentation.components.ResourceBar(
+                                onFreeRamClick = {
+                                    System.gc()
+                                },
+                            )
+                        }
+                    },
+                ),
                 Preference.PreferenceItem.CustomPreference(
                     title = "System Status Dashboard",
                     content = {
@@ -274,37 +296,21 @@ object SettingsTranslationScreen : SearchableSettings {
     }
 
     @Composable
-    private fun getOcrGroup(
+    private fun getBubbleDetectionGroup(
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
-        val scope = rememberCoroutineScope()
         val context = androidx.compose.ui.platform.LocalContext.current
         val modelManager = remember { eu.kanade.tachiyomi.data.ai.AiModelManager(context) }
         return Preference.PreferenceGroup(
-            title = "2. Text Recognizer (OCR) & Speech Balloon Detection",
+            title = "2. Speech Balloon Detection & Layout Analysis",
             preferenceItems = persistentListOf(
-                Preference.PreferenceItem.ListPreference(
-                    preference = translationPreferences.ocrEngine(),
-                    title = stringResource(KMR.strings.pref_ocr_engine),
-                    entries = mapOf(
-                        0 to "MLKit OCR [FREE • Built-in • No Downloads]",
-                        1 to "MangaOCR [Offline Japanese • Needs Download]",
-                        2 to "PaddleOCR [Offline Multilingual • Needs Download]",
-                        3 to "Comic Text Detector (ONNX) [Deep Learning • Needs Download]",
-                    ).toImmutableMap(),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = translationPreferences.bubbleGroupingEnabled(),
-                    title = "DSU Speech Bubble Grouping",
-                    subtitle = "Merges multi-line vertical fragments into complete coherent sentences",
-                ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = translationPreferences.bubbleDetectionEnabled(),
-                    title = stringResource(KMR.strings.pref_bubble_detection),
-                    subtitle = stringResource(KMR.strings.pref_bubble_detection_summary),
+                    title = "Enable Speech Balloon Detection",
+                    subtitle = "Detects speech balloon boundaries with Comic-Text-Detector AI before OCR",
                 ),
                 Preference.PreferenceItem.CustomPreference(
-                    title = "Comic Text Detector Model (~94.7 MB)",
+                    title = "Comic Text Detector Model (~17.5 MB)",
                     content = {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                             ModelDownloadCard(
@@ -314,158 +320,82 @@ object SettingsTranslationScreen : SearchableSettings {
                         }
                     },
                 ),
-                Preference.PreferenceItem.CustomPreference(
-                    title = stringResource(KMR.strings.pref_download_ocr_model),
-                    content = {
-                        ModelDownloadPreference(
-                            title = stringResource(KMR.strings.pref_download_ocr_model),
-                            subtitle = "Downloads the MangaOCR models (~100MB)",
-                            modelDirName = "mangaocr",
-                            onDownload = { onProgress ->
-                                val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
-                                val recognizer = MangaOcrTextRecognizer(context, fromLang)
-                                recognizer.engine.downloadModels(onProgress)
-                            },
-                        )
-                    },
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = translationPreferences.bubbleGroupingEnabled(),
+                    title = "Speech Bubble Line Grouping",
+                    subtitle = "Combines multi-line vertical fragments inside bubbles into coherent sentences",
                 ),
-                Preference.PreferenceItem.CustomPreference(
-                    title = stringResource(KMR.strings.pref_download_paddleocr_model),
-                    content = {
-                        ModelDownloadPreference(
-                            title = stringResource(KMR.strings.pref_download_paddleocr_model),
-                            subtitle = stringResource(KMR.strings.pref_download_paddleocr_model_summary),
-                            modelDirName = "paddleocr",
-                            onDownload = { onProgress ->
-                                val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
-                                val recognizer = PaddleOcrTextRecognizer(context, fromLang)
-                                recognizer.ensureModels(onProgress)
-                            },
-                        )
-                    },
+                Preference.PreferenceItem.ListPreference(
+                    preference = translationPreferences.bubbleAssignmentMode(),
+                    title = "Bubble Assignment Algorithm",
+                    entries = mapOf(
+                        0 to "Point-in-Polygon Centroid [Enclosure Contained • Recommended]",
+                        1 to "Spatial Proximity DSU [Distance-based Clustering]",
+                    ).toImmutableMap(),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = translationPreferences.lineSortingOrder(),
+                    title = "Line Spatial Sorting Order",
+                    entries = mapOf(
+                        0 to "Auto / RTL Manga (Right-to-Left Columns: X↓, Y↑)",
+                        1 to "LTR Webtoon / Western (Top-to-Bottom: Y↑, X↑)",
+                        2 to "Disabled (Raw Detection Order)",
+                    ).toImmutableMap(),
                 ),
             ),
         )
     }
 
     @Composable
-    private fun getColorizerGroup(
+    private fun getOcrGroup(
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
-        val engineMode by translationPreferences.colorizerEngine().collectAsState()
-        val engines = persistentListOf(
-            0 to "Local On-Device AI (ONNX) [Fast • Offline]",
-            1 to "Remote Cloud (Kaggle Server / ngrok) [Needs Account]",
-        )
-        val colorizerModels = persistentListOf(
-            "manga_colorizer_v2" to "Manga Colorizer v2 (INT8 • 61.7MB • Recommended)",
-            "deoldify_artistic" to "DeOldify Artistic (INT8 • 254MB)",
-            "ddcolor_tiny" to "DDColor Tiny (INT8 • 50MB)",
-        )
-
-        val items = mutableListOf<Preference.PreferenceItem<out Any, out Any>>()
-
-        items.add(
-            Preference.PreferenceItem.SwitchPreference(
-                preference = translationPreferences.useColorizer(),
-                title = "Enable Manga Colorization",
-                subtitle = "Enables colorization button on downloaded chapters",
-            ),
-        )
-        items.add(
-            Preference.PreferenceItem.ListPreference(
-                preference = translationPreferences.colorizerEngine(),
-                title = "Colorization Backend",
-                entries = engines.associate { it.first to it.second }.toImmutableMap(),
-            ),
-        )
-
-        if (engineMode == 0) {
-            // Local on-device AI settings
-            items.add(
+        val context = androidx.compose.ui.platform.LocalContext.current
+        return Preference.PreferenceGroup(
+            title = "3. Text Recognition Engine (OCR)",
+            preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
-                    preference = translationPreferences.colorizerModel(),
-                    title = "Local Colorization Model",
-                    entries = colorizerModels.associate { it.first to it.second }.toImmutableMap(),
+                    preference = translationPreferences.ocrEngine(),
+                    title = stringResource(KMR.strings.pref_ocr_engine),
+                    entries = mapOf(
+                        0 to "MLKit OCR [FREE • Built-in • Multi-Language]",
+                        1 to "MangaOCR [Offline Japanese • High Accuracy ViT]",
+                        2 to "PaddleOCR [Offline Multilingual • Fast]",
+                    ).toImmutableMap(),
                 ),
-            )
-            items.add(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = translationPreferences.colorizerUseNnapi(),
-                    title = "Hardware Acceleration (NNAPI)",
-                    subtitle = "Uses device NPU/GPU for faster inference (auto-fallback to CPU on error)",
-                ),
-            )
-            items.add(
                 Preference.PreferenceItem.CustomPreference(
-                    title = "Local AI Model Files",
+                    title = "Offline OCR Models",
                     content = {
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        val modelManager = remember { eu.kanade.tachiyomi.data.ai.AiModelManager(context) }
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            ModelDownloadCard(
-                                modelType = eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.MANGA_COLORIZER_V2,
-                                modelManager = modelManager,
+                            ModelDownloadPreference(
+                                title = "MangaOCR (Offline Japanese ViT)",
+                                subtitle = "MangaOCR Japanese ViT models (tap to download)",
+                                modelDirName = "mangaocr",
+                                onDownload = { onProgress ->
+                                    val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
+                                    val recognizer = MangaOcrTextRecognizer(context, fromLang)
+                                    recognizer.engine.downloadModels(onProgress)
+                                },
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            ModelDownloadCard(
-                                modelType = eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.DEOLDIFY_ARTISTIC,
-                                modelManager = modelManager,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            ModelDownloadCard(
-                                modelType = eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.DDCOLOR_TINY,
-                                modelManager = modelManager,
+                            ModelDownloadPreference(
+                                title = "PaddleOCR (PP-OCRv5 Multilingual)",
+                                subtitle = "PaddleOCR PP-OCRv5 multilingual models (tap to download)",
+                                modelDirName = "paddleocr",
+                                onDownload = { onProgress ->
+                                    val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
+                                    val recognizer = PaddleOcrTextRecognizer(context, fromLang)
+                                    recognizer.ensureModels(onProgress)
+                                },
                             )
                         }
                     },
                 ),
-            )
-        } else {
-            // Remote Kaggle / ngrok cloud server settings
-            items.add(
-                Preference.PreferenceItem.EditTextPreference(
-                    preference = translationPreferences.colorizerKaggleUsername(),
-                    title = "Kaggle Username",
-                    subtitle = "Your Kaggle account username",
-                ),
-            )
-            items.add(
-                Preference.PreferenceItem.EditTextPreference(
-                    preference = translationPreferences.colorizerKaggleApiKey(),
-                    title = "Kaggle API Key",
-                    subtitle = "API key generated from Kaggle account settings",
-                ),
-            )
-            items.add(
-                Preference.PreferenceItem.EditTextPreference(
-                    preference = translationPreferences.colorizerNgrokAuthToken(),
-                    title = "ngrok Auth Token",
-                    subtitle = "ngrok tunnel auth token for Kaggle bridge",
-                ),
-            )
-            items.add(
-                Preference.PreferenceItem.EditTextPreference(
-                    preference = translationPreferences.colorizerKaggleKernelSlug(),
-                    title = "Kaggle Kernel Slug",
-                    subtitle = "Default: binitdox/manga-colorizer",
-                ),
-            )
-        }
-
-        items.add(
-            Preference.PreferenceItem.SwitchPreference(
-                preference = translationPreferences.autoColorizeAfterDownload(),
-                title = "Colorize after Downloading",
-                subtitle = "Automatically colorizes downloaded chapters in background",
             ),
         )
-
-        return Preference.PreferenceGroup(
-            title = "3. Manga Colorization (AI Colorizer)",
-            preferenceItems = items.toImmutableList(),
-        )
     }
+
+
 
     @Composable
     private fun getSuperResolutionGroup(
@@ -481,7 +411,7 @@ object SettingsTranslationScreen : SearchableSettings {
         )
 
         return Preference.PreferenceGroup(
-            title = "4. AI Super-Resolution (Upscaler)",
+            title = "5. AI Super-Resolution (Upscaler)",
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = translationPreferences.useSuperResolution(),
@@ -535,15 +465,23 @@ object SettingsTranslationScreen : SearchableSettings {
         translationPreferences: TranslationPreferences,
     ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
-            title = "Diagnostics",
+            title = "AI & Translation Pipeline Diagnostics",
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = translationPreferences.translationLoggingEnabled(),
-                    title = "Enable Translation Logging",
-                    subtitle = "When disabled, translation reports and logs will not be recorded.",
+                    title = "Enable AI Pipeline Logging",
+                    subtitle = "When disabled, logs for Translation, Colorization, and Super-Resolution will not be recorded.",
                 ),
                 Preference.PreferenceItem.CustomPreference(
-                    title = "Translation Logs & Reports",
+                    title = "Live Engine Console",
+                    content = {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                            eu.kanade.presentation.components.LogConsoleWindow()
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.CustomPreference(
+                    title = "AI & Translation Process Report",
                     content = {
                         TranslationReportPreference()
                     },
@@ -607,7 +545,7 @@ private fun PipelineStatusOverviewCard(
         1 -> {
             val dir = File(context.filesDir, "mangaocr")
             val ready = (dir.listFiles()?.sumOf { it.length() } ?: 0L) > 10 * 1024 * 1024L
-            if (ready) Triple("MangaOCR", "Ready • Model Downloaded (~100MB)", true)
+            if (ready) Triple("MangaOCR", "Ready • Model Downloaded (~135MB)", true)
             else Triple("MangaOCR", "⚠️ Download Needed • Download MangaOCR below", false)
         }
         2 -> {
@@ -615,11 +553,6 @@ private fun PipelineStatusOverviewCard(
             val ready = (dir.listFiles()?.sumOf { it.length() } ?: 0L) > 10 * 1024 * 1024L
             if (ready) Triple("PaddleOCR", "Ready • Model Downloaded (~30MB)", true)
             else Triple("PaddleOCR", "⚠️ Download Needed • Download PaddleOCR below", false)
-        }
-        3 -> {
-            val ready = modelManager.isModelDownloaded(eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.COMIC_TEXT_DETECTOR)
-            if (ready) Triple("Comic Text Detector", "Ready • ONNX Model Loaded (~94MB)", true)
-            else Triple("Comic Text Detector", "⚠️ Download Needed • Download CTD ONNX below", false)
         }
         else -> Triple("MLKit OCR", "Ready", true)
     }
@@ -632,11 +565,7 @@ private fun PipelineStatusOverviewCard(
         if (hasKaggle) Triple("Kaggle Remote Colorizer", "Ready • Cloud Bridge Configured", true)
         else Triple("Kaggle Remote Colorizer", "⚠️ Action Required • Missing Kaggle API Key", false)
     } else {
-        val modelType = when (colorizerModelId) {
-            "deoldify_artistic" -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.DEOLDIFY_ARTISTIC
-            "ddcolor_tiny" -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.DDCOLOR_TINY
-            else -> eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.MANGA_COLORIZER_V2
-        }
+        val modelType = eu.kanade.tachiyomi.data.ai.AiModelManager.ModelType.MANGA_COLORIZER_V2
         val ready = modelManager.isModelDownloaded(modelType)
         if (ready) {
             val size = formatBytes(modelManager.getModelFile(modelType).length())
@@ -868,34 +797,35 @@ private fun ModelDownloadPreference(
 
     val isDownloaded = sizeBytes > 1024L
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = if (isDownloading) {
-                        downloadStatus
-                    } else if (isDownloaded) {
-                        "Downloaded (${formatBytes(sizeBytes)})"
-                    } else {
-                        subtitle
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+                Column(
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = if (isDownloading) {
+                            downloadStatus
+                        } else if (isDownloaded) {
+                            "Downloaded (${formatBytes(sizeBytes)})"
+                        } else {
+                            subtitle
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             if (isDownloaded && !isDownloading) {
                 IconButton(onClick = {
                     deleteFolder(modelDir)
@@ -956,6 +886,7 @@ private fun ModelDownloadPreference(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        }
     }
 
     errorDialogText?.let { errorText ->
@@ -1007,6 +938,7 @@ private fun TranslationReportPreference() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val logs by TranslationReport.logs.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("ALL") }
 
     Column(
         modifier = Modifier
@@ -1021,7 +953,7 @@ private fun TranslationReportPreference() {
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = "View Translation Logs",
+                    text = "View AI & Translation Logs",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
@@ -1040,11 +972,21 @@ private fun TranslationReportPreference() {
     }
 
     if (showDialog) {
-        val logText = remember(logs) {
-            if (logs.isEmpty()) {
-                "No logs available. Run a translation first."
+        val filteredLogs = remember(logs, selectedFilter) {
+            when (selectedFilter) {
+                "COLORIZER" -> logs.filter { it.component.contains("Colorizer", ignoreCase = true) }
+                "SUPER_RES" -> logs.filter { it.component.contains("SuperRes", ignoreCase = true) }
+                "TRANSLATION" -> logs.filter { !it.component.contains("Colorizer", ignoreCase = true) && !it.component.contains("SuperRes", ignoreCase = true) }
+                "ERRORS" -> logs.filter { it.level == "ERROR" || it.level == "WARNING" }
+                else -> logs
+            }
+        }
+
+        val logText = remember(filteredLogs) {
+            if (filteredLogs.isEmpty()) {
+                "No logs matching filter '$selectedFilter'."
             } else {
-                logs.joinToString("\n") { entry ->
+                filteredLogs.joinToString("\n") { entry ->
                     val time = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
                     val ex = if (entry.exceptionTrace != null) "\n${entry.exceptionTrace}" else ""
                     "[$time] [${entry.level}] [${entry.component}] ${entry.message}$ex"
@@ -1054,18 +996,42 @@ private fun TranslationReportPreference() {
 
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("Translation Process Report") },
+            title = { Text("AI Pipeline Process Report") },
             text = {
                 Column {
                     Text(
-                        text = "Logs from the latest translation execution. Copy these to report issues or check pipeline health.",
+                        text = "Real-time diagnostic logs from Translation, Colorization, and Super-Resolution.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Filter chips row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(
+                            "ALL" to "All (${logs.size})",
+                            "COLORIZER" to "Colorizer",
+                            "SUPER_RES" to "Super-Res",
+                            "TRANSLATION" to "Translation",
+                            "ERRORS" to "Errors/Warnings",
+                        ).forEach { (key, label) ->
+                            FilterChip(
+                                selected = selectedFilter == key,
+                                onClick = { selectedFilter = key },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     val scrollState = rememberScrollState()
                     Box(
                         modifier = Modifier
-                            .height(300.dp)
+                            .height(280.dp)
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .verticalScroll(scrollState)
@@ -1080,11 +1046,19 @@ private fun TranslationReportPreference() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    context.copyToClipboard("Translation Logs", logText)
-                    context.toast("Logs copied to clipboard")
-                }) {
-                    Text("Copy Logs")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        TranslationReport.clear()
+                        context.toast("Logs cleared")
+                    }) {
+                        Text("Clear")
+                    }
+                    TextButton(onClick = {
+                        context.copyToClipboard("AI Pipeline Logs", logText)
+                        context.toast("Logs copied to clipboard")
+                    }) {
+                        Text("Copy")
+                    }
                 }
             },
             dismissButton = {
@@ -1210,12 +1184,18 @@ private fun ModelDownloadCard(
     modelManager: eu.kanade.tachiyomi.data.ai.AiModelManager,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
+    val downloadState by eu.kanade.tachiyomi.data.ai.AiModelManager.getDownloadState(modelType).collectAsState()
     var isDownloaded by remember { mutableStateOf(modelManager.isModelDownloaded(modelType)) }
-    var isDownloading by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableStateOf(0f) }
-    var downloadStatus by remember { mutableStateOf("") }
-    var downloadJob by remember { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(downloadState.isDownloading) {
+        if (!downloadState.isDownloading) {
+            isDownloaded = modelManager.isModelDownloaded(modelType)
+        }
+    }
+
+    val isDownloading = downloadState.isDownloading
+    val downloadProgress = downloadState.progress
+    val downloadStatus = downloadState.status
 
     Surface(
         shape = MaterialTheme.shapes.medium,
@@ -1239,9 +1219,9 @@ private fun ModelDownloadCard(
                         text = if (isDownloading) {
                             if (downloadStatus.isNotBlank()) downloadStatus else "Downloading (${(downloadProgress * 100).toInt()}%)"
                         } else if (isDownloaded) {
-                            "Ready ($sizeText)"
+                            "Downloaded ($sizeText)"
                         } else {
-                            "Not downloaded (~$expectedSizeText)"
+                            "Not downloaded (tap to download)"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1262,8 +1242,7 @@ private fun ModelDownloadCard(
                     }
                 } else if (isDownloading) {
                     IconButton(onClick = {
-                        downloadJob?.cancel()
-                        isDownloading = false
+                        modelManager.cancelDownload(modelType)
                         context.toast("Download cancelled")
                     }) {
                         Icon(
@@ -1274,28 +1253,12 @@ private fun ModelDownloadCard(
                     }
                 } else {
                     IconButton(onClick = {
-                        isDownloading = true
-                        downloadProgress = 0f
-                        downloadStatus = "Connecting..."
-                        downloadJob = scope.launch {
-                            try {
-                                val success = modelManager.downloadModel(
-                                    type = modelType,
-                                    onProgress = { downloadProgress = it },
-                                    onStatus = { downloadStatus = it },
-                                )
-                                isDownloaded = success
-                                if (success) {
-                                    context.toast("${modelType.displayName} downloaded")
-                                } else {
-                                    context.toast("Download failed from all mirrors")
-                                }
-                            } catch (e: CancellationException) {
-                                // Cancelled by user
-                            } catch (e: Exception) {
-                                context.toast("Error: ${e.message}")
-                            } finally {
-                                isDownloading = false
+                        modelManager.startDownload(modelType) { success ->
+                            isDownloaded = success
+                            if (success) {
+                                context.toast("${modelType.displayName} downloaded")
+                            } else {
+                                context.toast("Download failed from all mirrors")
                             }
                         }
                     }) {

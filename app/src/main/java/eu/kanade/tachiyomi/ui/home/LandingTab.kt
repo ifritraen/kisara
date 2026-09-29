@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.manga.interactor.toTrackSeriesItem
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
@@ -209,6 +210,7 @@ fun landingTab(
                     screenModel.triggerBackgroundFeedFetch(force = true)
                     screenModel.loadForgottenFavorites()
                     screenModel.loadTrackerRecommendations(force = true)
+                    screenModel.loadTrackerContinue(force = true)
                 },
             ) {
                 LazyColumn(
@@ -340,6 +342,63 @@ fun landingTab(
 
                                 item {
                                     SeeAllEndCard(width = 80.dp, height = 120.dp, onClick = { HomeTab.showSubTab(4) })
+                                }
+                            }
+                        }
+                    }
+
+                    // 2b. Continue from Tracker
+                    if (state.trackerContinue.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = stringResource(KMR.strings.pref_home_section_names_continue_tracker),
+                                onClickMore = { HomeTab.showSubTab(2) },
+                            )
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                items(
+                                    items = state.trackerContinue,
+                                    key = { "tracker-continue-${it.id}" },
+                                ) { trackerItem ->
+                                    val coverTitleStyle = uiPreferences.kisaraCoverTitleStyle().collectAsState().value
+                                    val chapterSubtitle = if (trackerItem.lastReadChapter != null && trackerItem.lastReadChapter > 0) {
+                                        val maxCh = if (trackerItem.totalChapters != null && trackerItem.totalChapters > 0) " / ${trackerItem.totalChapters}" else ""
+                                        "Ch. ${trackerItem.lastReadChapter.toInt()}$maxCh"
+                                    } else {
+                                        trackerItem.status ?: "Reading"
+                                    }
+
+                                    KisaraHomeSectionCard(
+                                        style = HomeSectionCardStyle.DEFAULT,
+                                        title = trackerItem.title,
+                                        subtitle = trackerItem.sourceName,
+                                        coverData = trackerItem.coverUrl,
+                                        progress = if (trackerItem.totalChapters != null && trackerItem.totalChapters > 0 && trackerItem.lastReadChapter != null) {
+                                            (trackerItem.lastReadChapter / trackerItem.totalChapters).coerceIn(0f, 1f)
+                                        } else null,
+                                        chapterName = chapterSubtitle,
+                                        coverTitleStyle = coverTitleStyle,
+                                        onClick = {
+                                            navigator.push(
+                                                eu.kanade.tachiyomi.ui.track.details.TrackerMediaDetailsScreen(
+                                                    series = trackerItem.toTrackSeriesItem(MediaType.MANGA),
+                                                    mediaType = MediaType.MANGA,
+                                                ),
+                                            )
+                                        },
+                                        onResume = {
+                                            navigator.push(
+                                                eu.kanade.tachiyomi.ui.track.details.TrackerMediaDetailsScreen(
+                                                    series = trackerItem.toTrackSeriesItem(MediaType.MANGA),
+                                                    mediaType = MediaType.MANGA,
+                                                ),
+                                            )
+                                        },
+                                    )
                                 }
                             }
                         }

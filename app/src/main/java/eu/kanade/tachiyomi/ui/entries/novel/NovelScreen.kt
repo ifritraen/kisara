@@ -476,6 +476,9 @@ class NovelScreen(
                 }
             },
             trackingCount = successState.trackingCount,
+            onDuplicateClicked = {
+                navigator.push(eu.kanade.tachiyomi.ui.browse.novel.duplicate.DuplicateNovelScreen(successState.novel.id))
+            },
             onOpenBatchDownloadDialog = { showBatchDownloadDialog = true },
             onOpenTranslatedDownloadDialog = {
                 showTranslatedDownloadDialog = true

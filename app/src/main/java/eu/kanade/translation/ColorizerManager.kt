@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import eu.kanade.tachiyomi.util.system.toast
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
@@ -43,6 +45,8 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 import java.io.FileOutputStream
 
+import eu.kanade.translation.model.TranslationReport
+
 /**
  * Manages local on-device batch chapter colorization using ONNX AI models (Manga-Colorizer-v2 / DeOldify).
  * Saves colorized chapter images into storageManager.getColorizerDirectory().
@@ -54,12 +58,40 @@ class ColorizerManager(
     private val translationPreferences: TranslationPreferences = Injekt.get(),
     private val downloadProvider: DownloadProvider = Injekt.get(),
 ) {
+    data class Progress(
+        val chapterId: Long,
+        val chapterName: String,
+        val currentPage: Int,
+        val totalPages: Int,
+        val percent: Int = 0,
+        val step: String,
+    )
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _queueState = MutableStateFlow<List<Translation>>(emptyList())
     val queueState = _queueState.asStateFlow()
 
+    private val _progressState = MutableStateFlow<Progress?>(null)
+    val progressState = _progressState.asStateFlow()
+
     private val colorizeEngine by lazy { MangaColorizeEngine() }
     private val modelManager by lazy { AiModelManager(context) }
+    private var idleUnloadJob: kotlinx.coroutines.Job? = null
+    private var activeColorizeJob: kotlinx.coroutines.Job? = null
+    private var activeChapterId: Long? = null
+
+    private fun scheduleIdleUnload(delayMs: Long = 5_000L) {
+        idleUnloadJob?.cancel()
+        idleUnloadJob = scope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            if (_queueState.value.isEmpty()) {
+                colorizeEngine.unloadSession()
+                System.gc()
+                Runtime.getRuntime().gc()
+                eu.kanade.tachiyomi.data.ai.AppLogger.info("Auto-freed RAM: Colorizer ONNX session unloaded after ${delayMs / 1000}s idle.")
+            }
+        }
+    }
 
     private val colorizerDir: UniFile?
         get() = storageManager.getColorizerDirectory()
@@ -83,19 +115,29 @@ class ColorizerManager(
     }
 
     private fun processQueue() {
-        scope.launch {
+        if (activeColorizeJob?.isActive == true) return
+
+        activeColorizeJob = scope.launch {
             val next = synchronized(_queueState) {
                 _queueState.value.find { it.status == Translation.State.QUEUE }
-            } ?: return@launch
+            } ?: run {
+                activeChapterId = null
+                return@launch
+            }
 
+            activeChapterId = next.chapter.id
             next.status = Translation.State.TRANSLATING
             try {
+                TranslationReport.clear()
+                TranslationReport.log("INFO", "Colorizer", "Starting colorization for chapter: ${next.chapter.name}")
+
                 val isCloudBackend = translationPreferences.colorizerEngine().get() == 1
                 val kaggleApiKey = translationPreferences.colorizerKaggleApiKey().get()
                 val ngrokToken = translationPreferences.colorizerNgrokAuthToken().get()
 
                 // Check if user explicitly configured and wants remote Cloud processing
                 if (isCloudBackend && (kaggleApiKey.isNotBlank() || ngrokToken.isNotBlank())) {
+                    TranslationReport.log("INFO", "Colorizer", "Using remote Cloud Kaggle colorizer backend")
                     logcat { "Using remote Cloud Kaggle colorizer backend" }
                     // Cloud processing stub / bridge: marked translated upon remote completion
                     next.status = Translation.State.TRANSLATED
@@ -103,23 +145,38 @@ class ColorizerManager(
                 }
 
                 // Default: Local On-Device AI (ONNX)
-                val prefModelId = translationPreferences.colorizerModel().get()
-                val modelType = when (prefModelId) {
-                    "deoldify_artistic" -> AiModelManager.ModelType.DEOLDIFY_ARTISTIC
-                    "ddcolor_tiny" -> AiModelManager.ModelType.DDCOLOR_TINY
-                    else -> AiModelManager.ModelType.MANGA_COLORIZER_V2
-                }
+                val modelType = AiModelManager.ModelType.MANGA_COLORIZER_V2
+
+                idleUnloadJob?.cancel()
+                eu.kanade.tachiyomi.data.ai.AppLogger.init(context)
+                eu.kanade.tachiyomi.data.ai.ResourceMonitor.start()
+                eu.kanade.tachiyomi.data.ai.WakeLockHelper.acquire(context)
+                _progressState.value = Progress(
+                    chapterId = next.chapter.id,
+                    chapterName = next.chapter.name,
+                    currentPage = 0,
+                    totalPages = 0,
+                    percent = 0,
+                    step = "Checking AI model (${modelType.displayName})...",
+                )
+                TranslationReport.log("INFO", "Colorizer", "Selected model: ${modelType.displayName}")
 
                 var modelFile = modelManager.getModelFile(modelType)
                 if (!modelFile.exists() || modelFile.length() < modelType.minSize) {
+                    TranslationReport.log("INFO", "Colorizer", "Model not found locally, downloading ${modelType.displayName}...")
+                    _progressState.value = Progress(
+                        chapterId = next.chapter.id,
+                        chapterName = next.chapter.name,
+                        currentPage = 0,
+                        totalPages = 0,
+                        percent = 0,
+                        step = "Downloading model ${modelType.displayName}...",
+                    )
                     val downloaded = modelManager.downloadModel(modelType)
                     if (!downloaded) {
-                        // Fallback to Manga Colorizer v2 or DeOldify
-                        val fallbackType = if (modelType != AiModelManager.ModelType.MANGA_COLORIZER_V2) {
-                            AiModelManager.ModelType.MANGA_COLORIZER_V2
-                        } else {
-                            AiModelManager.ModelType.DEOLDIFY_ARTISTIC
-                        }
+                        TranslationReport.log("WARNING", "Colorizer", "Download failed for ${modelType.displayName}, attempting fallback...")
+                        // Fallback to Manga Colorizer v2 FP32
+                        val fallbackType = AiModelManager.ModelType.MANGA_COLORIZER_V2
                         modelFile = modelManager.getModelFile(fallbackType)
                         if (!modelFile.exists() || modelFile.length() < fallbackType.minSize) {
                             modelManager.downloadModel(fallbackType)
@@ -128,11 +185,37 @@ class ColorizerManager(
                 }
 
                 if (!modelFile.exists()) {
-                    throw IllegalStateException("No valid colorization AI model found.")
+                    val err = "No valid colorization AI model found."
+                    TranslationReport.log("ERROR", "Colorizer", err)
+                    throw IllegalStateException(err)
                 }
+                TranslationReport.log("INFO", "Colorizer", "AI model ready: ${modelFile.name} (${modelFile.length() / 1024 / 1024}MB)")
 
-                val intensity = translationPreferences.colorizerIntensity().get().coerceIn(0.3f, 2.0f)
+                val intensity = translationPreferences.colorizerIntensity().get().coerceIn(0.5f, 35.0f)
                 val useNnapi = translationPreferences.colorizerUseNnapi().get()
+                val blendMode = translationPreferences.colorizerBlendMode().get()
+                val customParams = if (blendMode == 7) {
+                    eu.kanade.tachiyomi.data.ai.ColorizeImageUtils.ColorizerTuningParams(
+                        skinHue = translationPreferences.colorizerSkinHue().get(),
+                        skinSat = translationPreferences.colorizerSkinSat().get(),
+                        blueCap = translationPreferences.colorizerBlueCap().get(),
+                        redFlush = translationPreferences.colorizerRedFlush().get(),
+                        skinMinLum = translationPreferences.colorizerSkinMinLum().get(),
+                        paperThresh = translationPreferences.colorizerPaperThresh().get(),
+                        paperFeather = translationPreferences.colorizerPaperFeather().get(),
+                        gamma = translationPreferences.colorizerGamma().get(),
+                        contrast = translationPreferences.colorizerContrast().get(),
+                        blackFloor = translationPreferences.colorizerBlackFloor().get(),
+                        lineThresh = translationPreferences.colorizerLineThresh().get(),
+                        lineExp = translationPreferences.colorizerLineExp().get(),
+                        satMul = translationPreferences.colorizerSatMul().get(),
+                        colorMix = translationPreferences.colorizerColorMix().get(),
+                        clarity = translationPreferences.colorizerClarity().get(),
+                    )
+                } else {
+                    null
+                }
+                TranslationReport.log("INFO", "Colorizer", "Config: intensity=$intensity, useNnapi=$useNnapi, blendMode=$blendMode")
 
                 // Locate downloaded chapter directory / archive
                 val chapterDir = downloadProvider.findChapterDir(
@@ -144,7 +227,9 @@ class ColorizerManager(
                 )
 
                 if (chapterDir == null || !chapterDir.exists()) {
-                    throw IllegalStateException("Downloaded chapter files not found.")
+                    val err = "Downloaded chapter files not found."
+                    TranslationReport.log("ERROR", "Colorizer", err)
+                    throw IllegalStateException(err)
                 }
 
                 val mangaDir = getMangaDir(next.manga.ogTitle, next.source)
@@ -156,62 +241,138 @@ class ColorizerManager(
                 val pages = getChapterPages(chapterDir)
 
                 if (pages.isEmpty()) {
-                    throw IllegalStateException("No image files in downloaded chapter.")
+                    val err = "No image files found in downloaded chapter."
+                    TranslationReport.log("ERROR", "Colorizer", err)
+                    throw IllegalStateException(err)
                 }
+                TranslationReport.log("INFO", "Colorizer", "Loaded ${pages.size} pages to colorize")
 
                 for ((idx, pagePair) in pages.withIndex()) {
                     ensureActive()
                     val pageName = pagePair.first.substringAfterLast("/")
+                    val basePercent = ((idx.toFloat() / pages.size.coerceAtLeast(1)) * 100).toInt()
+
+                    _progressState.value = Progress(
+                        chapterId = next.chapter.id,
+                        chapterName = next.chapter.name,
+                        currentPage = idx + 1,
+                        totalPages = pages.size,
+                        percent = basePercent,
+                        step = "Colorizing page ${idx + 1}/${pages.size} ($pageName)...",
+                    )
+                    TranslationReport.log("INFO", "Colorizer", "Processing page ${idx + 1}/${pages.size} ($pageName)")
+
+                    val pageStart = System.currentTimeMillis()
                     val outFile = outChapterDir.findFile(pageName) ?: outChapterDir.createFile(pageName) ?: continue
 
                     pagePair.second().use { inputStream ->
                         val inputBitmap = BitmapFactory.decodeStream(inputStream)
                         if (inputBitmap != null) {
+                            val speedTier = translationPreferences.colorizerSpeedTier().get()
                             val colorizedBitmap = colorizeEngine.colorize(
                                 inputBitmap = inputBitmap,
                                 modelFile = modelFile,
                                 intensity = intensity,
                                 useNnapi = useNnapi,
+                                blendMode = blendMode,
+                                customParams = customParams,
+                                speedTier = speedTier,
+                                onProgress = { subStep, subPct ->
+                                    val interpolatedPercent = (((idx.toFloat() + (subPct * 0.85f)) / pages.size.coerceAtLeast(1)) * 100).toInt().coerceIn(0, 99)
+                                    _progressState.value = Progress(
+                                        chapterId = next.chapter.id,
+                                        chapterName = next.chapter.name,
+                                        currentPage = idx + 1,
+                                        totalPages = pages.size,
+                                        percent = interpolatedPercent,
+                                        step = subStep,
+                                    )
+                                },
+                            )
+
+                            _progressState.value = Progress(
+                                chapterId = next.chapter.id,
+                                chapterName = next.chapter.name,
+                                currentPage = idx + 1,
+                                totalPages = pages.size,
+                                percent = (((idx.toFloat() + 0.9f) / pages.size.coerceAtLeast(1)) * 100).toInt().coerceAtMost(99),
+                                step = "Saving colorized page ${idx + 1}/${pages.size} ($pageName)...",
                             )
 
                             outFile.openOutputStream()?.use { outputStream ->
-                                colorizedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+                                colorizedBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
                                 outputStream.flush()
                             }
-                            if (outFile.length() == 0L) {
-                                outFile.delete()
-                            }
+
                             if (colorizedBitmap != inputBitmap) {
                                 colorizedBitmap.recycle()
                             }
                             inputBitmap.recycle()
+
+                            val pageElapsed = System.currentTimeMillis() - pageStart
+                            TranslationReport.log("INFO", "Colorizer", "Page ${idx + 1}/${pages.size} finished in ${pageElapsed}ms")
                         } else {
-                            if (outFile.length() == 0L) {
-                                outFile.delete()
-                            }
+                            TranslationReport.log("WARNING", "Colorizer", "Could not decode bitmap for page ${idx + 1}")
                         }
                     }
                 }
 
+                _progressState.value = Progress(
+                    chapterId = next.chapter.id,
+                    chapterName = next.chapter.name,
+                    currentPage = pages.size,
+                    totalPages = pages.size,
+                    percent = 100,
+                    step = "Colorization complete!",
+                )
+                TranslationReport.log("INFO", "Colorizer", "Colorization finished successfully for chapter: ${next.chapter.name}")
                 next.status = Translation.State.TRANSLATED
             } catch (e: CancellationException) {
+                TranslationReport.log("WARNING", "Colorizer", "Colorization cancelled for chapter: ${next.chapter.name}")
                 next.status = Translation.State.NOT_TRANSLATED
                 throw e
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Colorization failed" }
+                TranslationReport.log("ERROR", "Colorizer", "Colorization failed: ${e.message}", e)
                 next.status = Translation.State.ERROR
+                withContext(Dispatchers.Main) {
+                    context.toast(e.message ?: "Colorization failed")
+                }
             } finally {
+                activeChapterId = null
+                activeColorizeJob = null
+                _progressState.value = null
                 synchronized(_queueState) {
                     _queueState.value = _queueState.value - next
+                    if (_queueState.value.isEmpty()) {
+                        eu.kanade.tachiyomi.data.ai.WakeLockHelper.release()
+                        scheduleIdleUnload(2_000L)
+                    }
                 }
                 processQueue()
             }
         }
     }
 
+    fun cancelActiveColorizer() {
+        activeColorizeJob?.cancel()
+        activeColorizeJob = null
+        activeChapterId = null
+        _progressState.value = null
+        eu.kanade.tachiyomi.data.ai.WakeLockHelper.release()
+        colorizeEngine.unloadSession()
+        System.gc()
+        Runtime.getRuntime().gc()
+        TranslationReport.log("WARNING", "Colorizer", "Active colorization cancelled immediately by user and memory released.")
+        processQueue()
+    }
+
     fun cancelQueuedColorizer(translation: Translation) {
         synchronized(_queueState) {
             _queueState.value = _queueState.value - translation
+        }
+        if (activeChapterId == translation.chapter.id) {
+            cancelActiveColorizer()
         }
     }
 

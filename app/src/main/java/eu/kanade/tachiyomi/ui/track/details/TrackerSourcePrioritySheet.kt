@@ -13,26 +13,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -43,17 +46,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.ui.track.matcher.TrackerSourceItem
 
 // KMK -->
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackerSourcePrioritySheet(
     prioritizedSourceIds: List<Long>,
-    allInstalledSources: List<CatalogueSource>,
+    allInstalledSources: List<TrackerSourceItem>,
     activeSourceId: Long?,
     onSavePriorityList: (List<Long>) -> Unit,
     onDirectSelectSource: (Long) -> Unit,
@@ -67,6 +70,8 @@ fun TrackerSourcePrioritySheet(
         )
     }
     var isAddingSource by remember { mutableStateOf(false) }
+    var sourceSearchQuery by remember { mutableStateOf("") }
+    var selectedLangFilter by remember { mutableStateOf("all") }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -90,8 +95,12 @@ fun TrackerSourcePrioritySheet(
                         fontWeight = FontWeight.Bold,
                     )
 
-                    if (currentPriorityList.size < 8 && allInstalledSources.size > currentPriorityList.size) {
-                        TextButton(onClick = { isAddingSource = true }) {
+                    if (allInstalledSources.size > currentPriorityList.size) {
+                        TextButton(onClick = {
+                            sourceSearchQuery = ""
+                            selectedLangFilter = "all"
+                            isAddingSource = true
+                        }) {
                             Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Add Source")
@@ -147,17 +156,21 @@ fun TrackerSourcePrioritySheet(
                                 )
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = sourceName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                    if (source != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
                                         Text(
-                                            text = source.lang.uppercase(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            text = sourceName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                                         )
+                                        if (source != null && source.lang.isNotBlank()) {
+                                            SuggestionChip(
+                                                onClick = {},
+                                                label = { Text(source.lang.uppercase(), style = MaterialTheme.typography.labelSmall) },
+                                            )
+                                        }
                                     }
                                 }
 
@@ -214,63 +227,168 @@ fun TrackerSourcePrioritySheet(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    IconButton(onClick = { isAddingSource = false }) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        IconButton(onClick = { isAddingSource = false }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        }
+                        Text(
+                            text = "Add to Priority Hierarchy",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
-                    Text(
-                        text = "Add to Priority Hierarchy",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                val unselectedSources = allInstalledSources.filter { it.id !in currentPriorityList }
+                // Search Bar
+                OutlinedTextField(
+                    value = sourceSearchQuery,
+                    onValueChange = { sourceSearchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    placeholder = { Text("Search installed extensions...") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (sourceSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { sourceSearchQuery = "" }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                )
+
+                // Language Filter Chips
+                val availableLangs = remember(allInstalledSources) {
+                    listOf("all") + allInstalledSources
+                        .map { it.lang.lowercase() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .sorted()
+                }
+
+                if (availableLangs.size > 2) {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(availableLangs) { lang ->
+                            val isSelected = selectedLangFilter == lang
+                            val labelText = if (lang == "all") "All Languages" else lang.uppercase()
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedLangFilter = lang },
+                                label = { Text(labelText, style = MaterialTheme.typography.labelMedium) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+                // Filtered and Alphabetically Sorted Sources
+                val unselectedSources = remember(allInstalledSources, currentPriorityList, sourceSearchQuery, selectedLangFilter) {
+                    allInstalledSources
+                        .filter { it.id !in currentPriorityList }
+                        .filter { source ->
+                            val matchesQuery = sourceSearchQuery.isBlank() ||
+                                source.name.contains(sourceSearchQuery, ignoreCase = true) ||
+                                source.lang.contains(sourceSearchQuery, ignoreCase = true) ||
+                                source.id.toString().contains(sourceSearchQuery)
+                            val matchesLang = selectedLangFilter == "all" || source.lang.equals(selectedLangFilter, ignoreCase = true)
+                            matchesQuery && matchesLang
+                        }
+                        .sortedBy { it.name.lowercase() }
+                }
+
                 if (unselectedSources.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(150.dp),
+                            .height(180.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("All installed sources are already in your priority list.")
+                        Text(
+                            text = if (sourceSearchQuery.isNotBlank() || selectedLangFilter != "all") {
+                                "No matching sources found."
+                            } else {
+                                "All installed sources are already in your priority list."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 350.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        itemsIndexed(unselectedSources, key = { _, s -> s.id }) { _, source ->
-                            Row(
+                        items(unselectedSources, key = { it.id }) { source ->
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
                                     .clickable {
                                         val updated = currentPriorityList + source.id
                                         currentPriorityList = updated
                                         onSavePriorityList(updated)
                                         isAddingSource = false
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.4f),
+                                ),
                             ) {
-                                Column {
-                                    Text(
-                                        text = source.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        text = source.lang.uppercase(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = source.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        if (source.lang.isNotBlank()) {
+                                            Text(
+                                                text = source.lang.uppercase(),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val updated = currentPriorityList + source.id
+                                            currentPriorityList = updated
+                                            onSavePriorityList(updated)
+                                            isAddingSource = false
+                                        },
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Add,
+                                            contentDescription = "Add",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
                                 }
-                                Icon(Icons.Outlined.Add, contentDescription = "Add")
                             }
                         }
                     }

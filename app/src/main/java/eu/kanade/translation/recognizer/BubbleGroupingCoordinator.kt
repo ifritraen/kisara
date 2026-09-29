@@ -35,6 +35,8 @@ class BubbleGroupingCoordinator(
         blocks: List<TranslationBlock>,
         bubbleRegions: List<Rect> = emptyList(),
         isRtl: Boolean = true,
+        assignmentMode: Int = 0, // 0 = Point-in-Polygon Centroid, 1 = Spatial Proximity DSU
+        sortingOrder: Int = 0, // 0 = Auto/RTL, 1 = LTR, 2 = Disabled
     ): List<TranslationBlock> {
         if (blocks.size <= 1) return blocks
 
@@ -66,20 +68,26 @@ class BubbleGroupingCoordinator(
             }
         }
 
-        // 1. Group fragments that lie inside the same detected speech bubble region
-        if (bubbleRegions.isNotEmpty()) {
-            for (bubble in bubbleRegions) {
+        // Track which fragments belong to an explicit detected bubble
+        val assignedBubble = IntArray(fragments.size) { -1 }
+
+        // 1. Point-in-Polygon / Enclosure Assignment (when assignmentMode == 0)
+        if (assignmentMode == 0 && bubbleRegions.isNotEmpty()) {
+            for ((bIdx, bubble) in bubbleRegions.withIndex()) {
                 val bubbleRectF = RectF(bubble)
                 val insideIndices = fragments.filter { f ->
+                    val cx = f.rect.centerX()
+                    val cy = f.rect.centerY()
+                    val isCentroidInside = bubbleRectF.contains(cx, cy)
                     val overlap = RectF()
-                    if (overlap.setIntersect(bubbleRectF, f.rect)) {
-                        val overlapArea = overlap.width() * overlap.height()
-                        val fragArea = f.rect.width() * f.rect.height()
-                        overlapArea / fragArea > 0.4f
-                    } else {
-                        false
-                    }
+                    val hasAreaOverlap = overlap.setIntersect(bubbleRectF, f.rect) &&
+                        (overlap.width() * overlap.height()) / (f.rect.width() * f.rect.height()) > 0.35f
+                    isCentroidInside || hasAreaOverlap
                 }.map { it.index }
+
+                for (idx in insideIndices) {
+                    assignedBubble[idx] = bIdx
+                }
 
                 for (k in 1 until insideIndices.size) {
                     union(insideIndices[0], insideIndices[k])
@@ -87,10 +95,13 @@ class BubbleGroupingCoordinator(
             }
         }
 
-        // 2. Spatial proximity clustering for remaining fragments
+        // 2. Spatial proximity clustering (strictly for unassigned/standalone fragments or when assignmentMode == 1)
         for (i in fragments.indices) {
             for (j in i + 1 until fragments.size) {
                 if (find(i) == find(j)) continue
+                // If either fragment is already bound to a bubble under Point-in-Polygon mode, do not cross-merge
+                if (assignmentMode == 0 && (assignedBubble[i] != -1 || assignedBubble[j] != -1)) continue
+
                 val r1 = fragments[i].rect
                 val r2 = fragments[j].rect
 
@@ -104,26 +115,41 @@ class BubbleGroupingCoordinator(
         val groups = fragments.groupBy { find(it.index) }
         val consolidatedBlocks = mutableListOf<TranslationBlock>()
 
+        val effectiveIsRtl = when (sortingOrder) {
+            1 -> false
+            2 -> false
+            else -> isRtl
+        }
+
         for ((_, group) in groups) {
             if (group.isEmpty()) continue
 
             // Sort fragments in reading order:
-            // For Japanese/CJK Manga (RTL): Right to left columns, top to bottom within column
-            // For Western/Manhwa (LTR): Top to bottom rows, left to right within row
-            val sortedGroup = if (isRtl) {
-                group.sortedWith(
-                    compareByDescending<TextFragment> { it.rect.centerX() }
-                        .thenBy { it.rect.top },
-                )
-            } else {
-                group.sortedWith(
-                    compareBy<TextFragment> { it.rect.top }
-                        .thenBy { it.rect.left },
-                )
+            val sortedGroup = when (sortingOrder) {
+                0 -> {
+                    if (effectiveIsRtl) {
+                        group.sortedWith(
+                            compareByDescending<TextFragment> { it.rect.centerX() }
+                                .thenBy { it.rect.top },
+                        )
+                    } else {
+                        group.sortedWith(
+                            compareBy<TextFragment> { it.rect.top }
+                                .thenBy { it.rect.left },
+                        )
+                    }
+                }
+                1 -> {
+                    group.sortedWith(
+                        compareBy<TextFragment> { it.rect.top }
+                            .thenBy { it.rect.left },
+                    )
+                }
+                else -> group // Raw detector order (disabled)
             }
 
             // Compose text with CJK vs Latin whitespace rules
-            val composedText = composeText(sortedGroup.map { it.block.text }, isRtl)
+            val composedText = composeText(sortedGroup.map { it.block.text }, effectiveIsRtl)
 
             // Calculate encompassing bounding box
             val minX = sortedGroup.minOf { it.rect.left }
@@ -155,7 +181,19 @@ class BubbleGroupingCoordinator(
             )
         }
 
-        return consolidatedBlocks
+        // 4. Sort page-level consolidated blocks in reading order
+        return if (effectiveIsRtl) {
+            // Group by vertical bands (tier ~180px), sort Right to Left within each band
+            consolidatedBlocks.sortedWith(
+                compareBy<TranslationBlock> { (it.y / 180f).toInt() }
+                    .thenByDescending { it.x },
+            )
+        } else {
+            consolidatedBlocks.sortedWith(
+                compareBy<TranslationBlock> { (it.y / 180f).toInt() }
+                    .thenBy { it.x },
+            )
+        }
     }
 
     /**
@@ -169,15 +207,18 @@ class BubbleGroupingCoordinator(
         val avgWidth = (r1.width() + r2.width()) / 2f
         val avgHeight = (r1.height() + r2.height()) / 2f
 
-        // Check vertical column proximity (for Japanese vertical text)
+        // Tight proximity check: only merge lines/fragments strictly within the same speech bubble
+        val maxHorizontalGap = min(avgWidth * 0.6f, 28f)
+        val maxVerticalGap = min(avgHeight * 0.4f, 24f)
+
         val isVerticalColumn = if (isRtl) {
-            dx < avgWidth * 1.5f && dy < avgHeight * 0.6f
+            dx < maxHorizontalGap && dy < maxVerticalGap
         } else {
-            dx < avgWidth * 0.6f && dy < avgHeight * 1.2f
+            dx < maxHorizontalGap * 0.8f && dy < maxVerticalGap * 1.2f
         }
 
         // Check tight bounding box intersection or overlap
-        val isOverlapping = dx <= 8f && dy <= 8f
+        val isOverlapping = dx <= 6f && dy <= 6f
 
         return isVerticalColumn || isOverlapping
     }

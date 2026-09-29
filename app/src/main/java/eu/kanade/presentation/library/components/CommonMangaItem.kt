@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
@@ -112,6 +114,29 @@ internal const val GRID_SELECTED_COVER_ALPHA = 0.76f
 
 private val TITLE_NUMBER_REGEX = Regex("(\\d+)$")
 
+@Composable
+fun CategoryBadge(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = modifier,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+        )
+    }
+}
+
 /**
  * Layout of grid list item with title overlaying the cover.
  * Accepts null [title] for a cover-only view.
@@ -129,6 +154,7 @@ fun MangaCompactGridItem(
     coverBadgeEnd: @Composable (RowScope.() -> Unit)? = null,
     // KMK -->
     libraryColored: Boolean = true,
+    categoryBadges: List<String> = emptyList(),
     // KMK <--
     manga: Manga? = null,
 ) {
@@ -197,6 +223,7 @@ fun MangaCompactGridItem(
             coverBadgeStart = finalBadgeStart,
             coverBadgeEnd = finalBadgeEnd,
             coverTitleStyle = coverTitleStyleKey,
+            categoryBadges = categoryBadges,
             onClick = onClick,
             onLongClick = onLongClick,
             modifier = Modifier.fillMaxWidth(),
@@ -251,6 +278,7 @@ fun MangaCompactGridItem(
                         title = cleanTitle,
                         artistAuthorText = artistAuthorText,
                         onClickContinueReading = onClickContinueReading,
+                        categoryBadges = categoryBadges,
                     )
                 } else if (onClickContinueReading != null) {
                     ContinueReadingButton(
@@ -275,6 +303,7 @@ private fun BoxScope.CoverTextOverlay(
     title: String,
     artistAuthorText: String? = null,
     onClickContinueReading: (() -> Unit)? = null,
+    categoryBadges: List<String> = emptyList(),
 ) {
     val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
     val titleStyleKey = remember { uiPreferences.kisaraCoverTitleStyle().get() }
@@ -283,7 +312,7 @@ private fun BoxScope.CoverTextOverlay(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.60f)
+            .fillMaxHeight(if (categoryBadges.isNotEmpty()) 0.70f else 0.60f)
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
@@ -369,6 +398,18 @@ private fun BoxScope.CoverTextOverlay(
                     ),
                 ),
             )
+
+            if (categoryBadges.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    categoryBadges.take(2).forEach { badge ->
+                        CategoryBadge(badge)
+                    }
+                }
+            }
         }
         if (onClickContinueReading != null) {
             ContinueReadingButton(
@@ -404,6 +445,7 @@ fun MangaComfortableGridItem(
     coverRatio: MutableFloatState = remember { mutableFloatStateOf(1f) },
     usePanoramaCover: Boolean,
     fitToPanoramaCover: Boolean = false,
+    categoryBadges: List<String> = emptyList(),
     // KMK <--
     manga: Manga? = null,
 ) {
@@ -476,6 +518,7 @@ fun MangaComfortableGridItem(
             coverBadgeStart = finalBadgeStart,
             coverBadgeEnd = finalBadgeEnd,
             coverTitleStyle = coverTitleStyleKey,
+            categoryBadges = categoryBadges,
             onClick = onClick,
             onLongClick = onLongClick,
             modifier = Modifier.fillMaxWidth(),
@@ -613,6 +656,17 @@ fun MangaComfortableGridItem(
                     maxLines = titleMaxLines,
                     titleStyleKey = titleStyleKey,
                 )
+                if (categoryBadges.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp),
+                    ) {
+                        categoryBadges.take(3).forEach { badge ->
+                            CategoryBadge(badge)
+                        }
+                    }
+                }
             }
         }
     }
@@ -773,6 +827,7 @@ fun MangaListItem(
     onClickContinueReading: (() -> Unit)? = null,
     // KMK -->
     libraryColored: Boolean = true,
+    categoryBadges: List<String> = emptyList(),
     // KMK <--
     manga: Manga? = null,
 ) {
@@ -913,6 +968,17 @@ fun MangaListItem(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (categoryBadges.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    categoryBadges.take(3).forEach { badge ->
+                        CategoryBadge(badge)
+                    }
+                }
+            }
         }
         BadgeGroup(content = finalBadge)
         if (onClickContinueReading != null) {

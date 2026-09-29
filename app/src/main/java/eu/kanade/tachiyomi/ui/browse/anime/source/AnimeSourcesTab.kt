@@ -25,6 +25,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -75,10 +76,15 @@ fun Screen.animeSourcesTab(): TabContent {
                 contentPadding = contentPadding,
                 onClickItem = { source, listing ->
                     // KMK -->
+                    val query = if (listing == eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreenModel.Listing.Popular && source.supportsLatest) {
+                        tachiyomi.domain.source.anime.interactor.GetRemoteAnime.QUERY_LATEST
+                    } else {
+                        listing.query
+                    }
                     navigator.push(
                         BrowseAnimeSourceScreen(
                             sourceId = source.id,
-                            listingQuery = listing.query,
+                            listingQuery = query,
                         ),
                     )
                     // KMK <--
@@ -91,9 +97,11 @@ fun Screen.animeSourcesTab(): TabContent {
                 onClickManageTags = { source -> screenModel.dialog = SourcesScreenModel.Dialog.SourceTags(source) },
             )
 
+            val context = androidx.compose.ui.platform.LocalContext.current
             when (val dialog = state.dialog) {
                 is SourcesScreenModel.Dialog.SourceLongClick -> {
                     val source = dialog.source
+                    val isMiniInstalled = eu.kanade.tachiyomi.ui.mini.MiniModeManager.isSourceInstalled(source.id)
                     eu.kanade.presentation.browse.SourceOptionsDialog(
                         source = source,
                         onClickPin = {
@@ -128,6 +136,28 @@ fun Screen.animeSourcesTab(): TabContent {
                             screenModel.uninstallExtension(source)
                             screenModel.closeDialog()
                         },
+                        // KMK -->
+                        onClickInstallMiniApp = {
+                            if (isMiniInstalled) {
+                                eu.kanade.tachiyomi.ui.mini.MiniModeManager.releaseSlot(context, source.id)
+                            } else {
+                                val slot = eu.kanade.tachiyomi.ui.mini.MiniModeManager.assignSlot(context, source.id, source.name)
+                                if (slot == null) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        context.stringResource(tachiyomi.i18n.kmk.KMR.strings.mini_mode_slots_full),
+                                        android.widget.Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
+                            screenModel.closeDialog()
+                        },
+                        isMiniInstalled = isMiniInstalled,
+                        onClickAddToHome = {
+                            eu.kanade.tachiyomi.ui.mini.MiniModeManager.offerPinnedShortcut(context, source.id, source.name)
+                            screenModel.closeDialog()
+                        },
+                        // KMK <--
                     )
                 }
                 is SourcesScreenModel.Dialog.SourceTags -> {

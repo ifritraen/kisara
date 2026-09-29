@@ -27,7 +27,7 @@ class PaddleOcrRecognizer(
 
     private val modelDir = File(context.filesDir, "paddleocr")
     val modelFile get() = File(modelDir, "ppocrv5_rec.onnx")
-    val dictFile get() = File(modelDir, "ppocr_keys.txt")
+    val dictFile get() = File(modelDir, "ppocrv5_dict.txt")
 
     private var session: OrtSession? = null
     private var dictionary: List<String>? = null
@@ -38,7 +38,7 @@ class PaddleOcrRecognizer(
         modelDir.mkdirs()
         val files = listOf(
             "https://huggingface.co/ilaylow/PP_OCRv5_mobile_onnx/resolve/main/ppocrv5_rec.onnx" to modelFile,
-            "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/ppocr_keys_v1.txt" to dictFile,
+            "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/dict/ppocrv5_dict.txt" to dictFile,
         )
         val networkHelper = try {
             uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
@@ -104,8 +104,8 @@ class PaddleOcrRecognizer(
             session = env.createSession(modelFile.absolutePath, opts)
         }
         if (dictionary == null && dictFile.exists()) {
-            // Load key dictionary line by line
-            dictionary = dictFile.readLines(Charsets.UTF_8)
+            // Load key dictionary line by line + space token
+            dictionary = dictFile.readLines(Charsets.UTF_8).filter { it.isNotEmpty() } + " "
         }
     }
 
@@ -118,16 +118,31 @@ class PaddleOcrRecognizer(
         val sess = session ?: return@withContext ""
         val dict = dictionary ?: return@withContext ""
 
-        // Resize image to fixed height 48, dynamic width
-        val targetH = 48
-        val ratio = targetH.toFloat() / crop.height
-        val targetW = (crop.width * ratio).roundToInt().coerceAtLeast(32)
+        // 1. Orientation check: Rotate vertical text columns (H > 1.3 * W) 90 deg clockwise
+        val normalizedCrop = if (crop.height.toFloat() / crop.width.coerceAtLeast(1) >= 1.3f) {
+            val matrix = android.graphics.Matrix().apply { postRotate(90f) }
+            Bitmap.createBitmap(crop, 0, 0, crop.width, crop.height, matrix, true)
+        } else {
+            crop
+        }
 
-        val scaled = Bitmap.createScaledBitmap(crop, targetW, targetH, true)
+        // 2. Resize image to fixed height 48, dynamic width (min 32px)
+        val targetH = 48
+        val ratio = targetH.toFloat() / normalizedCrop.height.coerceAtLeast(1)
+        val targetW = (normalizedCrop.width * ratio).roundToInt().coerceIn(32, 1024)
+
+        val scaled = Bitmap.createScaledBitmap(normalizedCrop, targetW, targetH, true)
         val tensor = bitmapToTensor(scaled)
 
-        val outputs = sess.run(mapOf("x" to tensor))
-        val logits = outputs.firstOrNull()?.value as? OnnxTensor ?: return@withContext ""
+        val inputName = sess.inputNames.firstOrNull() ?: "x"
+        val outputs = sess.run(mapOf(inputName to tensor))
+        val logits = outputs.firstOrNull()?.value as? OnnxTensor ?: run {
+            tensor.close()
+            outputs.close()
+            if (normalizedCrop != crop) normalizedCrop.recycle()
+            scaled.recycle()
+            return@withContext ""
+        }
 
         val shape = logits.info.shape // [1, seqLen, vocabSize]
         val seqLen = shape[1].toInt()
@@ -139,6 +154,8 @@ class PaddleOcrRecognizer(
 
         tensor.close()
         outputs.close()
+        if (normalizedCrop != crop) normalizedCrop.recycle()
+        scaled.recycle()
 
         // CTC greedy decoder
         val sb = StringBuilder()
@@ -177,7 +194,7 @@ class PaddleOcrRecognizer(
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
         // Normalize using standard mean/std 0.5 for recognition models
-        val buf = FloatBuffer.allocate(3 * h * w)
+        val buf = eu.kanade.tachiyomi.data.ai.AiBufferUtils.allocateDirectFloatBuffer(3 * h * w)
         for (c in 0..2) {
             for (px in pixels) {
                 val v = when (c) {

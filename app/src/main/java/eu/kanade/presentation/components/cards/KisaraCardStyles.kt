@@ -1,5 +1,6 @@
 package eu.kanade.presentation.components.cards
 
+import eu.kanade.presentation.library.components.CategoryBadge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -482,6 +483,7 @@ fun KisaraNormalCard(
     coverBadgeStart: @Composable (RowScope.() -> Unit)? = null,
     coverBadgeEnd: @Composable (RowScope.() -> Unit)? = null,
     coverTitleStyle: String = "default",
+    categoryBadges: List<String> = emptyList(),
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -489,6 +491,20 @@ fun KisaraNormalCard(
     val titleParams = remember(coverTitleStyle) { getCoverTitleParams(coverTitleStyle) }
     val subtitleFontSize = remember(titleParams.fontSize) {
         (titleParams.fontSize.value - 2.0f).coerceAtLeast(8.0f).sp
+    }
+
+    val categoryBadgesRow: @Composable () -> Unit = {
+        if (categoryBadges.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 2.dp),
+            ) {
+                categoryBadges.take(2).forEach { badge ->
+                    CategoryBadge(badge)
+                }
+            }
+        }
     }
 
     val numberMatch = remember(title) { Regex("(\\d+)$").find(title) }
@@ -586,6 +602,7 @@ fun KisaraNormalCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        categoryBadgesRow()
                     }
                 }
             }
@@ -635,6 +652,7 @@ fun KisaraNormalCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        categoryBadgesRow()
                     }
                 }
             }
@@ -675,6 +693,7 @@ fun KisaraNormalCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        categoryBadgesRow()
                     }
                 }
             }
@@ -707,6 +726,7 @@ fun KisaraNormalCard(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                            categoryBadgesRow()
                         }
                     }
                 }
@@ -740,6 +760,7 @@ fun KisaraNormalCard(
                             Spacer(modifier = Modifier.height(2.dp))
                         }
                         titleRow(MaterialTheme.colorScheme.onSurface, 2)
+                        categoryBadgesRow()
                     }
                 }
             }
@@ -799,6 +820,7 @@ fun KisaraNormalCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        categoryBadgesRow()
                     }
                 }
             }
@@ -842,6 +864,7 @@ fun KisaraNormalCard(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    categoryBadgesRow()
                 }
             }
         }

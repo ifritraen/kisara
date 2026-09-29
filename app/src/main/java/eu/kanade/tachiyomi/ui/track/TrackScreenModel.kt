@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.track
 
+import android.app.Application
 import android.content.Context
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -26,14 +27,33 @@ import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALHomeSection
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALMediaItem
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUser
+import eu.kanade.domain.entries.anime.interactor.UpdateAnime
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
+import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.track.matcher.TrackerSourceMatcher
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
+import tachiyomi.domain.category.anime.interactor.SetAnimeCategories
+import tachiyomi.domain.category.interactor.GetCategories
+import tachiyomi.domain.category.interactor.SetMangaCategories
+import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.SetNovelCategories
+import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.manga.model.Manga
+import tachiyomi.core.common.preference.CheckboxState
+import tachiyomi.core.common.preference.mapAsCheckboxState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -43,8 +63,13 @@ class TrackScreenModel(
     private val networkHelper: NetworkHelper = Injekt.get(),
     private val json: Json = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
-    private val context: Context = Injekt.get(),
+    private val context: Application = Injekt.get(),
 ) : ScreenModel {
+
+    private val anilistHomeCache = mutableMapOf<MediaType, List<ALHomeSection>>()
+    private val anilistUserListCache = mutableMapOf<MediaType, List<ALUserListEntry>>()
+    private val malHomeCache = mutableMapOf<MediaType, List<MALHomeSection>>()
+    private val malUserListCache = mutableMapOf<MediaType, List<MALMediaItem>>()
 
     private val mediaCache by lazy { AnilistMediaCache(context) }
 
@@ -90,8 +115,28 @@ class TrackScreenModel(
             return
         }
 
+        if (!forceRefresh) {
+            val cached = anilistHomeCache[mediaType]
+            if (cached != null) {
+                _state.update {
+                    it.copy(
+                        homeSections = cached,
+                        isLoadingHome = false,
+                        currentHomeMediaType = mediaType,
+                    )
+                }
+                return
+            }
+        }
+
         screenModelScope.launch {
-            _state.update { it.copy(isLoadingHome = true, currentHomeMediaType = mediaType) }
+            _state.update {
+                it.copy(
+                    homeSections = emptyList(),
+                    isLoadingHome = true,
+                    currentHomeMediaType = mediaType,
+                )
+            }
             try {
                 val currentSeason = AnilistSeasonUtil.getCurrentSeason()
                 val prevSeasonCount = uiPreferences.trackTabPreviousSeasons().get().coerceIn(1, 8)
@@ -130,6 +175,12 @@ class TrackScreenModel(
                         val continueItems = userListResult.data.collection.lists
                             .filter { it.status == "CURRENT" }
                             .flatMap { it.entries }
+                            .filter { entry ->
+                                val fmt = entry.media?.format
+                                if (mediaType == MediaType.NOVEL) fmt == "NOVEL"
+                                else if (mediaType == MediaType.MANGA) fmt != "NOVEL"
+                                else true
+                            }
                             .mapNotNull { entry ->
                                 val media = entry.media ?: return@mapNotNull null
                                 ALSearchItem(
@@ -151,14 +202,18 @@ class TrackScreenModel(
                     } catch (_: Throwable) {}
                 }
 
-                // Cache items for quick lookups
-                sections.forEach { section ->
+                // Deduplicate items per section and cache for quick lookups
+                val deduplicatedSections = sections.map { section ->
+                    section.copy(items = section.items.distinctBy { it.id })
+                }
+                deduplicatedSections.forEach { section ->
                     mediaCache.cacheMediaList(section.items)
                 }
 
+                anilistHomeCache[mediaType] = deduplicatedSections
                 _state.update {
                     it.copy(
-                        homeSections = sections,
+                        homeSections = deduplicatedSections,
                         isLoadingHome = false,
                     )
                 }
@@ -172,7 +227,7 @@ class TrackScreenModel(
     fun toggleAnilistHomeSection(key: String, isEnabled: Boolean) {
         val current = uiPreferences.anilistHomeEnabledSections().get().toMutableSet()
         if (current.isEmpty()) {
-            current.addAll(eu.kanade.tachiyomi.ui.track.anilist.AnilistLandingSections.ALL_SECTIONS.map { it.key })
+            current.addAll(eu.kanade.tachiyomi.ui.track.anilist.AnilistLandingSections.getSections().map { it.key })
         }
         if (isEnabled) {
             current.add(key)
@@ -197,8 +252,28 @@ class TrackScreenModel(
         if (!isAniListLoggedIn()) return
         if (!forceRefresh && _state.value.userList.isNotEmpty() && _state.value.currentUserListMediaType == mediaType) return
 
+        if (!forceRefresh) {
+            val cached = anilistUserListCache[mediaType]
+            if (cached != null) {
+                _state.update {
+                    it.copy(
+                        userList = cached,
+                        isLoadingUserList = false,
+                        currentUserListMediaType = mediaType,
+                    )
+                }
+                return
+            }
+        }
+
         screenModelScope.launch {
-            _state.update { it.copy(isLoadingUserList = true, currentUserListMediaType = mediaType) }
+            _state.update {
+                it.copy(
+                    userList = emptyList(),
+                    isLoadingUserList = true,
+                    currentUserListMediaType = mediaType,
+                )
+            }
             try {
                 val (userId, _) = trackerManager.aniList.api.getCurrentUser()
                 val type = when (mediaType) {
@@ -207,8 +282,16 @@ class TrackScreenModel(
                 }
 
                 val result = trackerManager.aniList.api.getUserMediaList(userId, type)
-                val entries = result.data.collection.lists.flatMap { it.entries }
+                val entries = result.data.collection.lists
+                    .flatMap { it.entries }
+                    .filter { entry ->
+                        val fmt = entry.media?.format
+                        if (mediaType == MediaType.NOVEL) fmt == "NOVEL"
+                        else if (mediaType == MediaType.MANGA) fmt != "NOVEL"
+                        else true
+                    }
 
+                anilistUserListCache[mediaType] = entries
                 _state.update {
                     it.copy(
                         userList = entries,
@@ -271,9 +354,15 @@ class TrackScreenModel(
                     perPage = 30,
                 )
 
+                val filteredMedia = result.data.page.media.filter { item ->
+                    if (mediaType == MediaType.NOVEL) item.format == "NOVEL"
+                    else if (mediaType == MediaType.MANGA) item.format != "NOVEL"
+                    else true
+                }
+
                 _state.update {
                     it.copy(
-                        searchResults = result.data.page.media,
+                        searchResults = filteredMedia,
                         isSearching = false,
                     )
                 }
@@ -333,8 +422,28 @@ class TrackScreenModel(
             return
         }
 
+        if (!forceRefresh) {
+            val cached = malHomeCache[mediaType]
+            if (cached != null) {
+                _state.update {
+                    it.copy(
+                        malHomeSections = cached,
+                        isLoadingMALHome = false,
+                        currentMALHomeMediaType = mediaType,
+                    )
+                }
+                return
+            }
+        }
+
         screenModelScope.launch {
-            _state.update { it.copy(isLoadingMALHome = true, currentMALHomeMediaType = mediaType) }
+            _state.update {
+                it.copy(
+                    malHomeSections = emptyList(),
+                    isLoadingMALHome = true,
+                    currentMALHomeMediaType = mediaType,
+                )
+            }
             try {
                 val isAnime = mediaType == MediaType.ANIME
                 val sections = mutableListOf<MALHomeSection>()
@@ -380,9 +489,14 @@ class TrackScreenModel(
                     if (favorite.isNotEmpty()) sections.add(MALHomeSection("favorite", "Most Favorited", favorite))
                 }
 
+                val deduplicatedSections = sections.map { section ->
+                    section.copy(items = section.items.distinctBy { it.id })
+                }
+
+                malHomeCache[mediaType] = deduplicatedSections
                 _state.update {
                     it.copy(
-                        malHomeSections = sections,
+                        malHomeSections = deduplicatedSections,
                         isLoadingMALHome = false,
                     )
                 }
@@ -397,8 +511,28 @@ class TrackScreenModel(
         if (!isMALLoggedIn()) return
         if (!forceRefresh && _state.value.malUserList.isNotEmpty() && _state.value.currentMALUserListMediaType == mediaType) return
 
+        if (!forceRefresh) {
+            val cached = malUserListCache[mediaType]
+            if (cached != null) {
+                _state.update {
+                    it.copy(
+                        malUserList = cached,
+                        isLoadingMALUserList = false,
+                        currentMALUserListMediaType = mediaType,
+                    )
+                }
+                return
+            }
+        }
+
         screenModelScope.launch {
-            _state.update { it.copy(isLoadingMALUserList = true, currentMALUserListMediaType = mediaType) }
+            _state.update {
+                it.copy(
+                    malUserList = emptyList(),
+                    isLoadingMALUserList = true,
+                    currentMALUserListMediaType = mediaType,
+                )
+            }
             try {
                 val isAnime = mediaType == MediaType.ANIME
                 val items = if (isAnime) {
@@ -407,6 +541,7 @@ class TrackScreenModel(
                     trackerManager.myAnimeList.api.getUserMangaList().map { it.node.toMALMediaItem() }
                 }
 
+                malUserListCache[mediaType] = items
                 _state.update {
                     it.copy(
                         malUserList = items,
@@ -699,9 +834,201 @@ class TrackScreenModel(
             }
         }
     }
+
+    // ==========================================
+    // LOCAL CATEGORIES & TRACKER LIBRARY
+    // ==========================================
+
+    private val matcher = TrackerSourceMatcher()
+    private val getCategories = Injekt.get<GetCategories>()
+    private val getAnimeCategories = Injekt.get<GetAnimeCategories>()
+    private val getNovelCategories = Injekt.get<GetNovelCategories>()
+    private val setMangaCategories = Injekt.get<SetMangaCategories>()
+    private val setAnimeCategories = Injekt.get<SetAnimeCategories>()
+    private val setNovelCategories = Injekt.get<SetNovelCategories>()
+    private val updateManga = Injekt.get<UpdateManga>()
+    private val updateAnime = Injekt.get<UpdateAnime>()
+    private val updateNovel = Injekt.get<UpdateNovel>()
+
+    sealed interface Dialog {
+        data class ChangeMangaCategory(
+            val manga: Manga,
+            val initialSelection: ImmutableList<CheckboxState<Category>>,
+        ) : Dialog
+
+        data class ChangeAnimeCategory(
+            val anime: Anime,
+            val initialSelection: ImmutableList<CheckboxState<Category>>,
+        ) : Dialog
+
+        data class ChangeNovelCategory(
+            val novel: Novel,
+            val initialSelection: ImmutableList<CheckboxState<Category>>,
+        ) : Dialog
+
+        data class TrackerStatusPicker(
+            val item: TrackSeriesItem,
+            val isAniList: Boolean,
+        ) : Dialog
+    }
+
+    fun dismissDialog() {
+        _state.update { it.copy(dialog = null) }
+    }
+
+    fun showTrackerStatusPicker(item: TrackSeriesItem, isAniList: Boolean) {
+        _state.update { it.copy(dialog = Dialog.TrackerStatusPicker(item, isAniList)) }
+    }
+
+    fun showSetCategoryDialog(series: TrackSeriesItem, mediaType: MediaType) {
+        screenModelScope.launchIO {
+            val storedIds = when (mediaType) {
+                MediaType.ANIME -> uiPreferences.trackerPrioritizedAnimeSources().get()
+                MediaType.NOVEL -> uiPreferences.trackerPrioritizedNovelSources().get()
+                MediaType.MANGA -> uiPreferences.trackerPrioritizedMangaSources().get()
+            }.split(",").mapNotNull { it.trim().toLongOrNull() }
+
+            val priorityIds = if (storedIds.isNotEmpty()) storedIds else {
+                when (mediaType) {
+                    MediaType.ANIME -> Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>().getCatalogueSources().take(5).map { it.id }
+                    MediaType.NOVEL -> Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>().getCatalogueSources().take(5).map { it.id }
+                    MediaType.MANGA -> Injekt.get<tachiyomi.domain.source.service.SourceManager>().getOnlineSources().filterIsInstance<eu.kanade.tachiyomi.source.CatalogueSource>().take(5).map { it.id }
+                }
+            }
+
+            val matchResult = matcher.matchAndFetch(series.title, priorityIds, mediaType)
+            if (matchResult is TrackerSourceMatcher.MatchResult.Success) {
+                val entryId = matchResult.entryId
+                when (mediaType) {
+                    MediaType.MANGA -> {
+                        val manga = Injekt.get<tachiyomi.domain.manga.interactor.GetManga>().await(entryId) ?: return@launchIO
+                        val categories = getCategories.await().filterNot { it.isSystemCategory }
+                        val mangaCategories = getCategories.await(manga.id)
+                        val initialSelection = categories.mapAsCheckboxState { cat ->
+                            mangaCategories.any { it.id == cat.id }
+                        }.toImmutableList()
+                        _state.update { it.copy(dialog = Dialog.ChangeMangaCategory(manga, initialSelection)) }
+                    }
+                    MediaType.ANIME -> {
+                        val anime = Injekt.get<tachiyomi.domain.entries.anime.interactor.GetAnime>().await(entryId) ?: return@launchIO
+                        val categories = getAnimeCategories.await().filterNot { it.isSystemCategory }
+                        val animeCategories = getAnimeCategories.await(anime.id)
+                        val initialSelection = categories.mapAsCheckboxState { cat ->
+                            animeCategories.any { it.id == cat.id }
+                        }.toImmutableList()
+                        _state.update { it.copy(dialog = Dialog.ChangeAnimeCategory(anime, initialSelection)) }
+                    }
+                    MediaType.NOVEL -> {
+                        val novel = Injekt.get<tachiyomi.domain.entries.novel.interactor.GetNovel>().await(entryId) ?: return@launchIO
+                        val categories = getNovelCategories.await().map {
+                            Category(
+                                id = it.id,
+                                name = it.name,
+                                order = it.order,
+                                flags = it.flags,
+                                hidden = it.hidden,
+                                parentId = it.parentId,
+                            )
+                        }.filterNot { it.isSystemCategory }
+                        val novelCategories = getNovelCategories.await(novel.id)
+                        val initialSelection = categories.mapAsCheckboxState { cat ->
+                            novelCategories.any { it.id == cat.id }
+                        }.toImmutableList()
+                        _state.update { it.copy(dialog = Dialog.ChangeNovelCategory(novel, initialSelection)) }
+                    }
+                }
+            }
+        }
+    }
+
+    fun setMangaCategories(manga: Manga, categories: List<Long>) {
+        screenModelScope.launchIO {
+            updateManga.awaitUpdateFavorite(manga.id, true)
+            setMangaCategories.await(manga.id, categories)
+            _state.update { it.copy(dialog = null) }
+        }
+    }
+
+    fun setAnimeCategories(anime: Anime, categories: List<Long>) {
+        screenModelScope.launchIO {
+            updateAnime.awaitUpdateFavorite(anime.id, true)
+            setAnimeCategories.await(anime.id, categories)
+            _state.update { it.copy(dialog = null) }
+        }
+    }
+
+    fun setNovelCategories(novel: Novel, categories: List<Long>) {
+        screenModelScope.launchIO {
+            updateNovel.awaitUpdateFavorite(novel.id, true)
+            setNovelCategories.await(novel.id, categories)
+            _state.update { it.copy(dialog = null) }
+        }
+    }
+
+    fun updateTrackerEntryStatus(
+        item: TrackSeriesItem,
+        status: String,
+        isAniList: Boolean,
+    ) {
+        screenModelScope.launchIO {
+            try {
+                val trackerId = item.trackerId ?: return@launchIO
+                if (isAniList) {
+                    if (item.mediaType == MediaType.ANIME) {
+                        val track = eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack.create(1L).apply {
+                            remote_id = trackerId
+                            this.status = when (status.uppercase()) {
+                                "CURRENT", "WATCHING" -> 1L
+                                "COMPLETED" -> 2L
+                                "PAUSED", "ON_HOLD" -> 3L
+                                "DROPPED" -> 4L
+                                "PLANNING", "PLAN_TO_WATCH" -> 5L
+                                "REPEATING" -> 6L
+                                else -> 5L
+                            }
+                        }
+                        trackerManager.aniList.api.addLibAnime(track)
+                    } else {
+                        val track = eu.kanade.tachiyomi.data.database.models.Track.create(1L).apply {
+                            remote_id = trackerId
+                            this.status = when (status.uppercase()) {
+                                "CURRENT", "READING" -> 1L
+                                "COMPLETED" -> 2L
+                                "PAUSED", "ON_HOLD" -> 3L
+                                "DROPPED" -> 4L
+                                "PLANNING", "PLAN_TO_READ" -> 5L
+                                "REPEATING" -> 6L
+                                else -> 5L
+                            }
+                        }
+                        trackerManager.aniList.api.addLibManga(track)
+                    }
+                } else {
+                    if (item.mediaType != MediaType.ANIME) {
+                        val track = eu.kanade.tachiyomi.data.database.models.Track.create(2L).apply {
+                            remote_id = trackerId
+                            this.status = when (status.uppercase()) {
+                                "CURRENT", "READING" -> 1L
+                                "COMPLETED" -> 2L
+                                "PAUSED", "ON_HOLD" -> 3L
+                                "DROPPED" -> 4L
+                                "PLANNING", "PLAN_TO_READ" -> 5L
+                                else -> 5L
+                            }
+                        }
+                        trackerManager.myAnimeList.api.updateItem(track)
+                    }
+                }
+                _state.update { it.copy(dialog = null) }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to update tracker entry status" }
+            }
+        }
+    }
 }
 
 data class TrackState(
+    val dialog: TrackScreenModel.Dialog? = null,
     val selectedSeries: TrackSeriesItem? = null,
     // AniList State
     val homeSections: List<ALHomeSection> = emptyList(),

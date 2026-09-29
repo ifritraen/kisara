@@ -48,6 +48,7 @@ import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.manga.ColorizerAction
 import eu.kanade.presentation.manga.DownloadAction
+import eu.kanade.presentation.manga.SuperResolutionAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.manga.components.ChapterTranslationAction
 import eu.kanade.presentation.util.formattedMessage
@@ -225,6 +226,7 @@ class MangaScreenModel(
     private val setCustomMangaInfo: SetCustomMangaInfo = Injekt.get(),
     // SY <--
     private val getDuplicateLibraryManga: GetDuplicateLibraryManga = Injekt.get(),
+    private val getLibraryManga: tachiyomi.domain.manga.interactor.GetLibraryManga = Injekt.get(),
     private val getAvailableScanlators: GetAvailableScanlators = Injekt.get(),
     private val getExcludedScanlators: GetExcludedScanlators = Injekt.get(),
     private val setExcludedScanlators: SetExcludedScanlators = Injekt.get(),
@@ -265,7 +267,6 @@ class MangaScreenModel(
         get() = state.value as? State.Success
 
     // KMK -->
-    val useNewSourceNavigation by uiPreferences.useNewSourceNavigation().asState(screenModelScope)
     val themeCoverBased = uiPreferences.themeCoverBased().get()
     // KMK <--
 
@@ -576,7 +577,7 @@ class MangaScreenModel(
             }
 
             launchIO {
-                val duplicates = getDuplicateLibraryManga(manga)
+                val duplicates = getSmartDuplicateLibraryManga(manga)
                 updateSuccessState { it.copy(duplicateCount = duplicates.size) }
             }
 
@@ -993,10 +994,10 @@ class MangaScreenModel(
                 eu.kanade.tachiyomi.data.logbook.LogbookLogger.logLibraryAdd(manga.id, manga.title)
                 // First, check if duplicate exists if callback is provided
                 if (checkDuplicate) {
-                    val duplicates = getDuplicateLibraryManga(manga)
+                    val duplicates = getSmartDuplicateLibraryManga(manga)
 
                     if (duplicates.isNotEmpty()) {
-                        updateSuccessState { it.copy(dialog = Dialog.DuplicateManga(manga, duplicates)) }
+                        updateSuccessState { it.copy(dialog = Dialog.DuplicateManga(manga, duplicates), duplicateCount = duplicates.size) }
                         return@launchIO
                     }
                 }
@@ -1248,6 +1249,15 @@ class MangaScreenModel(
                     }
                 }
         }
+        screenModelScope.launchIO {
+            translationManager.progressState
+                .flowWithLifecycle(lifecycle)
+                .collect { progress ->
+                    withUIContext {
+                        updateTranslationProgress(progress)
+                    }
+                }
+        }
     }
 
     private fun observeColorizer() {
@@ -1262,6 +1272,15 @@ class MangaScreenModel(
                     }
                 }
         }
+        screenModelScope.launchIO {
+            colorizerManager.progressState
+                .flowWithLifecycle(lifecycle)
+                .collect { progress ->
+                    withUIContext {
+                        updateColorizerProgress(progress)
+                    }
+                }
+        }
     }
 
     private fun observeSuperResolution() {
@@ -1273,6 +1292,15 @@ class MangaScreenModel(
                 .collect {
                     withUIContext {
                         updateSuperResolutionState(it)
+                    }
+                }
+        }
+        screenModelScope.launchIO {
+            superResolutionManager.progressState
+                .flowWithLifecycle(lifecycle)
+                .collect { progress ->
+                    withUIContext {
+                        updateSuperResolutionProgress(progress)
                     }
                 }
         }
@@ -1292,6 +1320,24 @@ class MangaScreenModel(
         }
     }
 
+    private fun updateTranslationProgress(progress: eu.kanade.translation.ChapterTranslator.Progress?) {
+        updateSuccessState { successState ->
+            if (progress == null) {
+                val newChapters = successState.chapters.map { if (it.translationProgress > 0) it.copy(translationProgress = 0) else it }
+                successState.copy(chapters = newChapters)
+            } else {
+                val modifiedIndex = successState.chapters.indexOfFirst { it.id == progress.chapterId }
+                if (modifiedIndex < 0) return@updateSuccessState successState
+                val pct = if (progress.totalPages > 0) ((progress.currentPage * 100) / progress.totalPages).coerceIn(0, 100) else 0
+                val newChapters = successState.chapters.toMutableList().apply {
+                    val item = removeAt(modifiedIndex).copy(translationProgress = pct)
+                    add(modifiedIndex, item)
+                }
+                successState.copy(chapters = newChapters)
+            }
+        }
+    }
+
     private fun updateColorizerState(translation: Translation) {
         updateSuccessState { successState ->
             val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
@@ -1306,6 +1352,36 @@ class MangaScreenModel(
         }
     }
 
+    private fun updateColorizerProgress(progress: ColorizerManager.Progress?) {
+        updateSuccessState { successState ->
+            if (progress == null) {
+                val newChapters = successState.chapters.map { item ->
+                    if (item.colorizerProgress > 0 || item.colorizerState == Translation.State.TRANSLATING || item.colorizerState == Translation.State.QUEUE) {
+                        val refreshedStatus = colorizerManager.getChapterColorizerStatus(
+                            chapterId = item.chapter.id,
+                            chapterName = item.chapter.name,
+                            scanlator = item.chapter.scanlator,
+                            title = successState.manga.ogTitle,
+                            sourceId = successState.manga.source,
+                        )
+                        item.copy(colorizerProgress = 0, colorizerState = refreshedStatus)
+                    } else {
+                        item
+                    }
+                }
+                successState.copy(chapters = newChapters)
+            } else {
+                val modifiedIndex = successState.chapters.indexOfFirst { it.id == progress.chapterId }
+                if (modifiedIndex < 0) return@updateSuccessState successState
+                val newChapters = successState.chapters.toMutableList().apply {
+                    val item = removeAt(modifiedIndex).copy(colorizerProgress = progress.percent)
+                    add(modifiedIndex, item)
+                }
+                successState.copy(chapters = newChapters)
+            }
+        }
+    }
+
     private fun updateSuperResolutionState(translation: Translation) {
         updateSuccessState { successState ->
             val modifiedIndex = successState.chapters.indexOfFirst { it.id == translation.chapter.id }
@@ -1317,6 +1393,36 @@ class MangaScreenModel(
                 add(modifiedIndex, item)
             }
             successState.copy(chapters = newChapters)
+        }
+    }
+
+    private fun updateSuperResolutionProgress(progress: SuperResolutionManager.Progress?) {
+        updateSuccessState { successState ->
+            if (progress == null) {
+                val newChapters = successState.chapters.map { item ->
+                    if (item.superResolutionProgress > 0 || item.superResolutionState == Translation.State.TRANSLATING || item.superResolutionState == Translation.State.QUEUE) {
+                        val refreshedStatus = superResolutionManager.getChapterSuperResolutionStatus(
+                            chapterId = item.chapter.id,
+                            chapterName = item.chapter.name,
+                            scanlator = item.chapter.scanlator,
+                            title = successState.manga.ogTitle,
+                            sourceId = successState.manga.source,
+                        )
+                        item.copy(superResolutionProgress = 0, superResolutionState = refreshedStatus)
+                    } else {
+                        item
+                    }
+                }
+                successState.copy(chapters = newChapters)
+            } else {
+                val modifiedIndex = successState.chapters.indexOfFirst { it.id == progress.chapterId }
+                if (modifiedIndex < 0) return@updateSuccessState successState
+                val newChapters = successState.chapters.toMutableList().apply {
+                    val item = removeAt(modifiedIndex).copy(superResolutionProgress = progress.percent)
+                    add(modifiedIndex, item)
+                }
+                successState.copy(chapters = newChapters)
+            }
         }
     }
     // KMK <--
@@ -1728,8 +1834,12 @@ class MangaScreenModel(
     ) {
         when (action) {
             ChapterTranslationAction.START -> {
-                if (item.downloadState != Download.State.DOWNLOADED) return
                 val manga = successState?.manga ?: return
+                if (item.downloadState != Download.State.DOWNLOADED) {
+                    startDownload(listOf(item.chapter), false)
+                    context.toast("Downloading chapter for colorization...")
+                    return
+                }
                 screenModelScope.launchNonCancellable {
                     colorizerManager.colorizeChapter(manga, item.chapter)
                 }
@@ -1780,8 +1890,39 @@ class MangaScreenModel(
             ColorizerAction.BOOKMARKED_CHAPTERS -> getBookmarkedChapters()
         }
         val manga = successState?.manga ?: return
+        val downloadedChapterIds = successState?.chapters?.filter { it.downloadState == Download.State.DOWNLOADED }?.map { it.id }?.toSet() ?: emptySet()
+        val undownloaded = chaptersToColorize.filter { it.id !in downloadedChapterIds }
+        if (undownloaded.isNotEmpty()) {
+            startDownload(undownloaded, false)
+            context.toast("Downloading ${undownloaded.size} chapters for colorization...")
+        }
         chaptersToColorize.forEach { chapterItem ->
-            colorizerManager.colorizeChapter(manga, chapterItem)
+            if (chapterItem.id in downloadedChapterIds) {
+                colorizerManager.colorizeChapter(manga, chapterItem)
+            }
+        }
+    }
+
+    fun runSuperResolutionAction(action: SuperResolutionAction) {
+        val chaptersToSuperResolve = when (action) {
+            SuperResolutionAction.NEXT_1_CHAPTER -> getUnreadChaptersSorted().take(1)
+            SuperResolutionAction.NEXT_5_CHAPTERS -> getUnreadChaptersSorted().take(5)
+            SuperResolutionAction.NEXT_10_CHAPTERS -> getUnreadChaptersSorted().take(10)
+            SuperResolutionAction.NEXT_25_CHAPTERS -> getUnreadChaptersSorted().take(25)
+            SuperResolutionAction.UNREAD_CHAPTERS -> getUnreadChapters()
+            SuperResolutionAction.BOOKMARKED_CHAPTERS -> getBookmarkedChapters()
+        }
+        val manga = successState?.manga ?: return
+        val downloadedChapterIds = successState?.chapters?.filter { it.downloadState == Download.State.DOWNLOADED }?.map { it.id }?.toSet() ?: emptySet()
+        val undownloaded = chaptersToSuperResolve.filter { it.id !in downloadedChapterIds }
+        if (undownloaded.isNotEmpty()) {
+            startDownload(undownloaded, false)
+            context.toast("Downloading ${undownloaded.size} chapters for super-resolution...")
+        }
+        chaptersToSuperResolve.forEach { chapterItem ->
+            if (chapterItem.id in downloadedChapterIds) {
+                superResolutionManager.superResolveChapter(manga, chapterItem)
+            }
         }
     }
 
@@ -1791,8 +1932,12 @@ class MangaScreenModel(
     ) {
         when (action) {
             ChapterTranslationAction.START -> {
-                if (item.downloadState != Download.State.DOWNLOADED) return
                 val manga = successState?.manga ?: return
+                if (item.downloadState != Download.State.DOWNLOADED) {
+                    startDownload(listOf(item.chapter), false)
+                    context.toast("Downloading chapter for super-resolution...")
+                    return
+                }
                 screenModelScope.launchNonCancellable {
                     superResolutionManager.superResolveChapter(manga, item.chapter)
                 }
@@ -2431,10 +2576,46 @@ class MangaScreenModel(
         updateSuccessState { it.copy(dialog = Dialog.FullCover) }
     }
 
+    private suspend fun getSmartDuplicateLibraryManga(manga: Manga): List<tachiyomi.domain.manga.model.MangaWithChapterCount> {
+        val direct = try { getDuplicateLibraryManga(manga) } catch (_: Exception) { emptyList<tachiyomi.domain.manga.model.MangaWithChapterCount>() }
+        val allLibrary = try { getLibraryManga.await() } catch (_: Exception) { emptyList<tachiyomi.domain.library.model.LibraryManga>() }
+        val currentClean = eu.kanade.tachiyomi.util.MangaTitleParser.cleanForDuplicate(manga.title)
+        val currentTracks = try { getTracks.await(manga.id) } catch (_: Exception) { emptyList<tachiyomi.domain.track.model.Track>() }
+
+        val extraDuplicates = allLibrary.filter { item ->
+            val other = item.manga
+            if (other.id == manga.id) return@filter false
+            if (direct.any { it.manga.id == other.id }) return@filter false
+
+            val otherClean = eu.kanade.tachiyomi.util.MangaTitleParser.cleanForDuplicate(other.title)
+            if (currentClean.isNotEmpty() && otherClean.isNotEmpty() &&
+                (currentClean == otherClean || currentClean.contains(otherClean) || otherClean.contains(currentClean))
+            ) {
+                return@filter true
+            }
+
+            if (currentTracks.isNotEmpty()) {
+                val otherTracks = try { getTracks.await(other.id) } catch (_: Exception) { emptyList<tachiyomi.domain.track.model.Track>() }
+                if (currentTracks.any { t1 -> otherTracks.any { t2 -> t1.trackerId == t2.trackerId && t1.remoteId == t2.remoteId } }) {
+                    return@filter true
+                }
+            }
+
+            false
+        }.map { item ->
+            tachiyomi.domain.manga.model.MangaWithChapterCount(
+                manga = item.manga,
+                chapterCount = item.totalChapters,
+            )
+        }
+
+        return (direct + extraDuplicates).distinctBy { it.manga.id }
+    }
+
     fun showDuplicateDialog() {
         val manga = successState?.manga ?: return
         screenModelScope.launchIO {
-            val duplicates = getDuplicateLibraryManga(manga)
+            val duplicates = getSmartDuplicateLibraryManga(manga)
             updateSuccessState { it.copy(dialog = Dialog.DuplicateManga(manga, duplicates)) }
         }
     }
@@ -2669,6 +2850,9 @@ sealed class ChapterList {
         val translationState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
         val colorizerState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
         val superResolutionState: eu.kanade.translation.model.Translation.State = eu.kanade.translation.model.Translation.State.NOT_TRANSLATED,
+        val translationProgress: Int = 0,
+        val colorizerProgress: Int = 0,
+        val superResolutionProgress: Int = 0,
     ) : ChapterList() {
         val id = chapter.id
         val isDownloaded = downloadState == Download.State.DOWNLOADED

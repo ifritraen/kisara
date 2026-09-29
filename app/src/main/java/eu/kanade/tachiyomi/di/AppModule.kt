@@ -49,6 +49,7 @@ import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.History
 import tachiyomi.data.Manga_external_metadata
 import tachiyomi.data.Mangas
+import tachiyomi.data.Mini_history
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.manga.interactor.GetCustomMangaInfo
@@ -74,6 +75,7 @@ class AppModule(val app: Application) : InjektModule {
 
     override fun InjektRegistrar.registerInjectables() {
         addSingleton(app)
+        addSingleton<android.content.Context>(app)
         addSingletonFactory { eu.kanade.tachiyomi.vpn.WireguardManager(app) }
 
         addSingletonFactory<SqlDriver> {
@@ -129,6 +131,9 @@ class AppModule(val app: Application) : InjektModule {
                 manga_external_metadataAdapter = Manga_external_metadata.Adapter(
                     genresAdapter = StringListColumnAdapter,
                     tagsAdapter = StringListColumnAdapter,
+                ),
+                mini_historyAdapter = Mini_history.Adapter(
+                    last_readAdapter = DateColumnAdapter,
                 ),
             )
         }
@@ -492,6 +497,7 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { TranslationProvider(app) }
         addSingletonFactory { TranslationManager(app) }
         addSingletonFactory { ColorizerManager(app) }
+        addSingletonFactory { eu.kanade.tachiyomi.data.ai.MangaColorizeEngine() }
         addSingletonFactory { SuperResolutionManager(app) }
         addSingletonFactory { eu.kanade.tachiyomi.data.favorite.FavoriteManager(app) }
         // KMK <--

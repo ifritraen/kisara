@@ -1,53 +1,53 @@
 package eu.kanade.tachiyomi.ui.browse.search
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import tachiyomi.presentation.core.util.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.MediaType
-import eu.kanade.presentation.browse.components.GlobalSearchCardRow
-import eu.kanade.presentation.components.SearchToolbar
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.TabContent
-import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.ui.browse.bulk.BulkSearchScreen
-import eu.kanade.tachiyomi.ui.browse.bulk.BulkSearchScreenModel
+import eu.kanade.tachiyomi.ui.browse.anime.bulk.animeBulkSearchTab
+import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
+import eu.kanade.tachiyomi.ui.browse.bulk.bulkSearchTab
+import eu.kanade.tachiyomi.ui.browse.novel.bulk.novelBulkSearchTab
+import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.browse.search.components.AdvancedSearchScreen
-import eu.kanade.tachiyomi.ui.browse.search.components.GlobalSearchLandingView
-import eu.kanade.tachiyomi.ui.browse.search.components.SearchSourceFilterSheet
-import eu.kanade.tachiyomi.ui.manga.MangaScreen
+import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -61,6 +61,8 @@ import uy.kohesive.injekt.api.get
 object SearchTabEvents {
     val nextSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val prevSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val selectSubTabEvent = kotlinx.coroutines.channels.Channel<Int>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    var currentPageIndex = 0
 }
 
 fun Screen.searchTab(
@@ -86,12 +88,23 @@ private fun SearchTabContent(
     contentPadding: PaddingValues,
 ) {
     val navigator = LocalNavigator.currentOrThrow
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val screenModel = screen.rememberScreenModel { SearchScreenModel(mediaType = mediaType) }
     val state by screenModel.state.collectAsState()
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+    val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
+    val bottomBarHeight by uiPreferences.bottomBarHeight().collectAsState()
+    val bottomBarBottomMargin by uiPreferences.bottomBarBottomMargin().collectAsState()
+    val standardBottomBarHeight by uiPreferences.standardBottomBarHeight().collectAsState()
+    val standardBottomBarBottomMargin by uiPreferences.standardBottomBarBottomMargin().collectAsState()
+    val subTabsBottomMargin by uiPreferences.subTabsBottomMargin().collectAsState()
+
+    val bottomBarGap = ((if (floatingBottomBar) (bottomBarHeight + bottomBarBottomMargin) else (standardBottomBarHeight + standardBottomBarBottomMargin)) + subTabsBottomMargin).coerceAtLeast(0).dp
+
+    LaunchedEffect(Unit) {
         eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.initialize(context)
     }
 
@@ -100,10 +113,13 @@ private fun SearchTabContent(
         stringResource(KMR.strings.tab_bulk_search),
         stringResource(KMR.strings.tab_advanced_search),
     )
-    val pagerState = rememberPagerState(initialPage = 0) { tabTitles.size }
-    var showSourceFilterSheet by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(initialPage = SearchTabEvents.currentPageIndex.coerceIn(0, tabTitles.size - 1)) { tabTitles.size }
 
-    androidx.compose.runtime.LaunchedEffect(pagerState.pageCount) {
+    LaunchedEffect(pagerState.currentPage) {
+        SearchTabEvents.currentPageIndex = pagerState.currentPage
+    }
+
+    LaunchedEffect(pagerState.pageCount) {
         launch {
             SearchTabEvents.nextSubTabEvent.receiveAsFlow().collectLatest {
                 if (pagerState.currentPage < pagerState.pageCount - 1) {
@@ -118,161 +134,111 @@ private fun SearchTabContent(
                 }
             }
         }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = contentPadding.calculateTopPadding()),
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Subsubtab Header Row
-            PrimaryTabRow(
-                selectedTabIndex = pagerState.currentPage,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                tabTitles.forEachIndexed { index, title ->
-                    Tab(
-                        selected = pagerState.currentPage == index,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        text = {
-                            Text(
-                                text = title,
-                                fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        },
-                    )
+        launch {
+            SearchTabEvents.selectSubTabEvent.receiveAsFlow().collectLatest { index ->
+                if (index in 0 until tabTitles.size) {
+                    pagerState.animateScrollToPage(index)
                 }
             }
+        }
+    }
 
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            ) { pageIndex ->
+    val snackbarHostState = remember { SnackbarHostState() }
+    val subTabContentPadding = PaddingValues(
+        top = contentPadding.calculateTopPadding(),
+        bottom = contentPadding.calculateBottomPadding() + bottomBarGap + 48.dp,
+    )
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+        ) { pageIndex ->
+            key(mediaType, pageIndex) {
                 when (pageIndex) {
                     // Page 0: Global Search
                     0 -> {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            SearchToolbar(
-                                searchQuery = state.searchQuery,
-                                onChangeSearchQuery = { screenModel.updateSearchQuery(it ?: "") },
-                                onSearch = screenModel::search,
-                                onClickCloseSearch = { screenModel.updateSearchQuery("") },
-                                actions = {
-                                    IconButton(onClick = { showSourceFilterSheet = true }) {
-                                        Icon(Icons.Outlined.Tune, contentDescription = "Search Sources")
-                                    }
-                                },
-                            )
-
-                            if (state.searchQuery.isBlank() && state.results.isEmpty()) {
-                                GlobalSearchLandingView(
-                                    recentSearches = state.recentSearches,
-                                    onSelectQuery = { query ->
-                                        screenModel.updateSearchQuery(query)
-                                        screenModel.search(query)
-                                    },
-                                    onOpenCategory = { category ->
-                                        scope.launch { pagerState.animateScrollToPage(2) } // Jump to Advanced
-                                    },
-                                    onClearRecentSearches = screenModel::clearRecentSearches,
-                                )
-                            } else {
-                                // Multi-Source Results
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(bottom = 80.dp),
-                                ) {
-                                    items(state.results.entries.toList(), key = { it.key.id }) { (source, result) ->
-                                        when (result) {
-                                            is SearchItemResult.Loading -> {
-                                                Column(modifier = Modifier.padding(16.dp)) {
-                                                    Text(text = source.name, style = MaterialTheme.typography.titleMedium)
-                                                    CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
-                                                }
-                                            }
-                                            is SearchItemResult.Success -> {
-                                                Column {
-                                                    Text(
-                                                        text = source.name,
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                                    )
-                                                    GlobalSearchCardRow(
-                                                        titles = result.list,
-                                                        getManga = { manga -> remember(manga) { mutableStateOf(manga) } },
-                                                        onClick = { navigator.push(MangaScreen(it.id, true)) },
-                                                        onLongClick = { navigator.push(MangaScreen(it.id, true)) },
-                                                        selection = emptyList(),
-                                                    )
-                                                }
-                                            }
-                                            is SearchItemResult.Error -> {
-                                                Column(modifier = Modifier.padding(16.dp)) {
-                                                    Text(text = source.name, style = MaterialTheme.typography.titleMedium)
-                                                    Text(
-                                                        text = "Error: ${result.throwable.message ?: "Failed"}",
-                                                        color = MaterialTheme.colorScheme.error,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        when (mediaType) {
+                            MediaType.ANIME -> GlobalAnimeSearchScreen().Content()
+                            MediaType.NOVEL -> GlobalNovelSearchScreen().Content()
+                            MediaType.MANGA -> GlobalSearchScreen().Content()
                         }
                     }
 
                     // Page 1: Bulk Search
                     1 -> {
-                        BulkSearchScreen(
-                            sourceIds = state.availableSources.filter { it.isEnabled }.map { it.id },
-                            queries = emptyList(),
-                        ).Content()
+                        when (mediaType) {
+                            MediaType.ANIME -> screen.animeBulkSearchTab().content(subTabContentPadding, snackbarHostState)
+                            MediaType.NOVEL -> screen.novelBulkSearchTab().content(subTabContentPadding, snackbarHostState)
+                            MediaType.MANGA -> screen.bulkSearchTab().content(subTabContentPadding, snackbarHostState)
+                        }
                     }
 
                     // Page 2: Advanced Search
                     2 -> {
-                        AdvancedSearchScreen(
-                            state = state.advancedState,
-                            onStateChange = screenModel::updateAdvancedState,
-                            onExecuteSearch = { compiledQuery ->
-                                screenModel.updateSearchQuery(compiledQuery)
-                                screenModel.search(compiledQuery)
-                                scope.launch { pagerState.animateScrollToPage(0) } // Jump to Global results
-                            },
-                            onResetFilters = screenModel::resetAdvancedFilters,
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = contentPadding.calculateTopPadding(), bottom = bottomBarGap + 48.dp),
+                        ) {
+                            AdvancedSearchScreen(
+                                state = state.advancedState,
+                                onStateChange = screenModel::updateAdvancedState,
+                                onExecuteSearch = { compiledQuery ->
+                                    when (mediaType) {
+                                        MediaType.ANIME -> navigator.push(GlobalAnimeSearchScreen(compiledQuery))
+                                        MediaType.NOVEL -> navigator.push(GlobalNovelSearchScreen(compiledQuery))
+                                        MediaType.MANGA -> navigator.push(GlobalSearchScreen(compiledQuery))
+                                    }
+                                },
+                                onResetFilters = screenModel::resetAdvancedFilters,
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Floating 3-Dot Options Button (Toggle Sources)
-        FloatingActionButton(
-            onClick = { showSourceFilterSheet = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ) {
-            Icon(Icons.Outlined.Tune, contentDescription = "Search Sources")
+        // Sub-subtab bar positioned at the bottom if floating subtabs are not enabled or if subtabs are at the top
+        if (!floatingBottomBar || showTopTabBar) {
+            GlassSurface(
+                shape = RoundedCornerShape(16.dp),
+                style = GlassDefaults.regularStyle(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomBarGap + 8.dp)
+                    .zIndex(2f),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    tabTitles.forEachIndexed { index, title ->
+                        val selected = pagerState.currentPage == index
+                        val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        val bg = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(bg)
+                                .clickable { scope.launch { pagerState.animateScrollToPage(index) } }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = tint,
+                            )
+                        }
+                    }
+                }
+            }
         }
-    }
-
-    // Source Filter Bottom Sheet
-    if (showSourceFilterSheet) {
-        SearchSourceFilterSheet(
-            availableSources = state.availableSources,
-            onToggleSource = screenModel::toggleSource,
-            onSelectAll = screenModel::selectAllSources,
-            onDeselectAll = screenModel::deselectAllSources,
-            onDismissRequest = { showSourceFilterSheet = false },
-        )
     }
 }
 // KMK <--

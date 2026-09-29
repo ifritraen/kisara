@@ -24,6 +24,7 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 class GlobalSearchScreen(
     val searchQuery: String = "",
     private val extensionFilter: String? = null,
+    val openSearchOnStart: Boolean = false,
 ) : Screen() {
 
     @Composable
@@ -118,6 +119,7 @@ class GlobalSearchScreen(
                 onSelectCustomGroup = screenModel::setCustomGroupFilter,
                 onSaveCustomGroup = screenModel::saveCustomGroup,
                 onDeleteCustomGroup = screenModel::deleteCustomGroup,
+                openSearchOnStart = openSearchOnStart,
                 // KMK <--
             )
         }

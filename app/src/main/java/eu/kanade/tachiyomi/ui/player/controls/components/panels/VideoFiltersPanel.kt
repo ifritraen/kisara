@@ -19,6 +19,8 @@ package eu.kanade.tachiyomi.ui.player.controls.components.panels
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -215,7 +217,9 @@ private fun ShadersTabContent(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     val presets = listOf(
@@ -223,6 +227,9 @@ private fun ShadersTabContent(
                         Anime4KShaderPreset.ModeA_Balanced to "Mode A",
                         Anime4KShaderPreset.ModeB_Balanced to "Mode B",
                         Anime4KShaderPreset.ModeC_Balanced to "Mode C",
+                        Anime4KShaderPreset.ModeAA_High to "Mode A+A",
+                        Anime4KShaderPreset.ModeBB_High to "Mode B+B",
+                        Anime4KShaderPreset.ModeCA_High to "Mode C+A",
                     )
                     presets.forEach { (preset, label) ->
                         val isSelected = anime4kPreset == preset

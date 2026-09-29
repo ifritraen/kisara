@@ -80,7 +80,7 @@ class SuperResolutionEngine(
 
     private fun verifyNnapiSanity(session: OrtSession, channels: Int, tileDim: Int): Boolean {
         return try {
-            val probeBuffer = FloatBuffer.allocate(channels * tileDim * tileDim)
+            val probeBuffer = AiBufferUtils.allocateDirectFloatBuffer(channels * tileDim * tileDim)
             for (i in 0 until (channels * tileDim * tileDim)) {
                 probeBuffer.put(i, 0.5f)
             }
@@ -117,12 +117,14 @@ class SuperResolutionEngine(
      * @param modelFile The local .onnx super-resolution model file.
      * @param scale Scaling factor (2 or 4).
      * @param useNnapi Hardware acceleration flag.
+     * @param onTileProgress Optional callback for tile progress (currentTile, totalTiles).
      */
     suspend fun upscale(
         inputBitmap: Bitmap,
         modelFile: File,
         scale: Int = 2,
         useNnapi: Boolean = false,
+        onTileProgress: ((currentTile: Int, totalTiles: Int) -> Unit)? = null,
     ): Bitmap = withContext(Dispatchers.Default) {
         if (!modelFile.exists()) {
             throw IllegalArgumentException("Model file does not exist: ${modelFile.absolutePath}")
@@ -146,6 +148,12 @@ class SuperResolutionEngine(
         val core = tileIn - 2 * pad // Effective step = 352
         val inputName = session.inputNames.iterator().next()
 
+        // Calculate total tiles for progress tracking
+        val numTilesX = (w + core - 1) / core
+        val numTilesY = (h + core - 1) / core
+        val totalTiles = numTilesX * numTilesY
+        var currentTile = 0
+
         // Probe model output shape with a single dummy tile if needed, or dynamically on first tile
         var modelScale = if (isAcnetLuma) 2 else 4
         var rawOutW = w * modelScale
@@ -153,12 +161,19 @@ class SuperResolutionEngine(
         var outPixels = IntArray(rawOutW * rawOutH)
         var initializedScale = false
 
+        // Reusable direct FloatBuffer for all tiles in this page to avoid memory churning
+        val tensorBuffer = AiBufferUtils.allocateDirectFloatBuffer(channels * tileIn * tileIn)
+        val plane = tileIn * tileIn
+
         var y = 0
         while (y < h) {
             val coreH = min(core, h - y)
             var x = 0
             while (x < w) {
                 val coreW = min(core, w - x)
+
+                currentTile++
+                onTileProgress?.invoke(currentTile, totalTiles)
 
                 // 1. Source bounds with padding
                 val sx0 = max(0, x - pad)
@@ -184,9 +199,7 @@ class SuperResolutionEngine(
                 }
 
                 // 3. Prepare NCHW FloatBuffer for ONNX
-                val tensorBuffer = FloatBuffer.allocate(channels * tileIn * tileIn)
-                val plane = tileIn * tileIn
-
+                tensorBuffer.clear()
                 if (channels == 1) {
                     for (i in 0 until plane) {
                         val px = paddedTile[i]

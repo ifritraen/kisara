@@ -319,3 +319,43 @@ fun GlobalNovelSearchToolbar(
         HorizontalDivider()
     }
 }
+
+@Composable
+fun MinimalGlobalNovelSearchToolbar(
+    searchQuery: String?,
+    progress: Int,
+    total: Int,
+    navigateUp: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior,
+    onOpenSearchSheet: () -> Unit,
+) {
+    Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+        Box {
+            AppBar(
+                title = if (searchQuery.isNullOrBlank()) "Global Novel Search" else searchQuery,
+                navigateUp = navigateUp,
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    AppBarActions(
+                        actions = persistentListOf(
+                            AppBar.Action(
+                                title = "Search Sheet",
+                                icon = Icons.Outlined.Layers,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = onOpenSearchSheet,
+                            ),
+                        ),
+                    )
+                },
+            )
+            if (progress in 1..<total) {
+                LinearProgressIndicator(
+                    progress = { progress / total.toFloat() },
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(),
+                )
+            }
+        }
+    }
+}

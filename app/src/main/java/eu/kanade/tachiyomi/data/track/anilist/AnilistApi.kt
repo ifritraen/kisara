@@ -994,7 +994,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
     ): List<ALHomeSection> {
         return withIOContext {
             val mediaFragment = """
-                id title { userPreferred } coverImage { large } format status episodes chapters description averageScore genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
+                id type title { userPreferred } coverImage { large } format status episodes chapters description averageScore popularity genres startDate { year month day } studios { edges { isMain node { name } } } isAdult
             """.trimIndent()
 
             val typeFilter = "type: $type"
@@ -1031,20 +1031,39 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
             if (isAll || "trending" in enabledSections) addSection("trendingMedia", "$baseFilter, sort: TRENDING_DESC")
             if (isAll || "popular" in enabledSections) addSection("popularMedia", "$baseFilter, sort: POPULARITY_DESC")
             if (isAll || "recent" in enabledSections) addSection("recentMedia", "$baseFilter, sort: ID_DESC")
-            if (isAll || "top_rated" in enabledSections) addSection("topRatedMedia", "$baseFilter, sort: SCORE_DESC")
+            if (isAll || "top_rated" in enabledSections) {
+                if (type == "ANIME") {
+                    addSection("topRatedMedia", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: SCORE_DESC")
+                } else {
+                    addSection("topRatedMedia", "$baseFilter, startDate_greater: ${seasonYear}0000, startDate_lesser: ${seasonYear + 1}0000, sort: SCORE_DESC")
+                }
+            }
             if (isAll || "recently_completed" in enabledSections) addSection("recentlyCompletedMedia", "$baseFilter, status: FINISHED, sort: END_DATE_DESC")
             if (isAll || "upcoming" in enabledSections) addSection("upcomingMedia", "$baseFilter, status: NOT_YET_RELEASED, sort: POPULARITY_DESC")
-            if (isAll || "popular_season" in enabledSections) addSection("popularThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC")
-            if (isAll || "top_rated_season" in enabledSections) addSection("topRatedThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: SCORE_DESC")
+            if (isAll || "popular_season" in enabledSections) {
+                if (type == "ANIME") {
+                    addSection("popularThisSeason", "$baseFilter, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC")
+                } else {
+                    addSection("popularThisSeason", "$baseFilter, startDate_greater: ${seasonYear}0000, startDate_lesser: ${seasonYear + 1}0000, sort: POPULARITY_DESC")
+                }
+            }
 
             if (isAll || "prev_popular" in enabledSections) {
                 prevSeasons.forEachIndexed { i, (s, y) ->
-                    addSection("prev${i}Popular", "$baseFilter, season: $s, seasonYear: $y, sort: POPULARITY_DESC")
+                    if (type == "ANIME") {
+                        addSection("prev${i}Popular", "$baseFilter, season: $s, seasonYear: $y, sort: POPULARITY_DESC")
+                    } else {
+                        addSection("prev${i}Popular", "$baseFilter, startDate_greater: ${y}0000, startDate_lesser: ${y + 1}0000, sort: POPULARITY_DESC")
+                    }
                 }
             }
             if (isAll || "prev_top_rated" in enabledSections) {
                 prevSeasons.forEachIndexed { i, (s, y) ->
-                    addSection("prev${i}TopRated", "$baseFilter, season: $s, seasonYear: $y, sort: SCORE_DESC")
+                    if (type == "ANIME") {
+                        addSection("prev${i}TopRated", "$baseFilter, season: $s, seasonYear: $y, sort: SCORE_DESC")
+                    } else {
+                        addSection("prev${i}TopRated", "$baseFilter, startDate_greater: ${y}0000, startDate_lesser: ${y + 1}0000, sort: SCORE_DESC")
+                    }
                 }
             }
 
@@ -1066,6 +1085,20 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
 
             val sections = mutableListOf<ALHomeSection>()
 
+            fun isValidMedia(item: ALSearchItem): Boolean {
+                val isAnimeFormat = item.format in listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC")
+                return if (type == "ANIME") {
+                    (item.type == null || item.type.equals("ANIME", ignoreCase = true)) &&
+                        (item.type?.equals("ANIME", ignoreCase = true) == true || isAnimeFormat)
+                } else if (format == "NOVEL") {
+                    (item.type == null || item.type.equals("MANGA", ignoreCase = true)) &&
+                        item.format?.equals("NOVEL", ignoreCase = true) == true
+                } else { // MANGA
+                    (item.type == null || item.type.equals("MANGA", ignoreCase = true)) &&
+                        !isAnimeFormat && item.format?.equals("NOVEL", ignoreCase = true) != true
+                }
+            }
+
             fun extract(key: String, title: String) {
                 val mediaList = data[key]?.jsonObject?.get("media")?.jsonArray
                 if (mediaList != null && mediaList.isNotEmpty()) {
@@ -1075,7 +1108,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         } catch (_: Throwable) {
                             null
                         }
-                    }
+                    }.filter { isValidMedia(it) }
                     if (items.isNotEmpty()) {
                         sections.add(ALHomeSection(key, title, items))
                     }
@@ -1092,34 +1125,76 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         } catch (_: Throwable) {
                             null
                         }
-                    }
+                    }.filter { isValidMedia(it) }
                     if (items.isNotEmpty()) {
                         sections.add(ALHomeSection(key, title, items))
                     }
                 }
             }
 
+            val seasonTitle = "${season.lowercase().replaceFirstChar { it.uppercase() }} $seasonYear"
+
             extract("recentMedia", "Recent")
             extract("trendingMedia", "Trending")
-            extract("topRatedMedia", "Top (High scored)")
+            extract("topRatedMedia", "Highest Rated $seasonTitle")
             extract("popularMedia", "Popular")
+            extract("popularThisSeason", "Popular $seasonTitle")
             extract("recentlyCompletedMedia", "Recently completed")
             extract("upcomingMedia", "Upcoming")
 
-            val seasonTitle = "${season.lowercase().replaceFirstChar { it.uppercase() }} $seasonYear"
-            extract("popularThisSeason", "Popular $seasonTitle")
-            extract("topRatedThisSeason", "Highest Rated $seasonTitle")
+            val count = prevSeasons.size
+            val combinedPrevTopRated = mutableListOf<ALSearchItem>()
+            val combinedPrevPopular = mutableListOf<ALSearchItem>()
 
-            prevSeasons.forEachIndexed { i, (s, y) ->
-                val prevTitle = "${s.lowercase().replaceFirstChar { it.uppercase() }} $y"
-                extract("prev${i}TopRated", "Top (High scored) in $prevTitle")
-                extract("prev${i}Popular", "Most Popular in $prevTitle")
+            prevSeasons.forEachIndexed { i, _ ->
+                val topList = data["prev${i}TopRated"]?.jsonObject?.get("media")?.jsonArray
+                if (topList != null) {
+                    topList.forEach { elem ->
+                        try {
+                            combinedPrevTopRated.add(json.decodeFromJsonElement<ALSearchItem>(elem))
+                        } catch (_: Throwable) {}
+                    }
+                }
+                val popList = data["prev${i}Popular"]?.jsonObject?.get("media")?.jsonArray
+                if (popList != null) {
+                    popList.forEach { elem ->
+                        try {
+                            combinedPrevPopular.add(json.decodeFromJsonElement<ALSearchItem>(elem))
+                        } catch (_: Throwable) {}
+                    }
+                }
+            }
+
+            if (combinedPrevTopRated.isNotEmpty()) {
+                val sortedTop = combinedPrevTopRated
+                    .filter { isValidMedia(it) }
+                    .distinctBy { it.id }
+                    .sortedWith(compareByDescending<ALSearchItem> { it.averageScore ?: 0 }.thenByDescending { it.popularity ?: 0 })
+                if (sortedTop.isNotEmpty()) {
+                    sections.add(ALHomeSection("prev_top_rated", "Top in last $count seasons", sortedTop))
+                }
+            }
+            if (combinedPrevPopular.isNotEmpty()) {
+                val sortedPopular = combinedPrevPopular
+                    .filter { isValidMedia(it) }
+                    .distinctBy { it.id }
+                    .sortedWith(compareByDescending<ALSearchItem> { it.popularity ?: 0 }.thenByDescending { it.averageScore ?: 0 })
+                if (sortedPopular.isNotEmpty()) {
+                    sections.add(ALHomeSection("prev_popular", "Popular in last $count seasons", sortedPopular))
+                }
             }
 
             extractRec("recommendedMedia", "Recommended for you")
             extractRec("communityRecs", "Community recommendation")
 
-            sections
+            sections.mapNotNull { section ->
+                val filtered = section.items.filter { isValidMedia(it) }
+                if (filtered.isNotEmpty()) {
+                    section.copy(items = filtered)
+                } else {
+                    null
+                }
+            }
         }
     }
 

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.updates.anime
 
 import android.content.Context
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
@@ -23,28 +24,24 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 
+import eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents
+import eu.kanade.tachiyomi.ui.updates.UpdatesTabViewContent
+
 @Composable
 fun Screen.animeUpdatesTab(
     context: Context,
     fromMore: Boolean,
     screenModel: AnimeUpdatesScreenModel = rememberScreenModel { AnimeUpdatesScreenModel() },
 ): TabContent {
-    val navigator = LocalNavigator.currentOrThrow
     val state by screenModel.state.collectAsStateWithLifecycle()
 
     return TabContent(
         titleRes = KMR.strings.label_anime,
         searchEnabled = false,
         content = { contentPadding, _ ->
-            AnimeUpdatesScreen(
-                state = state,
+            UpdatesTabViewContent(
                 contentPadding = contentPadding,
-                onAnimeClick = { animeId -> navigator.push(AnimeScreen(animeId)) },
-                onPlayClick = { animeId, episodeId ->
-                    val intent = PlayerActivity.newIntent(context, animeId, episodeId)
-                    context.startActivity(intent)
-                },
-                onToggleSelection = screenModel::toggleSelection,
+                animeScreenModel = screenModel,
             )
         },
         actions = if (state.selected.isNotEmpty()) {
@@ -62,6 +59,11 @@ fun Screen.animeUpdatesTab(
             )
         } else {
             persistentListOf(
+                AppBar.Action(
+                    title = context.stringResource(MR.strings.action_view_upcoming),
+                    icon = Icons.Outlined.CalendarMonth,
+                    onClick = { UpdatesTabEvents.selectSubTabEvent.trySend(0) },
+                ),
                 AppBar.Action(
                     title = context.stringResource(MR.strings.action_update_library),
                     icon = Icons.Outlined.Refresh,

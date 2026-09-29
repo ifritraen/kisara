@@ -21,16 +21,24 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import tachiyomi.presentation.core.util.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALHomeSection
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchItem
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+
+import tachiyomi.presentation.core.components.material.PullRefresh
 
 // KMK -->
 /**
@@ -42,40 +50,53 @@ import kotlinx.coroutines.launch
 fun AnilistHomeScreen(
     sections: List<ALHomeSection>,
     isLoading: Boolean,
+    onRefresh: () -> Unit = {},
     onItemClick: (ALSearchItem) -> Unit,
+    onItemLongClick: (ALSearchItem) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    if (isLoading && sections.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val showTrackSubBarAtTop by uiPreferences.showTrackSubBarAtTop().collectAsState()
+    val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+    val enabledAnilistSections by uiPreferences.anilistHomeEnabledSections().collectAsState()
+    val prevSeasonCount = remember { uiPreferences.trackTabPreviousSeasons().get().coerceIn(1, 8) }
+
+    val subSubTabs = remember(sections, enabledAnilistSections) {
+        if (sections.isNotEmpty()) {
+            buildList {
+                add("Landing")
+                sections.forEach { add(it.title) }
+            }
+        } else {
+            buildList {
+                add("Landing")
+                val enabled = enabledAnilistSections
+                val isAll = enabled.isEmpty()
+                if (isAll || "continue" in enabled) add("Continue")
+                if (isAll || "recent" in enabled) add("Recent")
+                if (isAll || "trending" in enabled) add("Trending")
+                if (isAll || "top_rated" in enabled) add("Top")
+                if (isAll || "popular" in enabled) add("Popular")
+                if (isAll || "recently_completed" in enabled) add("Recently completed")
+                if (isAll || "upcoming" in enabled) add("Upcoming")
+                if (isAll || "prev_top_rated" in enabled) add("Top in last $prevSeasonCount seasons")
+                if (isAll || "prev_popular" in enabled) add("Popular in last $prevSeasonCount seasons")
+                if (isAll || "recommended" in enabled) add("Recommended for you")
+                if (isAll || "community_recommendation" in enabled) add("Community recommendation")
+            }
         }
-        return
     }
 
-    if (sections.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "No content available. Pull to refresh.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        return
-    }
-
-    val subSubTabs = buildList {
-        add("Landing")
-        sections.forEach { add(it.title) }
-    }
-
-    val pagerState = rememberPagerState { subSubTabs.size }
+    val pagerState = rememberPagerState(initialPage = eu.kanade.tachiyomi.ui.track.TrackTab.currentSubSubTabIndex.coerceIn(0, (subSubTabs.size - 1).coerceAtLeast(0))) { subSubTabs.size }
     val scope = rememberCoroutineScope()
+
+    androidx.compose.runtime.LaunchedEffect(subSubTabs) {
+        eu.kanade.tachiyomi.ui.track.TrackTab.currentSubSubTabTitles = subSubTabs
+    }
+
+    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
+        eu.kanade.tachiyomi.ui.track.TrackTab.currentSubSubTabIndex = pagerState.currentPage
+    }
 
     androidx.compose.runtime.LaunchedEffect(pagerState.pageCount) {
         launch {
@@ -92,69 +113,96 @@ fun AnilistHomeScreen(
                 }
             }
         }
-    }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        // Sub-sub-tab Bar
-        ScrollableTabRow(
-            selectedTabIndex = pagerState.currentPage.coerceIn(0, subSubTabs.size - 1),
-            edgePadding = 12.dp,
-            indicator = { tabPositions ->
-                if (pagerState.currentPage < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+        launch {
+            eu.kanade.tachiyomi.ui.track.TrackTab.selectSubSubTabEvent.receiveAsFlow().collectLatest { index ->
+                if (index in 0 until subSubTabs.size) {
+                    pagerState.animateScrollToPage(index)
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            subSubTabs.forEachIndexed { index, title ->
-                val isSelected = pagerState.currentPage == index
-                Tab(
-                    selected = isSelected,
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(index) }
-                    },
-                    text = {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
             }
         }
+    }
 
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) { page ->
-            if (page == 0) {
-                // Landing Page: Stack of horizontal carousels
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 12.dp),
+    PullRefresh(
+        refreshing = isLoading,
+        enabled = true,
+        onRefresh = onRefresh,
+    ) {
+        Column(modifier = modifier.fillMaxSize()) {
+            // Sub-sub-tab Bar (only shown when tabs are at top or floating bar is disabled)
+            if (showTrackSubBarAtTop || !floatingBottomBar) {
+                ScrollableTabRow(
+                    selectedTabIndex = pagerState.currentPage.coerceIn(0, subSubTabs.size - 1),
+                    edgePadding = 12.dp,
+                    indicator = { tabPositions ->
+                        if (pagerState.currentPage < tabPositions.size) {
+                            TabRowDefaults.SecondaryIndicator(
+                                Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    items(sections.size, key = { sections[it].key }) { index ->
-                        val section = sections[index]
-                        AnilistSectionCarousel(
-                            title = section.title,
-                            items = section.items,
-                            onItemClick = onItemClick,
-                            onViewAllClick = {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(index + 1)
-                                }
+                    subSubTabs.forEachIndexed { index, title ->
+                        val isSelected = pagerState.currentPage == index
+                        Tab(
+                            selected = isSelected,
+                            onClick = {
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            },
+                            text = {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             },
                         )
                     }
                 }
-            } else {
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) { page ->
+                if (page == 0) {
+                    // Landing Page: Stack of horizontal carousels
+                    if (sections.isEmpty() && isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(vertical = 12.dp),
+                        ) {
+                            items(
+                                count = sections.size,
+                                key = { "anilist-section-${sections[it].key}-$it" },
+                            ) { index ->
+                                val section = sections[index]
+                                AnilistSectionCarousel(
+                                    title = section.title,
+                                    items = section.items,
+                                    onItemClick = onItemClick,
+                                    onItemLongClick = onItemLongClick,
+                                    onViewAllClick = {
+                                        scope.launch {
+                                            pagerState.animateScrollToPage(index + 1)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                } else {
                 // Dedicated full grid for section
                 val sectionIndex = page - 1
                 if (sectionIndex in sections.indices) {
@@ -166,17 +214,30 @@ fun AnilistHomeScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(section.items, key = { it.id }) { item ->
+                        items(
+                            count = section.items.size,
+                            key = { "anilist-grid-${section.key}-${section.items[it].id}-$it" },
+                        ) { index ->
+                            val item = section.items[index]
                             AnilistMediaCard(
                                 item = item,
                                 onClick = { onItemClick(item) },
+                                onLongClick = onItemLongClick?.let { { it(item) } },
                                 width = 110,
                             )
                         }
+                    }
+                } else if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
                     }
                 }
             }
         }
     }
+}
 }
 // KMK <--

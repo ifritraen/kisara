@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Domain
 import androidx.compose.material.icons.outlined.Group
@@ -43,9 +44,15 @@ import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TrackChanges
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
+import eu.kanade.presentation.category.components.ChangeCategoryDialog
+import eu.kanade.tachiyomi.ui.category.CategoryScreen
+import eu.kanade.tachiyomi.ui.category.anime.AnimeCategoryScreen
+import eu.kanade.tachiyomi.ui.category.novel.NovelCategoryScreen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -59,11 +66,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -131,6 +140,7 @@ import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import eu.kanade.tachiyomi.network.NetworkHelper
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -145,12 +155,24 @@ object TrackTab : Tab {
     val prevSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val nextSubSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val prevSubSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val selectSubSubTabEvent = kotlinx.coroutines.channels.Channel<Int>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val switchTrackerServiceEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val openSectionFilterEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val refreshEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val searchEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     var currentPageIndex by mutableIntStateOf(0)
         private set
+    var currentSubSubTabIndex by mutableIntStateOf(0)
+    var currentSubSubTabTitles by mutableStateOf<List<String>>(emptyList())
 
     fun showSubTab(index: Int) {
         currentPageIndex = index
         selectSubTabEvent.trySend(index)
+    }
+
+    fun showSubSubTab(index: Int) {
+        currentSubSubTabIndex = index
+        selectSubSubTabEvent.trySend(index)
     }
 
     override val options: TabOptions
@@ -201,21 +223,42 @@ object TrackTab : Tab {
                     screenModel.loadMALUserList(activeMediaType)
                     screenModel.loadMALProfile()
                 }
-                else -> {}
+                UiPreferences.TrackTabService.MANGA_UPDATES -> {
+                    if (activeMediaType == MediaType.NOVEL) {
+                        screenModel.loadNovelReleases()
+                        screenModel.loadNovelRecommended()
+                    } else {
+                        screenModel.loadNewReleases()
+                        screenModel.loadRecommended()
+                    }
+                }
             }
         }
 
         val subTabs = remember(activeMediaType, activeTrackerService) {
-            persistentListOf(
-                SubTabItem("Home", Icons.Outlined.AutoAwesome),
-                SubTabItem("My List", Icons.AutoMirrored.Outlined.List),
-                SubTabItem("Search", Icons.Outlined.Search),
-                SubTabItem("Profile", Icons.Outlined.AccountCircle),
-            )
+            when (activeTrackerService) {
+                UiPreferences.TrackTabService.MANGA_UPDATES -> {
+                    persistentListOf(
+                        SubTabItem("Releases", Icons.Outlined.NewReleases),
+                        SubTabItem("Recommended", Icons.Outlined.AutoAwesome),
+                        SubTabItem("Search", Icons.Outlined.Search),
+                        SubTabItem("Reviews", Icons.Outlined.RateReview),
+                    )
+                }
+                else -> {
+                    persistentListOf(
+                        SubTabItem("Home", Icons.Outlined.AutoAwesome),
+                        SubTabItem("My List", Icons.AutoMirrored.Outlined.List),
+                        SubTabItem("Search", Icons.Outlined.Search),
+                        SubTabItem("Profile", Icons.Outlined.AccountCircle),
+                    )
+                }
+            }
         }
 
         val pagerState = rememberPagerState(initialPage = currentPageIndex.coerceIn(0, subTabs.size - 1)) { subTabs.size }
         var showAnilistSectionFilterSheet by remember { mutableStateOf(false) }
+        var showTrackerServiceDialog by remember { mutableStateOf(false) }
         val enabledAnilistSections by uiPreferences.anilistHomeEnabledSections().collectAsState()
 
         LaunchedEffect(pagerState.currentPage) {
@@ -246,6 +289,46 @@ object TrackTab : Tab {
                         val prev = (pagerState.currentPage - 1).coerceAtLeast(0)
                         pagerState.animateScrollToPage(prev)
                     }
+                }
+            }
+            launch {
+                switchTrackerServiceEvent.receiveAsFlow().collectLatest {
+                    showTrackerServiceDialog = true
+                }
+            }
+            launch {
+                openSectionFilterEvent.receiveAsFlow().collectLatest {
+                    showAnilistSectionFilterSheet = true
+                }
+            }
+            launch {
+                refreshEvent.receiveAsFlow().collectLatest {
+                    when (activeTrackerService) {
+                        UiPreferences.TrackTabService.ANILIST -> {
+                            screenModel.loadAnilistHome(activeMediaType, forceRefresh = true)
+                            screenModel.loadAnilistUserList(activeMediaType, forceRefresh = true)
+                            screenModel.loadAnilistStats()
+                        }
+                        UiPreferences.TrackTabService.MAL -> {
+                            screenModel.loadMALHome(activeMediaType, forceRefresh = true)
+                            screenModel.loadMALUserList(activeMediaType, forceRefresh = true)
+                            screenModel.loadMALProfile()
+                        }
+                        UiPreferences.TrackTabService.MANGA_UPDATES -> {
+                            if (activeMediaType == MediaType.NOVEL) {
+                                screenModel.loadNovelReleases()
+                                screenModel.loadNovelRecommended()
+                            } else {
+                                screenModel.loadNewReleases()
+                                screenModel.loadRecommended()
+                            }
+                        }
+                    }
+                }
+            }
+            launch {
+                searchEvent.receiveAsFlow().collectLatest {
+                    showSubTab(2)
                 }
             }
         }
@@ -294,19 +377,7 @@ object TrackTab : Tab {
             }
         }
 
-        Scaffold(
-            floatingActionButton = {
-                if (activeTrackerService == UiPreferences.TrackTabService.ANILIST && pagerState.currentPage == 0) {
-                    FloatingActionButton(
-                        onClick = { showAnilistSectionFilterSheet = true },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Filter Landing Sections")
-                    }
-                }
-            },
-        ) { paddingValues ->
+        Scaffold { paddingValues ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -328,8 +399,12 @@ object TrackTab : Tab {
                                 0 -> MALHomeScreen(
                                     sections = state.malHomeSections,
                                     isLoading = state.isLoadingMALHome,
+                                    onRefresh = { screenModel.loadMALHome(activeMediaType, forceRefresh = true) },
                                     onItemClick = { item ->
-                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(), activeMediaType))
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
                                     },
                                 )
                                 1 -> MALMyListScreen(
@@ -345,7 +420,10 @@ object TrackTab : Tab {
                                         scope.launch { pagerState.animateScrollToPage(3) }
                                     },
                                     onItemClick = { item ->
-                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(), activeMediaType))
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
                                     },
                                 )
                                 2 -> MALSearchScreen(
@@ -360,7 +438,10 @@ object TrackTab : Tab {
                                     isSearching = state.isSearchingMAL,
                                     activeMediaType = activeMediaType,
                                     onItemClick = { item ->
-                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(), activeMediaType))
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
                                     },
                                 )
                                 3 -> MALProfileScreen(
@@ -377,13 +458,59 @@ object TrackTab : Tab {
                                 else -> Box(Modifier.fillMaxSize())
                             }
                         }
+                        UiPreferences.TrackTabService.MANGA_UPDATES -> {
+                            when (page) {
+                                0 -> MangaUpdatesReleasesScreen(
+                                    releases = if (activeMediaType == MediaType.NOVEL) state.novelReleases else state.newReleases,
+                                    isLoading = if (activeMediaType == MediaType.NOVEL) state.isLoadingNovelReleases else state.isLoadingReleases,
+                                    onItemClick = { title ->
+                                        navigator.push(TrackerMediaDetailsScreen(TrackSeriesItem(title = title, mediaType = activeMediaType), activeMediaType))
+                                    },
+                                )
+                                1 -> MangaUpdatesRecommendedScreen(
+                                    items = if (activeMediaType == MediaType.NOVEL) state.novelRecommendedSeries else state.recommendedSeries,
+                                    isLoading = if (activeMediaType == MediaType.NOVEL) state.isLoadingNovelRecommended else state.isLoadingRecommended,
+                                    activeMediaType = activeMediaType,
+                                    onItemClick = { item ->
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
+                                    },
+                                )
+                                2 -> MangaUpdatesSearchScreen(
+                                    results = if (activeMediaType == MediaType.NOVEL) state.novelSearchResults else state.muSearchResults,
+                                    isSearching = if (activeMediaType == MediaType.NOVEL) state.isSearchingNovels else false,
+                                    activeMediaType = activeMediaType,
+                                    onSearch = { query ->
+                                        if (activeMediaType == MediaType.NOVEL) screenModel.searchNovels(query) else screenModel.searchSeries(query)
+                                    },
+                                    onItemClick = { item ->
+                                        navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
+                                    },
+                                )
+                                3 -> MangaUpdatesReviewsScreen(
+                                    reviews = state.reviews,
+                                    isLoading = state.isLoadingReviews,
+                                    onSearch = screenModel::loadReviews,
+                                )
+                                else -> Box(Modifier.fillMaxSize())
+                            }
+                        }
                         else -> {
                             when (page) {
                                 0 -> AnilistHomeScreen(
                                     sections = state.homeSections,
                                     isLoading = state.isLoadingHome,
+                                    onRefresh = { screenModel.loadAnilistHome(activeMediaType, forceRefresh = true) },
                                     onItemClick = { item ->
                                         navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
                                     },
                                 )
                                 1 -> AnilistMyListScreen(
@@ -400,6 +527,9 @@ object TrackTab : Tab {
                                     },
                                     onItemClick = { item ->
                                         navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
                                     },
                                 )
                                 2 -> AnilistSearchScreen(
@@ -424,6 +554,9 @@ object TrackTab : Tab {
                                     activeMediaType = activeMediaType,
                                     onItemClick = { item ->
                                         navigator.push(TrackerMediaDetailsScreen(item.toTrackSeriesItem(activeMediaType), activeMediaType))
+                                    },
+                                    onItemLongClick = { item ->
+                                        screenModel.showSetCategoryDialog(item.toTrackSeriesItem(activeMediaType), activeMediaType)
                                     },
                                 )
                                 3 -> AnilistProfileScreen(
@@ -452,6 +585,12 @@ object TrackTab : Tab {
             TrackSeriesDetailsSheet(
                 item = series,
                 onDismiss = { screenModel.selectSeries(null) },
+                onAddToLocalLibrary = {
+                    screenModel.showSetCategoryDialog(series, activeMediaType)
+                },
+                onAddToTrackerLibrary = {
+                    screenModel.showTrackerStatusPicker(series, isAniList = activeTrackerService == UiPreferences.TrackTabService.ANILIST)
+                },
                 onSearchInSources = {
                     screenModel.selectSeries(null)
                     navigator.push(GlobalSearchScreen(series.title))
@@ -464,6 +603,54 @@ object TrackTab : Tab {
             )
         }
 
+        val currentDialog = state.dialog
+        when (currentDialog) {
+            is TrackScreenModel.Dialog.ChangeMangaCategory -> {
+                ChangeCategoryDialog(
+                    initialSelection = currentDialog.initialSelection,
+                    onDismissRequest = screenModel::dismissDialog,
+                    onEditCategories = { navigator.push(CategoryScreen()) },
+                    onConfirm = { included, _ ->
+                        screenModel.setMangaCategories(currentDialog.manga, included)
+                    },
+                    manga = currentDialog.manga,
+                )
+            }
+            is TrackScreenModel.Dialog.ChangeAnimeCategory -> {
+                ChangeCategoryDialog(
+                    initialSelection = currentDialog.initialSelection,
+                    onDismissRequest = screenModel::dismissDialog,
+                    onEditCategories = { navigator.push(AnimeCategoryScreen()) },
+                    onConfirm = { included, _ ->
+                        screenModel.setAnimeCategories(currentDialog.anime, included)
+                    },
+                    anime = currentDialog.anime,
+                )
+            }
+            is TrackScreenModel.Dialog.ChangeNovelCategory -> {
+                ChangeCategoryDialog(
+                    initialSelection = currentDialog.initialSelection,
+                    onDismissRequest = screenModel::dismissDialog,
+                    onEditCategories = { navigator.push(NovelCategoryScreen()) },
+                    onConfirm = { included, _ ->
+                        screenModel.setNovelCategories(currentDialog.novel, included)
+                    },
+                    novel = currentDialog.novel,
+                )
+            }
+            is TrackScreenModel.Dialog.TrackerStatusPicker -> {
+                TrackerStatusPickerDialog(
+                    item = currentDialog.item,
+                    isAniList = currentDialog.isAniList,
+                    onSelectStatus = { status ->
+                        screenModel.updateTrackerEntryStatus(currentDialog.item, status, currentDialog.isAniList)
+                    },
+                    onDismissRequest = screenModel::dismissDialog,
+                )
+            }
+            null -> {}
+        }
+
         if (showAnilistSectionFilterSheet) {
             AnilistSectionFilterSheet(
                 enabledSections = enabledAnilistSections,
@@ -473,7 +660,91 @@ object TrackTab : Tab {
                 onDismissRequest = { showAnilistSectionFilterSheet = false },
             )
         }
+
+        if (showTrackerServiceDialog) {
+            TrackerServiceSelectorDialog(
+                activeMediaType = activeMediaType,
+                currentService = activeTrackerService,
+                onSelectService = { selectedService ->
+                    when (activeMediaType) {
+                        MediaType.ANIME -> uiPreferences.trackTabAnimeService().set(selectedService)
+                        MediaType.MANGA -> uiPreferences.trackTabMangaService().set(selectedService)
+                        MediaType.NOVEL -> uiPreferences.trackTabNovelService().set(selectedService)
+                    }
+                },
+                onDismissRequest = { showTrackerServiceDialog = false },
+            )
+        }
     }
+}
+
+@Composable
+private fun TrackerServiceSelectorDialog(
+    activeMediaType: MediaType,
+    currentService: UiPreferences.TrackTabService,
+    onSelectService: (UiPreferences.TrackTabService) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    val availableServices = when (activeMediaType) {
+        MediaType.ANIME -> listOf(
+            UiPreferences.TrackTabService.ANILIST to "AniList",
+            UiPreferences.TrackTabService.MAL to "MyAnimeList (MAL)",
+        )
+        MediaType.MANGA, MediaType.NOVEL -> listOf(
+            UiPreferences.TrackTabService.ANILIST to "AniList",
+            UiPreferences.TrackTabService.MAL to "MyAnimeList (MAL)",
+            UiPreferences.TrackTabService.MANGA_UPDATES to "MangaUpdates",
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(
+                text = "Select Tracker Service (${activeMediaType.name.lowercase().replaceFirstChar { it.uppercase() }})",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                availableServices.forEach { (service, name) ->
+                    val isSelected = service == currentService
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onSelectService(service)
+                                onDismissRequest()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = {
+                                onSelectService(service)
+                                onDismissRequest()
+                            },
+                        )
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(MR.strings.action_cancel))
+            }
+        },
+    )
 }
 
 private data class SubTabItem(val title: String, val icon: ImageVector)
@@ -490,6 +761,8 @@ data class TrackSeriesItem(
     val year: String? = null,
     val authors: String? = null,
     val genres: List<String> = emptyList(),
+    val trackerId: Long? = null,
+    val mediaType: MediaType = MediaType.MANGA,
 )
 
 fun ALSearchItem.toTrackSeriesItem(activeMediaType: MediaType): TrackSeriesItem {
@@ -506,10 +779,12 @@ fun ALSearchItem.toTrackSeriesItem(activeMediaType: MediaType): TrackSeriesItem 
         authors = staff?.edges?.mapNotNull { it.node.name() }?.joinToString(", ")
             ?: studios?.edges?.filter { it.isMain }?.map { it.node.name }?.joinToString(", "),
         genres = genres ?: emptyList(),
+        trackerId = id,
+        mediaType = activeMediaType,
     )
 }
 
-fun MALMediaItem.toTrackSeriesItem(): TrackSeriesItem {
+fun MALMediaItem.toTrackSeriesItem(activeMediaType: MediaType = MediaType.MANGA): TrackSeriesItem {
     return TrackSeriesItem(
         title = title,
         coverUrl = coverUrl,
@@ -522,6 +797,102 @@ fun MALMediaItem.toTrackSeriesItem(): TrackSeriesItem {
         year = startDate?.take(4),
         authors = authors,
         genres = genres,
+        trackerId = id,
+        mediaType = if (isAnime) MediaType.ANIME else activeMediaType,
+    )
+}
+
+fun MURecord.toTrackSeriesItem(activeMediaType: MediaType = MediaType.MANGA): TrackSeriesItem {
+    return TrackSeriesItem(
+        title = title ?: "",
+        coverUrl = image?.url?.original,
+        type = type?.uppercase() ?: if (activeMediaType == MediaType.NOVEL) "NOVEL" else "MANGA",
+        status = status,
+        rating = bayesianRating?.let { String.format("%.2f", it) },
+        score = bayesianRating?.times(10),
+        description = description,
+        trackingUrl = url,
+        year = year?.toString(),
+        authors = authors?.joinToString(", ") { it.name ?: "" },
+        genres = genres?.mapNotNull { it.genre } ?: emptyList(),
+        trackerId = seriesId,
+        mediaType = activeMediaType,
+    )
+}
+
+@Composable
+private fun TrackerStatusPickerDialog(
+    item: TrackSeriesItem,
+    isAniList: Boolean,
+    onSelectStatus: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    val serviceName = if (isAniList) "AniList" else "MyAnimeList"
+    val isAnime = item.mediaType == MediaType.ANIME
+    val statusOptions = if (isAniList) {
+        listOf(
+            "PLANNING" to ("Plan to " + if (isAnime) "Watch" else "Read"),
+            "CURRENT" to (if (isAnime) "Watching" else "Reading"),
+            "COMPLETED" to "Completed",
+            "PAUSED" to "Paused / On Hold",
+            "DROPPED" to "Dropped",
+            "REPEATING" to (if (isAnime) "Rewatching" else "Rereading"),
+        )
+    } else {
+        listOf(
+            (if (isAnime) "plan_to_watch" else "plan_to_read") to ("Plan to " + if (isAnime) "Watch" else "Read"),
+            (if (isAnime) "watching" else "reading") to (if (isAnime) "Watching" else "Reading"),
+            "completed" to "Completed",
+            "on_hold" to "On Hold",
+            "dropped" to "Dropped",
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(
+                text = "Add to $serviceName Library",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                statusOptions.forEach { (statusKey, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onSelectStatus(statusKey)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(MR.strings.action_cancel))
+            }
+        },
     )
 }
 
@@ -533,6 +904,8 @@ fun MALMediaItem.toTrackSeriesItem(): TrackSeriesItem {
 private fun TrackSeriesDetailsSheet(
     item: TrackSeriesItem,
     onDismiss: () -> Unit,
+    onAddToLocalLibrary: () -> Unit,
+    onAddToTrackerLibrary: () -> Unit,
     onSearchInSources: () -> Unit,
     onOpenInBrowser: () -> Unit,
 ) {
@@ -613,6 +986,30 @@ private fun TrackSeriesDetailsSheet(
                 }
             }
 
+            // Quick Actions: Local Library & Tracker Library
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = onAddToLocalLibrary,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Local Library")
+                }
+
+                FilledTonalButton(
+                    onClick = onAddToTrackerLibrary,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Add to Tracker")
+                }
+            }
+
             if (item.genres.isNotEmpty()) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -663,6 +1060,290 @@ private fun TrackSeriesDetailsSheet(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+// ==========================================
+// MANGAUPDATES SCREENS
+// ==========================================
+@Composable
+fun MangaUpdatesReleasesScreen(
+    releases: List<eu.kanade.tachiyomi.ui.track.MUReleaseItem>,
+    isLoading: Boolean,
+    onItemClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (isLoading && releases.isEmpty()) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(releases) { item ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { item.title?.let(onItemClick) },
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = item.title ?: "Unknown",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        item.chapter?.let { ch ->
+                            Text(
+                                text = "Ch. $ch",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                        item.releaseDate?.let { date ->
+                            Text(
+                                text = date,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (!item.groups.isNullOrEmpty()) {
+                        Text(
+                            text = item.groups,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MangaUpdatesRecommendedScreen(
+    items: List<MURecord>,
+    isLoading: Boolean,
+    activeMediaType: MediaType,
+    onItemClick: (MURecord) -> Unit,
+    onItemLongClick: (MURecord) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (isLoading && items.isEmpty()) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 110.dp),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(items) { record ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(0.68f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onItemClick(record) },
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AsyncImage(
+                        model = record.image?.url?.original,
+                        contentDescription = record.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                            .padding(6.dp),
+                    ) {
+                        Text(
+                            text = record.title ?: "",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MangaUpdatesSearchScreen(
+    results: List<MURecord>,
+    isSearching: Boolean,
+    activeMediaType: MediaType,
+    onSearch: (String) -> Unit,
+    onItemClick: (MURecord) -> Unit,
+    onItemLongClick: (MURecord) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var query by remember { mutableStateOf("") }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                query = it
+                onSearch(it)
+            },
+            placeholder = { Text("Search MangaUpdates...") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(12.dp),
+        )
+
+        if (isSearching) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 110.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(results) { record ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(0.68f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onItemClick(record) },
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = record.image?.url?.original,
+                                contentDescription = record.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.BottomCenter)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                                    .padding(6.dp),
+                            ) {
+                                Text(
+                                    text = record.title ?: "",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MangaUpdatesReviewsScreen(
+    reviews: List<MUReviewRecord>,
+    isLoading: Boolean,
+    onSearch: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var query by remember { mutableStateOf("") }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                query = it
+                onSearch(it)
+            },
+            placeholder = { Text("Search reviews by title...") },
+            leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(12.dp),
+        )
+
+        if (isLoading && reviews.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(reviews) { review ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = review.title ?: "Review",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            review.score?.let { r ->
+                                Text(
+                                    text = "★ $r / 10",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            review.body?.let { body ->
+                                Text(
+                                    text = body,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -1,0 +1,52 @@
+import java.util.Date;
+
+CREATE TABLE mini_history(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    chapter_id INTEGER NOT NULL UNIQUE,
+    source_id INTEGER NOT NULL,
+    last_read INTEGER AS Date,
+    time_read INTEGER NOT NULL,
+    FOREIGN KEY(chapter_id) REFERENCES chapters(_id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX idx_mini_history_source ON mini_history(source_id);
+CREATE INDEX idx_mini_history_last_read ON mini_history(last_read) WHERE last_read > 0;
+
+getMiniHistoryBySource:
+SELECT
+    mh._id,
+    mh.chapter_id,
+    mh.source_id,
+    mh.last_read,
+    mh.time_read,
+    c.manga_id,
+    c.chapter_number,
+    c.name AS chapter_name,
+    m.title AS manga_title,
+    m.thumbnail_url
+FROM mini_history mh
+JOIN chapters c ON mh.chapter_id = c._id
+JOIN mangas m ON c.manga_id = m._id
+WHERE mh.source_id = :sourceId AND mh.last_read > 0
+ORDER BY mh.last_read DESC
+LIMIT 200;
+
+upsertMiniHistory:
+INSERT INTO mini_history(chapter_id, source_id, last_read, time_read)
+VALUES (:chapterId, :sourceId, :readAt, :timeRead)
+ON CONFLICT(chapter_id)
+DO UPDATE SET
+    last_read = :readAt,
+    time_read = time_read + :timeRead
+WHERE chapter_id = :chapterId;
+
+removeMiniHistoryByMangaId:
+DELETE FROM mini_history
+WHERE chapter_id IN (SELECT _id FROM chapters WHERE manga_id = :mangaId);
+
+removeAllMiniHistory:
+DELETE FROM mini_history WHERE source_id = :sourceId;
+
+getMiniReadDuration:
+SELECT coalesce(sum(time_read), 0) FROM mini_history WHERE source_id = :sourceId;

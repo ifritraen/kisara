@@ -119,13 +119,11 @@ data object BrowseTab : Tab {
         val uiPreferences = Injekt.get<UiPreferences>()
         val activeMediaType = uiPreferences.activeMediaType().get()
         if (activeMediaType == MediaType.ANIME) {
-            val sourceManager = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>()
-            val sourceIds = sourceManager.getCatalogueSources().map { it.id }
-            navigator.push(eu.kanade.tachiyomi.ui.browse.anime.bulk.AnimeBulkSearchScreen(sourceIds, emptyList()))
+            navigator.push(eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen(openSearchOnStart = true))
         } else if (activeMediaType == MediaType.NOVEL) {
-            navigator.push(eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen())
+            navigator.push(eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen(openSearchOnStart = true))
         } else {
-            navigator.push(GlobalSearchScreen())
+            navigator.push(GlobalSearchScreen(openSearchOnStart = true))
         }
     }
 

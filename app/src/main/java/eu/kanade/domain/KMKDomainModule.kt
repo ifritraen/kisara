@@ -63,6 +63,7 @@ class KMKDomainModule : InjektModule {
         addFactory { tachiyomi.domain.manga.interactor.GetMangaExternalMetadata(get()) }
         addFactory { eu.kanade.domain.manga.interactor.FetchExternalMetadata(get(), get(), get(), get()) }
         addFactory { eu.kanade.domain.manga.interactor.GetTrackerRecommendations(get(), get(), get(), get()) }
+        addFactory { eu.kanade.domain.manga.interactor.GetTrackerContinueReading(get(), get()) }
 
         // Granular Scoring (AniScore)
         addSingletonFactory<tachiyomi.domain.scoring.repository.GranularScoreRepository> {

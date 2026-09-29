@@ -29,11 +29,25 @@ class MLKitTranslator(
         val totalBlocks = pages.values.sumOf { it.blocks.size }
         if (totalBlocks == 0) return
         var completed = 0
-        pages.mapValues { (_, v) ->
-            v.blocks.map { b ->
-                b.translation = b.text.split("\n").mapNotNull {
-                    Tasks.await(translator.translate(it)).takeIf { it.isNotEmpty() }
-                }.joinToString("\n")
+        pages.forEach { (_, v) ->
+            v.blocks.forEach { b ->
+                val lines = b.text.split("\n").filter { it.isNotBlank() }
+                val translatedLines = lines.mapNotNull { line ->
+                    try {
+                        Tasks.await(translator.translate(line)).takeIf { it.isNotBlank() }
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                b.translation = if (translatedLines.isNotEmpty()) {
+                    translatedLines.joinToString("\n")
+                } else {
+                    try {
+                        Tasks.await(translator.translate(b.text))
+                    } catch (e: Exception) {
+                        ""
+                    }
+                }
                 completed++
                 onProgress(completed, totalBlocks)
             }

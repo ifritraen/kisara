@@ -31,6 +31,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.math.min
 
+import eu.kanade.translation.model.PageTranslation
+import tachiyomi.domain.manga.model.Manga
+
 /**
  * Loader used to load chapters from an online source.
  */
@@ -38,14 +41,21 @@ import kotlin.math.min
 internal class HttpPageLoader(
     private val chapter: ReaderChapter,
     private val source: HttpSource,
+    private val manga: Manga? = null,
     private val chapterCache: ChapterCache = Injekt.get(),
     // SY -->
     private val readerPreferences: ReaderPreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
+    private val translationManager: eu.kanade.translation.TranslationManager = Injekt.get(),
     // SY <--
 ) : PageLoader() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // KMK -->
+    /** Translations map retained after getPages() so internalLoadPage() can re-attempt matching once imageUrl is resolved. */
+    private var pendingTranslations: Map<String, PageTranslation> = emptyMap()
+    // KMK <--
 
     /**
      * A queue used to manage requests one by one while allowing priorities.
@@ -92,9 +102,45 @@ internal class HttpPageLoader(
             source.getPageList(chapter.chapter)
         }
         // SY -->
+        val dbChapter = chapter.chapter
+        val translations: Map<String, PageTranslation> = try {
+            val mangaTitle = manga?.ogTitle
+            if (mangaTitle != null) {
+                translationManager.getChapterTranslation(
+                    chapterName = dbChapter.name,
+                    scanlator = dbChapter.scanlator,
+                    title = mangaTitle,
+                    source = source,
+                )
+            } else {
+                emptyMap()
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+        // KMK -->
+        pendingTranslations = translations
+        // KMK <--
+
         val rp = pages.mapIndexed { index, page ->
             // Don't trust sources and use our own indexing
-            ReaderPage(index, page.url, page.imageUrl)
+            val pageName = page.imageUrl?.substringAfterLast("/") ?: "${index + 1}.jpg"
+            val matchedTranslation: PageTranslation? = if (translations.isNotEmpty()) {
+                translations[pageName]
+                    ?: translations.entries.firstOrNull { it.key.equals(pageName, ignoreCase = true) || it.key.substringBeforeLast(".") == pageName.substringBeforeLast(".") }?.value
+                    ?: translations.entries.firstOrNull { entry ->
+                        val digits = entry.key.filter { it.isDigit() }.toIntOrNull()
+                        digits != null && (digits == index + 1 || digits == index)
+                    }?.value
+            } else {
+                null
+            }
+            ReaderPage(index, page.url, page.imageUrl).apply {
+                if (matchedTranslation != null) {
+                    translation = matchedTranslation
+                    translationKey = pageName
+                }
+            }
         }
         if (readerPreferences.aggressivePageLoading().get()) {
             rp.forEach {
@@ -216,6 +262,27 @@ internal class HttpPageLoader(
                 page.imageUrl = source.getImageUrl(page)
             }
             val imageUrl = page.imageUrl!!
+
+            // KMK -->
+            // Second-pass translation match: imageUrl was null at getPages() time for online chapters,
+            // so try again now that the real URL is known.
+            if (page.translation == null && pendingTranslations.isNotEmpty()) {
+                val pageName = imageUrl.substringAfterLast("/")
+                val matched = pendingTranslations[pageName]
+                    ?: pendingTranslations.entries.firstOrNull {
+                        it.key.equals(pageName, ignoreCase = true) ||
+                            it.key.substringBeforeLast(".") == pageName.substringBeforeLast(".")
+                    }?.value
+                    ?: pendingTranslations.entries.firstOrNull { entry ->
+                        val digits = entry.key.filter { it.isDigit() }.toIntOrNull()
+                        digits != null && (digits == page.index + 1 || digits == page.index)
+                    }?.value
+                if (matched != null) {
+                    page.translation = matched
+                    page.translationKey = pageName
+                }
+            }
+            // KMK <--
 
             if (!chapterCache.isImageInCache(imageUrl)) {
                 page.status = Page.State.DownloadImage

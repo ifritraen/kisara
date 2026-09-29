@@ -740,6 +740,7 @@ data class TrackServiceSearchScreen(
             queryResult = state.queryResult?.map { results ->
                 results.map { animeSearch ->
                     eu.kanade.tachiyomi.data.track.model.TrackSearch().apply {
+                        remote_id = animeSearch.remote_id
                         title = animeSearch.title
                         tracking_url = animeSearch.tracking_url
                         total_chapters = animeSearch.total_episodes
@@ -753,6 +754,7 @@ data class TrackServiceSearchScreen(
             },
             selected = state.selected?.let { animeSearch ->
                 eu.kanade.tachiyomi.data.track.model.TrackSearch().apply {
+                    remote_id = animeSearch.remote_id
                     title = animeSearch.title
                     tracking_url = animeSearch.tracking_url
                     total_chapters = animeSearch.total_episodes

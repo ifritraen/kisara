@@ -571,6 +571,11 @@ class ReaderActivity : BaseActivity() {
                             }
                         }
                     }
+
+                    // Floating AI Pipeline Overlay Banner in Reader
+                    eu.kanade.presentation.components.FloatingAiProgressOverlay(
+                        hazeState = hazeState,
+                    )
                 }
             }
 

@@ -1,5 +1,6 @@
 package eu.kanade.presentation.library.components
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -43,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,6 +110,26 @@ fun LibraryContent(
     // Track parent categories where the tab was clicked to bypass showSubcategoryTabs setting
     var clickedTabParentIds by rememberSaveable { mutableStateOf(setOf<Long>()) }
 
+    val isSearching = !searchQuery.isNullOrBlank()
+
+    val categoryMap = remember(categories) { categories.associateBy { it.id } }
+    val categoryNamesByMangaId = remember(categories, getItemsForCategory, isSearching) {
+        if (!isSearching) {
+            emptyMap<Long, List<String>>()
+        } else {
+            val map = mutableMapOf<Long, MutableList<String>>()
+            categories.forEach { cat ->
+                val parent = cat.parentId?.let { categoryMap[it] }
+                val label = if (parent != null) "${parent.name} > ${cat.name}" else cat.name
+                val items = getItemsForCategory(cat)
+                items.forEach { item ->
+                    map.getOrPut(item.libraryManga.manga.id) { mutableListOf() }.add(label)
+                }
+            }
+            map.mapValues { it.value.distinct() }
+        }
+    }
+
     LaunchedEffect(searchQuery) {
         if (!searchQuery.isNullOrEmpty()) {
             collapsedParentIds = emptySet()
@@ -153,7 +175,7 @@ fun LibraryContent(
         }
 
         // Show tabs if needed
-        if (showPageTabs && tabCategories.isNotEmpty() && (tabCategories.size > 1 || !tabCategories.first().isSystemCategory)) {
+        if (showPageTabs && !isSearching && tabCategories.isNotEmpty() && (tabCategories.size > 1 || !tabCategories.first().isSystemCategory)) {
             LibraryTabs(
                 categories = tabCategories,
                 pagerState = pagerState,
@@ -182,7 +204,7 @@ fun LibraryContent(
         }
 
         // Show subcategory filter chips if parent filters are enabled
-        if (showParentFilters && parentCategories.isNotEmpty()) {
+        if (showParentFilters && !isSearching && parentCategories.isNotEmpty()) {
             val activeParent = parentCategories.getOrNull(pagerState.currentPage)
             val subcategoriesForActiveParent = activeParent?.let { childrenByParent[it.id] }.orEmpty()
             val isCollapsed = activeParent?.id?.let { it in collapsedParentIds } ?: false
@@ -416,28 +438,118 @@ fun LibraryContent(
             Box(
                 modifier = Modifier.fillMaxSize(),
             ) {
-                LibraryPager(
-                    state = pagerState,
-                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
-                    hasActiveFilters = hasActiveFilters,
-                    selection = selection,
-                    searchQuery = searchQuery,
-                    onGlobalSearchClicked = onGlobalSearchClicked,
-                    getCategoryForPage = { page -> tabCategories[page] },
-                    getDisplayMode = getDisplayMode,
-                    getColumnsForOrientation = getColumnsForOrientation,
-                    getItemsForCategory = wrappedGetItemsForCategory,
-                    onClickManga = { category, manga ->
-                        if (selection.isNotEmpty()) {
-                            onToggleSelection(category, manga)
+                if (isSearching) {
+                    val allMatchingItems = remember(categories, getItemsForCategory, searchQuery) {
+                        categories.flatMap { getItemsForCategory(it) }
+                            .distinctBy { it.libraryManga.manga.id }
+                    }
+
+                    if (allMatchingItems.isEmpty()) {
+                        LibraryPagerEmptyScreen(
+                            searchQuery = searchQuery,
+                            hasActiveFilters = hasActiveFilters,
+                            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                            onGlobalSearchClicked = onGlobalSearchClicked,
+                        )
+                    } else {
+                        val displayMode by getDisplayMode(0)
+                        val columns by if (displayMode != LibraryDisplayMode.List) {
+                            val configuration = LocalConfiguration.current
+                            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                            remember(isLandscape) { getColumnsForOrientation(isLandscape) }
                         } else {
-                            onClickManga(manga.manga.id)
+                            remember { mutableIntStateOf(0) }
                         }
-                    },
-                    onLongClickManga = onToggleRangeSelection,
-                    onClickContinueReading = onContinueReadingClicked,
-                    userScrollEnabled = true,
-                )
+
+                        val firstCategory = categories.firstOrNull() ?: Category(0, "", 0, 0, null, false)
+
+                        when (displayMode) {
+                            LibraryDisplayMode.List -> {
+                                LibraryList(
+                                    items = allMatchingItems,
+                                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                                    selection = selection,
+                                    onClick = { manga ->
+                                        if (selection.isNotEmpty()) {
+                                            onToggleSelection(firstCategory, manga)
+                                        } else {
+                                            onClickManga(manga.manga.id)
+                                        }
+                                    },
+                                    onLongClick = { onToggleRangeSelection(firstCategory, it) },
+                                    onClickContinueReading = onContinueReadingClicked,
+                                    searchQuery = searchQuery,
+                                    onGlobalSearchClicked = onGlobalSearchClicked,
+                                    categoryNamesByMangaId = categoryNamesByMangaId,
+                                )
+                            }
+                            LibraryDisplayMode.CompactGrid, LibraryDisplayMode.CoverOnlyGrid -> {
+                                LibraryCompactGrid(
+                                    items = allMatchingItems,
+                                    showTitle = displayMode is LibraryDisplayMode.CompactGrid,
+                                    columns = columns,
+                                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                                    selection = selection,
+                                    onClick = { manga ->
+                                        if (selection.isNotEmpty()) {
+                                            onToggleSelection(firstCategory, manga)
+                                        } else {
+                                            onClickManga(manga.manga.id)
+                                        }
+                                    },
+                                    onLongClick = { onToggleRangeSelection(firstCategory, it) },
+                                    onClickContinueReading = onContinueReadingClicked,
+                                    searchQuery = searchQuery,
+                                    onGlobalSearchClicked = onGlobalSearchClicked,
+                                    categoryNamesByMangaId = categoryNamesByMangaId,
+                                )
+                            }
+                            LibraryDisplayMode.ComfortableGrid, LibraryDisplayMode.ComfortableGridPanorama -> {
+                                LibraryComfortableGrid(
+                                    items = allMatchingItems,
+                                    columns = columns,
+                                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                                    selection = selection,
+                                    onClick = { manga ->
+                                        if (selection.isNotEmpty()) {
+                                            onToggleSelection(firstCategory, manga)
+                                        } else {
+                                            onClickManga(manga.manga.id)
+                                        }
+                                    },
+                                    onLongClick = { onToggleRangeSelection(firstCategory, it) },
+                                    onClickContinueReading = onContinueReadingClicked,
+                                    searchQuery = searchQuery,
+                                    onGlobalSearchClicked = onGlobalSearchClicked,
+                                    categoryNamesByMangaId = categoryNamesByMangaId,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    LibraryPager(
+                        state = pagerState,
+                        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                        hasActiveFilters = hasActiveFilters,
+                        selection = selection,
+                        searchQuery = searchQuery,
+                        onGlobalSearchClicked = onGlobalSearchClicked,
+                        getCategoryForPage = { page -> tabCategories[page] },
+                        getDisplayMode = getDisplayMode,
+                        getColumnsForOrientation = getColumnsForOrientation,
+                        getItemsForCategory = wrappedGetItemsForCategory,
+                        onClickManga = { category, manga ->
+                            if (selection.isNotEmpty()) {
+                                onToggleSelection(category, manga)
+                            } else {
+                                onClickManga(manga.manga.id)
+                            }
+                        },
+                        onLongClickManga = onToggleRangeSelection,
+                        onClickContinueReading = onContinueReadingClicked,
+                        userScrollEnabled = true,
+                    )
+                }
             }
         }
 

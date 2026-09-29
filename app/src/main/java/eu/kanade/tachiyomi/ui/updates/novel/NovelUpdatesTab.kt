@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.updates.novel
 
 import android.content.Context
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
@@ -25,41 +26,24 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 
+import eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents
+import eu.kanade.tachiyomi.ui.updates.UpdatesTabViewContent
+
 @Composable
 fun Screen.novelUpdatesTab(
     context: Context,
     fromMore: Boolean,
     screenModel: NovelUpdatesScreenModel = rememberScreenModel { NovelUpdatesScreenModel() },
 ): TabContent {
-    val navigator = LocalNavigator.currentOrThrow
     val state by screenModel.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-
-    val navigateUp: (() -> Unit)? = if (fromMore) {
-        {
-            if (navigator.lastItem == HomeScreen) {
-                scope.launch { HomeScreen.openTab(HomeScreen.Tab.Library()) }
-            } else {
-                navigator.pop()
-            }
-        }
-    } else {
-        null
-    }
 
     return TabContent(
         titleRes = KMR.strings.label_novel,
         searchEnabled = false,
         content = { contentPadding, _ ->
-            NovelUpdatesScreen(
-                state = state,
-                lastUpdated = screenModel.lastUpdated,
+            UpdatesTabViewContent(
                 contentPadding = contentPadding,
-                onNovelClick = { novelId -> navigator.push(NovelScreen(novelId)) },
-                onChapterClick = { chapterId -> navigator.push(NovelReaderScreen(chapterId)) },
-                onToggleSelection = screenModel::toggleSelection,
-                onMultiBookmarkClicked = screenModel::bookmarkUpdates,
-                onMultiMarkAsReadClicked = screenModel::markUpdatesRead,
+                novelScreenModel = screenModel,
             )
         },
         actions = if (state.selected.isNotEmpty()) {
@@ -77,6 +61,11 @@ fun Screen.novelUpdatesTab(
             )
         } else {
             persistentListOf(
+                AppBar.Action(
+                    title = context.stringResource(MR.strings.action_view_upcoming),
+                    icon = Icons.Outlined.CalendarMonth,
+                    onClick = { UpdatesTabEvents.selectSubTabEvent.trySend(0) },
+                ),
                 AppBar.Action(
                     title = context.stringResource(MR.strings.action_update_library),
                     icon = Icons.Outlined.Refresh,

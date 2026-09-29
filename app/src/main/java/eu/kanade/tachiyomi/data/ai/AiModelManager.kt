@@ -4,16 +4,25 @@ import android.content.Context
 import android.net.Uri
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import okhttp3.Request
+import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Manages the lifecycle, downloading, verification, and local storage
@@ -23,6 +32,62 @@ class AiModelManager(
     private val context: Context,
     private val networkHelper: NetworkHelper = Injekt.get(),
 ) {
+
+    data class DownloadState(
+        val isDownloading: Boolean = false,
+        val progress: Float = 0f,
+        val status: String = "",
+    )
+
+    companion object {
+        private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val downloadJobs = ConcurrentHashMap<ModelType, Job>()
+        private val downloadStates = ConcurrentHashMap<ModelType, MutableStateFlow<DownloadState>>()
+
+        fun getDownloadState(type: ModelType): StateFlow<DownloadState> {
+            return downloadStates.getOrPut(type) { MutableStateFlow(DownloadState()) }.asStateFlow()
+        }
+
+        fun isDownloading(type: ModelType): Boolean {
+            return downloadJobs[type]?.isActive == true
+        }
+    }
+
+    fun startDownload(type: ModelType, onComplete: ((Boolean) -> Unit)? = null) {
+        if (isDownloading(type)) return
+        val stateFlow = downloadStates.getOrPut(type) { MutableStateFlow(DownloadState()) }
+        val job = downloadScope.launch {
+            stateFlow.value = DownloadState(isDownloading = true, progress = 0f, status = "Connecting...")
+            var success = false
+            try {
+                success = downloadModel(
+                    type = type,
+                    onProgress = { progress ->
+                        stateFlow.value = stateFlow.value.copy(progress = progress)
+                    },
+                    onStatus = { status ->
+                        stateFlow.value = stateFlow.value.copy(status = status)
+                    },
+                )
+            } catch (e: CancellationException) {
+                // Cancelled
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to download model ${type.displayName}" }
+            } finally {
+                stateFlow.value = DownloadState(isDownloading = false, progress = if (success) 1f else 0f, status = "")
+                downloadJobs.remove(type)
+                withUIContext {
+                    onComplete?.invoke(success)
+                }
+            }
+        }
+        downloadJobs[type] = job
+    }
+
+    fun cancelDownload(type: ModelType) {
+        downloadJobs.remove(type)?.cancel()
+        downloadStates[type]?.value = DownloadState(isDownloading = false, progress = 0f, status = "")
+    }
 
     private val modelsDir = File(context.filesDir, "models/ai").apply { mkdirs() }
 
@@ -34,33 +99,13 @@ class AiModelManager(
         val mirrors: List<String>,
     ) {
         MANGA_COLORIZER_V2(
-            id = "manga_colorizer_v2",
-            displayName = "Manga Colorizer v2 (INT8)",
-            fileName = "manga_colorization_v2_int8.onnx",
-            minSize = 30 * 1024 * 1024L,
+            id = "manga_colorizer_v2_fp32",
+            displayName = "Manga Colorizer v2 (FP32 Studio)",
+            fileName = "manga_colorization_v2_fp32.onnx",
+            minSize = 80 * 1024 * 1024L,
             mirrors = listOf(
-                "https://huggingface.co/Faridzar/manga-colorization-v2-onnx/resolve/main/manga-colorize-fp16.onnx",
-                "https://huggingface.co/Faridzar/manga-colorization-v2-onnx/raw/main/manga-colorize-fp16.onnx",
-            ),
-        ),
-        DEOLDIFY_ARTISTIC(
-            id = "deoldify_artistic",
-            displayName = "DeOldify Artistic (INT8)",
-            fileName = "deoldify_artistic_int8.onnx",
-            minSize = 50 * 1024 * 1024L,
-            mirrors = listOf(
-                "https://github.com/instant-high/deoldify-onnx/releases/download/deoldify-onnx/deoldify.onnx",
-                "https://huggingface.co/facefusion/models-3.0.0/resolve/main/deoldify.onnx",
-            ),
-        ),
-        DDCOLOR_TINY(
-            id = "ddcolor_tiny",
-            displayName = "DDColor Tiny (INT8)",
-            fileName = "ddcolor_tiny_int8.onnx",
-            minSize = 50 * 1024 * 1024L,
-            mirrors = listOf(
-                "https://huggingface.co/facefusion/models-3.0.0/resolve/main/ddcolor.onnx",
-                "https://github.com/instant-high/DDColor-onnx/releases/download/v1.0.0/ddcolor.onnx",
+                "https://github.com/ifritraen/color_model/releases/download/v0.1/manga_colorization_v2_fp32.onnx",
+                "https://huggingface.co/ifritraen/manga-colorization-v2-fp32/resolve/main/manga_colorization_v2_fp32.onnx",
             ),
         ),
         ANIME4K_ACNET(
@@ -95,7 +140,23 @@ class AiModelManager(
     }
 
     fun getModelFile(type: ModelType): File {
-        return File(modelsDir, type.fileName)
+        val internalFile = File(modelsDir, type.fileName)
+        if (internalFile.exists() && internalFile.length() >= type.minSize) {
+            return internalFile
+        }
+
+        try {
+            val extAppDir = context.getExternalFilesDir("models/ai")
+            if (extAppDir != null) {
+                val candidateApp = File(extAppDir, type.fileName)
+                if (candidateApp.exists() && candidateApp.length() >= type.minSize) {
+                    return candidateApp
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        return internalFile
     }
 
     fun isModelDownloaded(type: ModelType): Boolean {
@@ -104,8 +165,19 @@ class AiModelManager(
     }
 
     fun deleteModel(type: ModelType): Boolean {
-        val file = getModelFile(type)
-        return file.delete()
+        var deletedAny = false
+        val internalFile = File(modelsDir, type.fileName)
+        if (internalFile.exists()) {
+            deletedAny = internalFile.delete() || deletedAny
+        }
+        val extAppDir = context.getExternalFilesDir("models/ai")
+        if (extAppDir != null) {
+            val candidateApp = File(extAppDir, type.fileName)
+            if (candidateApp.exists()) {
+                deletedAny = candidateApp.delete() || deletedAny
+            }
+        }
+        return deletedAny || !isModelDownloaded(type)
     }
 
     /**
@@ -197,14 +269,16 @@ class AiModelManager(
         startByte: Long,
         onProgress: (Float) -> Unit,
     ) {
+        val isPartial = response.code == 206
+        val effectiveStartByte = if (isPartial) startByte else 0L
         val body = response.body ?: throw Exception("Empty response body")
-        val totalLength = (body.contentLength().takeIf { it > 0 } ?: 0L) + startByte
+        val totalLength = (body.contentLength().takeIf { it > 0 } ?: 0L) + effectiveStartByte
 
         body.byteStream().use { input ->
-            FileOutputStream(tempFile, startByte > 0).use { output ->
+            FileOutputStream(tempFile, isPartial).use { output ->
                 val buffer = ByteArray(64 * 1024)
                 var bytesRead: Int
-                var currentBytes = startByte
+                var currentBytes = effectiveStartByte
 
                 while (input.read(buffer).also { bytesRead = it } != -1) {
                     output.write(buffer, 0, bytesRead)

@@ -232,4 +232,18 @@ object MangaTitleParser {
         }
         return null
     }
+
+    fun cleanForDuplicate(title: String): String {
+        val parsedClean = parse(title).cleanTitle
+        var t = parsedClean.lowercase()
+        val wordsToRemove = listOf(
+            "official", "colored", "digital", "edition", "remastered",
+            "uncensored", "scanlation", "webtoon", "manga", "novel", "anime",
+            "ver", "version", "raw",
+        )
+        wordsToRemove.forEach { word ->
+            t = t.replace(word, "")
+        }
+        return t.filter { it.isLetterOrDigit() }.trim()
+    }
 }

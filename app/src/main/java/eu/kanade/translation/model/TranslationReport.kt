@@ -34,6 +34,15 @@ object TranslationReport {
             exceptionTrace = exception?.stackTraceToString(),
         )
         _logs.update { it + entry }
+
+        val appLogLevel = when (level.uppercase()) {
+            "STEP", "AI_STEP" -> eu.kanade.tachiyomi.data.ai.LogLevel.AI_STEP
+            "SUCCESS" -> eu.kanade.tachiyomi.data.ai.LogLevel.SUCCESS
+            "WARN", "WARNING" -> eu.kanade.tachiyomi.data.ai.LogLevel.WARN
+            "ERROR" -> eu.kanade.tachiyomi.data.ai.LogLevel.ERROR
+            else -> eu.kanade.tachiyomi.data.ai.LogLevel.INFO
+        }
+        eu.kanade.tachiyomi.data.ai.AppLogger.log(appLogLevel, "[$component] $message")
     }
 
     fun clear() {

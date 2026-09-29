@@ -62,8 +62,6 @@ class SourcesScreenModel(
     private val _events = Channel<Event>(Int.MAX_VALUE)
     val events = _events.receiveAsFlow()
 
-    val useNewSourceNavigation by uiPreferences.useNewSourceNavigation().asState(screenModelScope)
-
     init {
         // KMK -->
         combine(

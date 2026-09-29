@@ -305,11 +305,16 @@ fun AnilistProfileScreen(
                 fontWeight = FontWeight.Bold,
             )
 
+            val allFavorites = favAnime + favManga
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                items(favAnime + favManga, key = { it.id }) { item ->
+                items(
+                    count = allFavorites.size,
+                    key = { "anilist-fav-${allFavorites[it].id}-$it" },
+                ) { index ->
+                    val item = allFavorites[index]
                     Card(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.width(90.dp),

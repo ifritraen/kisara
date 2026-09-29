@@ -102,5 +102,10 @@ class PreferenceModule(val app: Application) : InjektModule {
         addSingletonFactory {
             aniyomi.core.common.torrent.TorrentPreferences(get())
         }
+        // KMK -->
+        addSingletonFactory {
+            eu.kanade.domain.mini.service.MiniModePreferences(get())
+        }
+        // KMK <--
     }
 }

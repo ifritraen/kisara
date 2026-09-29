@@ -27,9 +27,8 @@ internal fun LibraryComfortableGrid(
     onGlobalSearchClicked: () -> Unit,
     // KMK -->
     gridState: LazyGridState = rememberLazyGridState(),
-    // KMK <--
-    // KMK -->
     usePanoramaCover: Boolean = false,
+    categoryNamesByMangaId: Map<Long, List<String>> = emptyMap(),
     // KMK <--
 ) {
     LazyLibraryGrid(
@@ -113,6 +112,7 @@ internal fun LibraryComfortableGrid(
                 },
                 // KMK -->
                 usePanoramaCover = usePanoramaCover,
+                categoryBadges = categoryNamesByMangaId[manga.id].orEmpty(),
                 // KMK <--
                 manga = manga,
             )

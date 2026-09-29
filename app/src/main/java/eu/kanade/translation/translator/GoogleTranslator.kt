@@ -49,21 +49,53 @@ class GoogleTranslator(
     }
 
     private suspend fun translateText(lang: String, text: String): String {
-        val access = getTranslateUrl(lang, text)
-        val build: Request = Request.Builder().url(access).build()
-        val newCall = okHttpClient.newCall(build)
-        val response = newCall.await()
-        if (!response.isSuccessful) {
-            throw Exception("Google Translate API error ${response.code}: ${response.message}")
-        }
-        val body = response.body ?: throw Exception("Empty response body")
-        val string = body.string()
         try {
-            val jSONArray = JSONArray(string).getJSONArray(0).getJSONArray(0)
-            return jSONArray.getString(0)
-        } catch (e: Exception) {
-            throw Exception("Failed to parse Google Translate response: ${e.message}", e)
+            val access = getTranslateUrl(lang, text)
+            val build: Request = Request.Builder()
+                .url(access)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36")
+                .build()
+            val response = okHttpClient.newCall(build).await()
+            if (response.isSuccessful) {
+                val body = response.body?.string()
+                if (!body.isNullOrBlank()) {
+                    val rootArray = JSONArray(body)
+                    val segmentsArray = rootArray.optJSONArray(0)
+                    if (segmentsArray != null) {
+                        val sb = StringBuilder()
+                        for (i in 0 until segmentsArray.length()) {
+                            val segment = segmentsArray.optJSONArray(i)
+                            if (segment != null && !segment.isNull(0)) {
+                                sb.append(segment.getString(0))
+                            }
+                        }
+                        val result = sb.toString().trim()
+                        if (result.isNotBlank()) return result
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Fallback to web endpoint below
         }
+
+        // Resilient web endpoint fallback
+        val encoded = URLEncoder.encode(text, "utf-8")
+        val webUrl = "https://translate.google.com/m?sl=auto&tl=$lang&q=$encoded"
+        val webReq = Request.Builder()
+            .url(webUrl)
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36")
+            .build()
+        val webResp = okHttpClient.newCall(webReq).await()
+        if (!webResp.isSuccessful) {
+            throw Exception("Google Translate API error ${webResp.code}: ${webResp.message}")
+        }
+        val html = webResp.body?.string() ?: throw Exception("Empty response body")
+        val match = Regex("""class="result-container">([^<]+)</div>""").find(html)
+        val extracted = match?.groupValues?.get(1)?.trim()
+        if (!extracted.isNullOrBlank()) {
+            return android.text.Html.fromHtml(extracted, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+        }
+        throw Exception("Failed to parse Google Translate response")
     }
 
     private fun getTranslateUrl(lang: String, text: String): String {

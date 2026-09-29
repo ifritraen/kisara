@@ -147,6 +147,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -172,6 +173,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 data object LibraryTab : Tab {
+    val activeCategoryFlow = MutableStateFlow<Pair<Long?, Long?>>(Pair(null, null))
     val toggleCategoryBarEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
     val selectCategoryEvent = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
     val nextCategoryEvent = Channel<Unit>(1, BufferOverflow.DROP_OLDEST)
@@ -300,6 +302,10 @@ data object LibraryTab : Tab {
             activeSubcategoryId
         } else {
             if (activeCategory?.parentId != null) activeCategory.id else null
+        }
+
+        LaunchedEffect(activeParent?.id, activeSubcategoryId) {
+            activeCategoryFlow.value = Pair(activeParent?.id, activeSubcategoryId)
         }
 
         var showCategoryBar by remember { mutableStateOf(false) }

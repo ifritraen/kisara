@@ -10,13 +10,13 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import java.io.File
 import java.util.Collections
+import kotlin.math.roundToInt
 
 /**
  * On-device AI Manga Colorization engine using ONNX Runtime.
  *
- * Implements Manga-Colorization-v2, DeOldify, and DDColor architectures.
- * Preserves 100% of original manga sharpness by performing CIE-Lab chrominance
- * splicing: only (a, b) channels are generated, leaving original line art (L channel) untouched.
+ * Runs full-precision FP32 Manga-Colorization-v2 to force 32-bit registers on Android ARM CPUs/NPUs,
+ * completely eliminating color compression and reproducing desktop-grade anime colors.
  */
 class MangaColorizeEngine(
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment(),
@@ -25,43 +25,52 @@ class MangaColorizeEngine(
     private var activeSession: OrtSession? = null
     private var activeModelPath: String? = null
     private var isNnapiActive: Boolean = false
+    private var currentSpeedTier: Int = 3
 
     @Synchronized
-    private fun getSession(modelFile: File, useNnapi: Boolean): OrtSession {
-        if (activeSession != null && activeModelPath == modelFile.absolutePath && isNnapiActive == useNnapi) {
+    fun getSession(modelFile: File, useNnapi: Boolean, speedTier: Int = 3): OrtSession {
+        if (activeSession != null && activeModelPath == modelFile.absolutePath && isNnapiActive == useNnapi && currentSpeedTier == speedTier) {
             return activeSession!!
         }
 
         activeSession?.close()
+        currentSpeedTier = speedTier
+        val perf = ColorizeImageUtils.PerformanceConfig.fromLevel(speedTier)
         var session: OrtSession? = null
         var isNnapi = false
 
         if (useNnapi) {
             try {
+                AppLogger.step("Initializing NNAPI hardware acceleration for ${modelFile.name}...")
                 val nnapiOpts = OrtSession.SessionOptions().apply {
-                    setIntraOpNumThreads(2)
+                    setIntraOpNumThreads(perf.cpuThreads)
+                    setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     addNnapi()
                 }
                 val candidate = env.createSession(modelFile.absolutePath, nnapiOpts)
-                if (verifyNnapiSanity(candidate, 256)) {
+                if (verifyNnapiSanity(candidate, 576, 5)) {
                     session = candidate
                     isNnapi = true
+                    AppLogger.success("NNAPI hardware acceleration successfully initialized! (${perf.cpuThreads} threads)")
                 } else {
-                    logcat(LogPriority.WARN) { "NNAPI probe failed sanity check, falling back to CPU" }
+                    AppLogger.warn("NNAPI probe failed sanity check, falling back to CPU")
                     candidate.close()
                 }
             } catch (e: Exception) {
-                logcat(LogPriority.WARN, e) { "NNAPI init failed, falling back to CPU" }
+                AppLogger.warn("NNAPI init failed: ${e.message}, falling back to CPU")
             }
         }
 
         if (session == null) {
+            AppLogger.step("Initializing session on ARM CPU (${perf.label})...")
             val cpuOpts = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(2)
+                setIntraOpNumThreads(perf.cpuThreads)
+                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                 addCPU(true)
             }
             session = env.createSession(modelFile.absolutePath, cpuOpts)
             isNnapi = false
+            AppLogger.info("CPU Session ready with ${perf.cpuThreads} threads.")
         }
 
         activeSession = session
@@ -70,10 +79,10 @@ class MangaColorizeEngine(
         return session
     }
 
-    private fun verifyNnapiSanity(session: OrtSession, modelDim: Int): Boolean {
+    private fun verifyNnapiSanity(session: OrtSession, modelDim: Int, channels: Int): Boolean {
         return try {
-            val probeBuffer = java.nio.FloatBuffer.allocate(3 * modelDim * modelDim)
-            for (i in 0 until (3 * modelDim * modelDim)) {
+            val probeBuffer = AiBufferUtils.allocateDirectFloatBuffer(channels * modelDim * modelDim)
+            for (i in 0 until (channels * modelDim * modelDim)) {
                 probeBuffer.put(i, 0.5f)
             }
             probeBuffer.rewind()
@@ -81,7 +90,7 @@ class MangaColorizeEngine(
             val tensor = OnnxTensor.createTensor(
                 env,
                 probeBuffer,
-                longArrayOf(1L, 3L, modelDim.toLong(), modelDim.toLong()),
+                longArrayOf(1L, channels.toLong(), modelDim.toLong(), modelDim.toLong()),
             )
             val result = session.run(Collections.singletonMap(inputName, tensor))
             val out = result.get(0) as OnnxTensor
@@ -103,123 +112,122 @@ class MangaColorizeEngine(
     }
 
     /**
-     * Colorizes a black & white manga page.
-     *
-     * @param inputBitmap The input grayscale/BW page.
-     * @param modelFile The local .onnx model file.
-     * @param intensity Color saturation multiplier (0.3f .. 1.5f).
-     * @param useNnapi Whether to attempt hardware NPU/GPU acceleration via NNAPI.
-     * @return A new colorized ARGB_8888 [Bitmap].
+     * Colorizes a black & white manga page using pure FP32 inference + 15 Tuning Filter Pipeline.
      */
     suspend fun colorize(
         inputBitmap: Bitmap,
         modelFile: File,
         intensity: Float = 1.0f,
-        useNnapi: Boolean = false,
+        useNnapi: Boolean = true,
+        blendMode: Int = 0, // Default 0 = OPTIMIZED
+        customParams: ColorizeImageUtils.ColorizerTuningParams? = null,
+        speedTier: Int = 3,
+        onProgress: ((String, Float) -> Unit)? = null,
     ): Bitmap = withContext(Dispatchers.Default) {
         if (!modelFile.exists()) {
             throw IllegalArgumentException("Model file does not exist: ${modelFile.absolutePath}")
         }
 
+        val perf = ColorizeImageUtils.PerformanceConfig.fromLevel(speedTier)
+        onProgress?.invoke("Initializing session (${modelFile.name}, ${perf.label})...", 0.10f)
+
+        val startTime = System.currentTimeMillis()
         val session = try {
-            getSession(modelFile, useNnapi)
+            getSession(modelFile, useNnapi, speedTier)
         } catch (e: Exception) {
-            logcat(LogPriority.WARN, e) { "Failed to initialize NNAPI session, falling back to CPU" }
-            getSession(modelFile, false)
+            AppLogger.warn("Session init error: ${e.message}, retrying CPU")
+            getSession(modelFile, false, speedTier)
         }
 
-        val modelDim = 256
-        val isNormalized = true
-        val isBgr = modelFile.name.contains("bgr", ignoreCase = true)
+        val baseDim = 576
+        val aspect = inputBitmap.height.toFloat() / inputBitmap.width.coerceAtLeast(1).toFloat()
+        val targetW = baseDim
+        val targetH = (kotlin.math.round(baseDim * aspect / 32.0f).toInt() * 32).coerceIn(384, 896)
 
-        // 1. Prepare 256x256 NCHW Input FloatBuffer
-        val inputBuffer = ColorizeImageUtils.bitmapToNchwFloatBuffer(
+        onProgress?.invoke("Preparing NCHW tensor (5x${targetH}x${targetW})...", 0.25f)
+        AppLogger.step("Allocating Direct FloatBuffer for 1x5x${targetH}x${targetW} (image: ${inputBitmap.width}x${inputBitmap.height})")
+
+        val inputBuffer = ColorizeImageUtils.bitmapToMangaColorizerV2NchwFloatBuffer(
             bitmap = inputBitmap,
-            targetWidth = modelDim,
-            targetHeight = modelDim,
-            normalized = isNormalized,
-            isBgr = isBgr,
+            targetWidth = targetW,
+            targetHeight = targetH,
         )
 
         val inputName = session.inputNames.firstOrNull { it.contains("input", ignoreCase = true) || it.contains("data", ignoreCase = true) } ?: session.inputNames.first()
         val inputTensor = OnnxTensor.createTensor(
             env,
             inputBuffer,
-            longArrayOf(1L, 3L, modelDim.toLong(), modelDim.toLong()),
+            longArrayOf(1L, 5L, targetH.toLong(), targetW.toLong()),
         )
 
+        val providerDesc = if (isNnapiActive) "NNAPI Hardware Acceleration" else "ARM CPU (${perf.cpuThreads} threads)"
+        onProgress?.invoke("Running neural network forward pass ($providerDesc)...", 0.45f)
+        AppLogger.step("Running forward inference pass on $providerDesc...")
+
+        val inferStart = System.currentTimeMillis()
         val results = session.run(Collections.singletonMap(inputName, inputTensor))
         val outputTensor = results.get(0) as OnnxTensor
         val outBuffer = outputTensor.floatBuffer
+        outBuffer.rewind()
+        val inferDurationMs = System.currentTimeMillis() - inferStart
 
-        // 2. Extract predicted chrominance channels (a, b)
-        val plane = modelDim * modelDim
+        val plane = targetW * targetH
         val rawFloats = FloatArray(outBuffer.remaining())
         outBuffer.get(rawFloats)
 
         inputTensor.close()
+        outputTensor.close()
         results.close()
 
-        val predA = FloatArray(plane)
-        val predB = FloatArray(plane)
+        val ch0 = rawFloats.take(plane).average().toFloat()
+        val ch1 = rawFloats.slice(plane until 2 * plane).average().toFloat()
+        val ch2 = rawFloats.slice(2 * plane until 3 * plane).average().toFloat()
+        val channelDiff = ch0 - ch1
+        AppLogger.info("Inference completed in ${inferDurationMs}ms. Ch0: %.3f, Ch1: %.3f, Ch2: %.3f (diff: %.3f)".format(ch0, ch1, ch2, channelDiff))
 
-        if (rawFloats.size >= 3 * plane) {
-            // 3-channel output (DeOldify / Manga-Colorization-v2 RGB/BGR):
-            // Check dynamic range of output (normalized [0..1] vs [0..255])
-            var maxVal = 0.0f
-            for (i in 0 until kotlin.math.min(rawFloats.size, 1000)) {
-                val v = kotlin.math.abs(rawFloats[i])
-                if (v > maxVal) maxVal = v
-            }
-            val normFactor = if (maxVal <= 2.0f) 1.0f else 255.0f
+        onProgress?.invoke("Inference done (${inferDurationMs}ms). Processing tensor output...", 0.80f)
 
-            for (i in 0 until plane) {
-                val c0 = rawFloats[i] // R or B
-                val c1 = rawFloats[plane + i] // G
-                val c2 = rawFloats[2 * plane + i] // B or R
-                val r = if (isBgr) c2 else c0
-                val g = c1
-                val b = if (isBgr) c0 else c2
-
-                // Calculate CIE-Lab a and b
-                val rNorm = (r / normFactor).coerceIn(0.0f, 1.0f)
-                val gNorm = (g / normFactor).coerceIn(0.0f, 1.0f)
-                val bNorm = (b / normFactor).coerceIn(0.0f, 1.0f)
-
-                val x = 0.4124564f * rNorm + 0.3575761f * gNorm + 0.1804375f * bNorm
-                val y = 0.2126729f * rNorm + 0.7151522f * gNorm + 0.0721750f * bNorm
-                val z = 0.0193339f * rNorm + 0.1191920f * gNorm + 0.9503041f * bNorm
-
-                val fx = if (x > 0.008856f) Math.cbrt(x.toDouble()).toFloat() else (7.787f * x) + (16.0f / 116.0f)
-                val fy = if (y > 0.008856f) Math.cbrt(y.toDouble()).toFloat() else (7.787f * y) + (16.0f / 116.0f)
-                val fz = if (z > 0.008856f) Math.cbrt(z.toDouble()).toFloat() else (7.787f * z) + (16.0f / 116.0f)
-
-                predA[i] = 500.0f * (fx - fy)
-                predB[i] = 200.0f * (fy - fz)
-            }
-        } else if (rawFloats.size >= 2 * plane) {
-            // 2-channel output (DDColor ab channels directly)
-            for (i in 0 until plane) {
-                predA[i] = rawFloats[i]
-                predB[i] = rawFloats[plane + i]
-            }
+        // Raw model output: [0..1] float range -> convert to RGB Bitmap
+        val rawColorBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+        val colorPixels = IntArray(plane)
+        for (i in 0 until plane) {
+            val r = (rawFloats[i].coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255)
+            val g = (rawFloats[plane + i].coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255)
+            val b = (rawFloats[2 * plane + i].coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255)
+            colorPixels[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
+        rawColorBitmap.setPixels(colorPixels, 0, targetW, 0, 0, targetW, targetH)
 
-        // 3. Splicing: Merge original high-res L with predicted (a, b)
-        val colorizedBitmap = ColorizeImageUtils.spliceLabColorization(
+        val tuningParams = customParams ?: ColorizeImageUtils.ColorizerTuningParams.getPreset(blendMode)
+        onProgress?.invoke("Applying Tuning Pipeline (Skin: ${tuningParams.skinHue}°)...", 0.90f)
+
+        val finalBitmap = ColorizeImageUtils.applyTuningPipeline(
             originalBitmap = inputBitmap,
-            predA = predA,
-            predB = predB,
-            modelW = modelDim,
-            modelH = modelDim,
+            rawRgbBitmap = rawColorBitmap,
+            params = tuningParams,
             intensity = intensity,
+            numThreads = perf.chunkWorkers,
         )
+        rawColorBitmap.recycle()
 
-        colorizedBitmap
+        val totalDurationMs = System.currentTimeMillis() - startTime
+        onProgress?.invoke("Page complete (${totalDurationMs}ms)", 1.0f)
+        AppLogger.success("Output ready: ${finalBitmap.width}x${finalBitmap.height} in ${totalDurationMs}ms")
+
+        finalBitmap
+    }
+
+    @Synchronized
+    fun unloadSession() {
+        try {
+            activeSession?.close()
+            activeSession = null
+            activeModelPath = null
+            isNnapiActive = false
+        } catch (_: Exception) {}
     }
 
     override fun close() {
-        activeSession?.close()
-        activeSession = null
+        unloadSession()
     }
 }

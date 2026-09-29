@@ -28,6 +28,7 @@ internal fun LibraryCompactGrid(
     onGlobalSearchClicked: () -> Unit,
     // KMK -->
     gridState: LazyGridState = rememberLazyGridState(),
+    categoryNamesByMangaId: Map<Long, List<String>> = emptyMap(),
     // KMK <--
 ) {
     LazyLibraryGrid(
@@ -109,6 +110,7 @@ internal fun LibraryCompactGrid(
                 } else {
                     null
                 },
+                categoryBadges = categoryNamesByMangaId[manga.id].orEmpty(),
                 manga = manga,
             )
         }

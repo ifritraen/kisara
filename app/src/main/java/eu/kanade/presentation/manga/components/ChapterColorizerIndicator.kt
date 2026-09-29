@@ -35,10 +35,14 @@ import tachiyomi.presentation.core.components.material.IconButtonTokens
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.secondaryItemAlpha
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material3.ProgressIndicatorDefaults
+
 @Composable
 fun ChapterColorizerIndicator(
     enabled: Boolean,
     colorizerStateProvider: () -> Translation.State,
+    colorizerProgressProvider: () -> Int = { 0 },
     onClick: (ChapterTranslationAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,8 +54,9 @@ fun ChapterColorizerIndicator(
         )
         Translation.State.QUEUE, Translation.State.TRANSLATING -> ColorizingIndicator(
             enabled = enabled,
-            modifier = modifier,
+            colorizerProgressProvider = colorizerProgressProvider,
             onClick = onClick,
+            modifier = modifier,
         )
         Translation.State.TRANSLATED -> ColorizedIndicator(
             enabled = enabled,
@@ -96,10 +101,12 @@ private fun NotColorizedIndicator(
 @Composable
 private fun ColorizingIndicator(
     enabled: Boolean,
+    colorizerProgressProvider: () -> Int = { 0 },
     onClick: (ChapterTranslationAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isMenuExpanded by remember { mutableStateOf(false) }
+    val progress = colorizerProgressProvider()
     Box(
         modifier = modifier
             .size(IconButtonTokens.StateLayerSize)
@@ -112,14 +119,37 @@ private fun ColorizingIndicator(
         contentAlignment = Alignment.Center,
     ) {
         val strokeColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val iconColor: Color
 
-        CircularProgressIndicator(
-            modifier = ColorizerIndicatorModifier,
-            color = strokeColor,
-            strokeWidth = ColorizerIndicatorStrokeWidth,
-            trackColor = Color.Transparent,
-            strokeCap = StrokeCap.Butt,
-        )
+        if (progress <= 0) {
+            iconColor = strokeColor
+            CircularProgressIndicator(
+                modifier = ColorizerIndicatorModifier,
+                color = strokeColor,
+                strokeWidth = ColorizerIndicatorStrokeWidth,
+                trackColor = Color.Transparent,
+                strokeCap = StrokeCap.Butt,
+            )
+        } else {
+            val animatedProgress by animateFloatAsState(
+                targetValue = progress / 100f,
+                animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
+            )
+            iconColor = if (animatedProgress < 0.5f) {
+                strokeColor
+            } else {
+                MaterialTheme.colorScheme.background
+            }
+            CircularProgressIndicator(
+                progress = { animatedProgress },
+                modifier = ColorizerIndicatorModifier,
+                color = strokeColor,
+                strokeWidth = ColorizerIndicatorSize / 2,
+                trackColor = Color.Transparent,
+                strokeCap = StrokeCap.Butt,
+                gapSize = 0.dp,
+            )
+        }
 
         DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
             DropdownMenuItem(
@@ -134,7 +164,7 @@ private fun ColorizingIndicator(
             imageVector = Icons.Outlined.Palette,
             contentDescription = null,
             modifier = ColorizingIndicatorModifier,
-            tint = strokeColor,
+            tint = iconColor,
         )
     }
 }

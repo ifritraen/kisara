@@ -355,6 +355,11 @@ fun SourceOptionsDialog(
     // KMK <--
     onClickMoveUp: (() -> Unit)? = null,
     onClickMoveDown: (() -> Unit)? = null,
+    // KMK -->
+    onClickInstallMiniApp: (() -> Unit)? = null,
+    isMiniInstalled: Boolean = false,
+    onClickAddToHome: (() -> Unit)? = null,
+    // KMK <--
 ) {
     AlertDialog(
         title = {
@@ -461,6 +466,29 @@ fun SourceOptionsDialog(
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier
                             .clickable(onClick = onClickUninstall)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+                }
+                // KMK -->
+                if (onClickInstallMiniApp != null) {
+                    Text(
+                        text = if (isMiniInstalled) {
+                            stringResource(KMR.strings.mini_mode_uninstall_action)
+                        } else {
+                            stringResource(KMR.strings.mini_mode_install_action)
+                        },
+                        modifier = Modifier
+                            .clickable(onClick = onClickInstallMiniApp)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+                }
+                if (onClickAddToHome != null) {
+                    Text(
+                        text = stringResource(KMR.strings.mini_mode_add_to_home),
+                        modifier = Modifier
+                            .clickable(onClick = onClickAddToHome)
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
                     )

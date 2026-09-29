@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- KMK: Mini Mode slot labels (used in AndroidManifest.xml activity labels) -->
+    <string name="mini_slot_aka">K Aka</string>
+    <string name="mini_slot_ao">K Ao</string>
+    <string name="mini_slot_midori">K Midori</string>
+    <string name="mini_slot_ki">K Ki</string>
+    <string name="mini_slot_murasaki">K Murasaki</string>
+    <string name="mini_slot_daidai">K Daidai</string>
+    <string name="mini_slot_momoiro">K Momoiro</string>
+    <string name="mini_slot_mizu">K Mizu</string>
+    <string name="mini_slot_kon">K Kon</string>
+    <string name="mini_slot_sumi">K Sumi</string>
+    <!-- KMK -->
+</resources>

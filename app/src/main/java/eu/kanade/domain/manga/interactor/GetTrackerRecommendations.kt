@@ -142,6 +142,8 @@ class GetTrackerRecommendations(
                               nodes {
                                 mediaRecommendation {
                                   id
+                                  type
+                                  format
                                   title {
                                     userPreferred
                                     romaji
@@ -166,6 +168,8 @@ class GetTrackerRecommendations(
                           Page(page: 1, perPage: 15) {
                             media(type: ANIME, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
                               id
+                              type
+                              format
                               title {
                                 userPreferred
                                 romaji
@@ -190,6 +194,8 @@ class GetTrackerRecommendations(
                       Page(page: 1, perPage: 15) {
                         media(type: MANGA, format: NOVEL, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
                           id
+                          type
+                          format
                           title {
                             userPreferred
                             romaji
@@ -217,6 +223,8 @@ class GetTrackerRecommendations(
                               nodes {
                                 mediaRecommendation {
                                   id
+                                  type
+                                  format
                                   title {
                                     userPreferred
                                     romaji
@@ -241,6 +249,8 @@ class GetTrackerRecommendations(
                           Page(page: 1, perPage: 15) {
                             media(type: MANGA, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
                               id
+                              type
+                              format
                               title {
                                 userPreferred
                                 romaji
@@ -272,11 +282,27 @@ class GetTrackerRecommendations(
 
             val list = mutableListOf<TrackerRecommendation>()
 
+            fun isValidRec(recMedia: kotlinx.serialization.json.JsonObject): Boolean {
+                val recType = recMedia["type"]?.jsonPrimitive?.content
+                val recFormat = recMedia["format"]?.jsonPrimitive?.content
+                val isAnimeFormat = recFormat in listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC")
+                return when (mediaType) {
+                    MediaType.ANIME -> (recType == null || recType.equals("ANIME", ignoreCase = true)) &&
+                        (recType?.equals("ANIME", ignoreCase = true) == true || isAnimeFormat)
+                    MediaType.NOVEL -> (recType == null || recType.equals("MANGA", ignoreCase = true)) &&
+                        recFormat?.equals("NOVEL", ignoreCase = true) == true
+                    MediaType.MANGA -> (recType == null || recType.equals("MANGA", ignoreCase = true)) &&
+                        !isAnimeFormat && recFormat?.equals("NOVEL", ignoreCase = true) != true
+                }
+            }
+
             if (data.containsKey("Media")) {
                 val media = data["Media"]?.jsonObject
                 val recs = media?.get("recommendations")?.jsonObject?.get("nodes")?.jsonArray
                 recs?.forEach { node ->
                     val recMedia = node.jsonObject["mediaRecommendation"]?.jsonObject ?: return@forEach
+                    if (!isValidRec(recMedia)) return@forEach
+
                     val titleObj = recMedia["title"]?.jsonObject
                     val title = titleObj?.get("userPreferred")?.jsonPrimitive?.content
                         ?: titleObj?.get("romaji")?.jsonPrimitive?.content
@@ -307,6 +333,8 @@ class GetTrackerRecommendations(
                 val mediaList = page?.get("media")?.jsonArray
                 mediaList?.forEach { node ->
                     val recMedia = node.jsonObject
+                    if (!isValidRec(recMedia)) return@forEach
+
                     val titleObj = recMedia["title"]?.jsonObject
                     val title = titleObj?.get("userPreferred")?.jsonPrimitive?.content
                         ?: titleObj?.get("romaji")?.jsonPrimitive?.content

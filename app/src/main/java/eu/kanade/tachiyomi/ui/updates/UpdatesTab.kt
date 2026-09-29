@@ -51,6 +51,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.updates.UpdatesScreenModel.Event
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import mihon.feature.upcoming.UpcomingScreen
 import tachiyomi.core.common.i18n.stringResource
@@ -62,6 +63,236 @@ import tachiyomi.presentation.core.theme.active
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+// KMK -->
+object UpdatesTabEvents {
+    val nextSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val prevSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val selectSubTabEvent = kotlinx.coroutines.channels.Channel<Int>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    var currentPageIndex = 1
+}
+
+@Composable
+fun Screen.UpdatesTabViewContent(
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(),
+    screenModel: UpdatesScreenModel? = null,
+    settingsScreenModel: UpdatesSettingsScreenModel? = null,
+    animeScreenModel: eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel? = null,
+    novelScreenModel: eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel? = null,
+) {
+    val context = LocalContext.current
+    val navigator = LocalNavigator.currentOrThrow
+    val scope = rememberCoroutineScope()
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+    val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
+    val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
+
+    val tabTitles = persistentListOf(
+        stringResource(KMR.strings.tab_calendar),
+        stringResource(KMR.strings.tab_updates),
+        stringResource(KMR.strings.tab_schedule),
+    )
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = UpdatesTabEvents.currentPageIndex.coerceIn(0, tabTitles.size - 1)) { tabTitles.size }
+
+    LaunchedEffect(pagerState.currentPage) {
+        UpdatesTabEvents.currentPageIndex = pagerState.currentPage
+    }
+
+    LaunchedEffect(pagerState.pageCount) {
+        launch {
+            UpdatesTabEvents.nextSubTabEvent.receiveAsFlow().collectLatest {
+                if (pagerState.currentPage < pagerState.pageCount - 1) {
+                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                }
+            }
+        }
+        launch {
+            UpdatesTabEvents.prevSubTabEvent.receiveAsFlow().collectLatest {
+                if (pagerState.currentPage > 0) {
+                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                }
+            }
+        }
+        launch {
+            UpdatesTabEvents.selectSubTabEvent.receiveAsFlow().collectLatest { index ->
+                if (index in 0 until tabTitles.size) {
+                    pagerState.animateScrollToPage(index)
+                }
+            }
+        }
+    }
+
+    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
+        // Show in-screen tab row ONLY if floating bar is disabled or top tab bar is explicitly enabled
+        if (!floatingBottomBar || showTopTabBar) {
+            androidx.compose.material3.PrimaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                tabTitles.forEachIndexed { index, title ->
+                    androidx.compose.material3.Tab(
+                        selected = pagerState.currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        text = {
+                            androidx.compose.material3.Text(
+                                text = title,
+                                fontWeight = if (pagerState.currentPage == index) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) { pageIndex ->
+            when (pageIndex) {
+                0 -> {
+                    val upcomingScreenModel = rememberScreenModel { mihon.feature.upcoming.UpcomingScreenModel() }
+                    val upcomingState by upcomingScreenModel.state.collectAsState()
+                    mihon.feature.upcoming.UpcomingScreenContent(
+                        state = upcomingState,
+                        setSelectedYearMonth = upcomingScreenModel::setSelectedYearMonth,
+                        onClickUpcoming = { navigator.push(MangaScreen(it.id)) },
+                        showUpdatingMangas = upcomingScreenModel::showUpdatingMangas,
+                        hideUpdatingMangas = upcomingScreenModel::hideUpdatingMangas,
+                        isPredictReleaseDate = tachiyomi.domain.library.service.LibraryPreferences.MANGA_OUTSIDE_RELEASE_PERIOD in upcomingScreenModel.restriction,
+                    )
+                }
+                1 -> {
+                    when (activeMediaType) {
+                        eu.kanade.domain.ui.model.MediaType.NOVEL -> {
+                            val sm = novelScreenModel ?: rememberScreenModel { eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel() }
+                            val novelState by sm.state.collectAsState()
+                            eu.kanade.presentation.updates.novel.NovelUpdatesScreen(
+                                state = novelState,
+                                lastUpdated = sm.lastUpdated,
+                                onNovelClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(it)) },
+                                onChapterClick = { navigator.push(eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(it)) },
+                                onToggleSelection = sm::toggleSelection,
+                                onMultiBookmarkClicked = sm::bookmarkUpdates,
+                                onMultiMarkAsReadClicked = sm::markUpdatesRead,
+                            )
+                        }
+                        eu.kanade.domain.ui.model.MediaType.ANIME -> {
+                            val sm = animeScreenModel ?: rememberScreenModel { eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel() }
+                            val animeState by sm.state.collectAsState()
+                            eu.kanade.presentation.updates.anime.AnimeUpdatesScreen(
+                                state = animeState,
+                                onAnimeClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it)) },
+                                onPlayClick = { animeId, episodeId ->
+                                    val intent = eu.kanade.tachiyomi.ui.player.PlayerActivity.newIntent(context, animeId, episodeId)
+                                    context.startActivity(intent)
+                                },
+                                onToggleSelection = sm::toggleSelection,
+                            )
+                        }
+                        else -> {
+                            val sm = screenModel ?: rememberScreenModel { UpdatesScreenModel() }
+                            val settingsSM = settingsScreenModel ?: rememberScreenModel { UpdatesSettingsScreenModel() }
+                            val state by sm.state.collectAsState()
+                            val usePanoramaCover by settingsSM.updatesPreferences.usePanoramaCover().collectAsState()
+
+                            UpdateScreen(
+                                state = state,
+                                snackbarHostState = sm.snackbarHostState,
+                                lastUpdated = sm.lastUpdated,
+                                preserveReadingPosition = sm.preserveReadingPosition,
+                                onClickCover = { item -> navigator.push(MangaScreen(item.update.mangaId)) },
+                                onSelectAll = sm::toggleAllSelection,
+                                onInvertSelection = sm::invertSelection,
+                                onUpdateLibrary = sm::updateLibrary,
+                                onDownloadChapter = sm::downloadChapters,
+                                onMultiBookmarkClicked = sm::bookmarkUpdates,
+                                onMultiMarkAsReadClicked = sm::markUpdatesRead,
+                                onMultiDeleteClicked = sm::showConfirmDeleteChapters,
+                                updateSwipeStartAction = sm.chapterSwipeStartAction,
+                                updateSwipeEndAction = sm.chapterSwipeEndAction,
+                                onUpdateSwipe = sm::updateSwipe,
+                                onUpdateSelected = sm::toggleSelection,
+                                onOpenChapter = {
+                                    val intent = ReaderActivity.newIntent(context, it.update.mangaId, it.update.chapterId)
+                                    context.startActivity(intent)
+                                },
+                                onCalendarClicked = { scope.launch { pagerState.animateScrollToPage(0) } },
+                                onFilterClicked = sm::showFilterDialog,
+                                hasActiveFilters = state.hasActiveFilters,
+                                usePanoramaCover = usePanoramaCover,
+                                collapseToggle = sm::toggleExpandedState,
+                                showAppBar = false,
+                            )
+
+                            val onDismissDialog = { sm.setDialog(null) }
+                            when (val dialog = state.dialog) {
+                                is UpdatesScreenModel.Dialog.DeleteConfirmation -> {
+                                    UpdatesDeleteConfirmationDialog(
+                                        onDismissRequest = onDismissDialog,
+                                        onConfirm = { sm.deleteChapters(dialog.toDelete) },
+                                    )
+                                }
+                                is UpdatesScreenModel.Dialog.FilterSheet -> {
+                                    UpdatesFilterDialog(
+                                        onDismissRequest = onDismissDialog,
+                                        screenModel = settingsSM,
+                                    )
+                                }
+                                null -> {}
+                            }
+
+                            LaunchedEffect(Unit) {
+                                sm.events.collectLatest { event ->
+                                    when (event) {
+                                        Event.InternalError -> sm.snackbarHostState.showSnackbar(
+                                            context.stringResource(MR.strings.internal_error),
+                                        )
+                                        is Event.LibraryUpdateTriggered -> {
+                                            val msg = if (event.started) {
+                                                MR.strings.updating_library
+                                            } else {
+                                                MR.strings.update_already_running
+                                            }
+                                            sm.snackbarHostState.showSnackbar(context.stringResource(msg))
+                                        }
+                                    }
+                                }
+                            }
+
+                            LaunchedEffect(state.selectionMode) {
+                                HomeScreen.showBottomNav(!state.selectionMode)
+                            }
+
+                            LaunchedEffect(state.isLoading) {
+                                if (!state.isLoading) {
+                                    (context as? MainActivity)?.ready = true
+                                    with(DiscordRPCService) {
+                                        discordScope.launchIO { setScreen(context, DiscordScreen.UPDATES) }
+                                    }
+                                }
+                            }
+
+                            DisposableEffect(Unit) {
+                                sm.resetNewUpdatesCount()
+                                onDispose {
+                                    sm.resetNewUpdatesCount()
+                                }
+                            }
+                        }
+                    }
+                }
+                2 -> {
+                    val animeScheduleScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenModel() }
+                    eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenContent(screenModel = animeScheduleScreenModel)
+                }
+            }
+        }
+    }
+}
+// KMK <--
 
 data object UpdatesTab : Tab {
     @Suppress("unused")
@@ -95,179 +326,7 @@ data object UpdatesTab : Tab {
 
     @Composable
     override fun Content() {
-        val context = LocalContext.current
-        val navigator = LocalNavigator.currentOrThrow
-        val scope = rememberCoroutineScope()
-        val uiPreferences = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }
-        val activeMediaType by uiPreferences.activeMediaType().collectAsState()
-
-        val tabTitles = persistentListOf(
-            stringResource(KMR.strings.tab_calendar),
-            stringResource(KMR.strings.tab_updates),
-            stringResource(KMR.strings.tab_schedule),
-        )
-        val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = 1) { tabTitles.size }
-
-        androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
-            androidx.compose.material3.PrimaryTabRow(
-                selectedTabIndex = pagerState.currentPage,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                tabTitles.forEachIndexed { index, title ->
-                    androidx.compose.material3.Tab(
-                        selected = pagerState.currentPage == index,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        text = {
-                            androidx.compose.material3.Text(
-                                text = title,
-                                fontWeight = if (pagerState.currentPage == index) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
-                            )
-                        },
-                    )
-                }
-            }
-
-            androidx.compose.foundation.pager.HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            ) { pageIndex ->
-                when (pageIndex) {
-                    0 -> {
-                        val upcomingScreenModel = rememberScreenModel { mihon.feature.upcoming.UpcomingScreenModel() }
-                        val upcomingState by upcomingScreenModel.state.collectAsState()
-                        mihon.feature.upcoming.UpcomingScreenContent(
-                            state = upcomingState,
-                            setSelectedYearMonth = upcomingScreenModel::setSelectedYearMonth,
-                            onClickUpcoming = { navigator.push(MangaScreen(it.id)) },
-                            showUpdatingMangas = upcomingScreenModel::showUpdatingMangas,
-                            hideUpdatingMangas = upcomingScreenModel::hideUpdatingMangas,
-                            isPredictReleaseDate = tachiyomi.domain.library.service.LibraryPreferences.MANGA_OUTSIDE_RELEASE_PERIOD in upcomingScreenModel.restriction,
-                        )
-                    }
-                    1 -> {
-                        if (activeMediaType == eu.kanade.domain.ui.model.MediaType.NOVEL) {
-                            val novelScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel() }
-                            val novelState by novelScreenModel.state.collectAsState()
-                            eu.kanade.presentation.updates.novel.NovelUpdatesScreen(
-                                state = novelState,
-                                lastUpdated = novelScreenModel.lastUpdated,
-                                onNovelClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(it)) },
-                                onChapterClick = { navigator.push(eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(it)) },
-                                onToggleSelection = novelScreenModel::toggleSelection,
-                                onMultiBookmarkClicked = novelScreenModel::bookmarkUpdates,
-                                onMultiMarkAsReadClicked = novelScreenModel::markUpdatesRead,
-                            )
-                        } else if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
-                            val animeScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.updates.anime.AnimeUpdatesScreenModel() }
-                            val animeState by animeScreenModel.state.collectAsState()
-                            eu.kanade.presentation.updates.anime.AnimeUpdatesScreen(
-                                state = animeState,
-                                onAnimeClick = { navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(it)) },
-                                onPlayClick = { animeId, episodeId ->
-                                    val intent = eu.kanade.tachiyomi.ui.player.PlayerActivity.newIntent(context, animeId, episodeId)
-                                    context.startActivity(intent)
-                                },
-                                onToggleSelection = animeScreenModel::toggleSelection,
-                            )
-                        } else {
-                            val screenModel = rememberScreenModel { UpdatesScreenModel() }
-                            val settingsScreenModel = rememberScreenModel { UpdatesSettingsScreenModel() }
-                            val state by screenModel.state.collectAsState()
-                            val usePanoramaCover by settingsScreenModel.updatesPreferences.usePanoramaCover().collectAsState()
-
-                            UpdateScreen(
-                                state = state,
-                                snackbarHostState = screenModel.snackbarHostState,
-                                lastUpdated = screenModel.lastUpdated,
-                                preserveReadingPosition = screenModel.preserveReadingPosition,
-                                onClickCover = { item -> navigator.push(MangaScreen(item.update.mangaId)) },
-                                onSelectAll = screenModel::toggleAllSelection,
-                                onInvertSelection = screenModel::invertSelection,
-                                onUpdateLibrary = screenModel::updateLibrary,
-                                onDownloadChapter = screenModel::downloadChapters,
-                                onMultiBookmarkClicked = screenModel::bookmarkUpdates,
-                                onMultiMarkAsReadClicked = screenModel::markUpdatesRead,
-                                onMultiDeleteClicked = screenModel::showConfirmDeleteChapters,
-                                updateSwipeStartAction = screenModel.chapterSwipeStartAction,
-                                updateSwipeEndAction = screenModel.chapterSwipeEndAction,
-                                onUpdateSwipe = screenModel::updateSwipe,
-                                onUpdateSelected = screenModel::toggleSelection,
-                                onOpenChapter = {
-                                    val intent = ReaderActivity.newIntent(context, it.update.mangaId, it.update.chapterId)
-                                    context.startActivity(intent)
-                                },
-                                onCalendarClicked = { scope.launch { pagerState.animateScrollToPage(0) } },
-                                onFilterClicked = screenModel::showFilterDialog,
-                                hasActiveFilters = state.hasActiveFilters,
-                                usePanoramaCover = usePanoramaCover,
-                                collapseToggle = screenModel::toggleExpandedState,
-                            )
-
-                            val onDismissDialog = { screenModel.setDialog(null) }
-                            when (val dialog = state.dialog) {
-                                is UpdatesScreenModel.Dialog.DeleteConfirmation -> {
-                                    UpdatesDeleteConfirmationDialog(
-                                        onDismissRequest = onDismissDialog,
-                                        onConfirm = { screenModel.deleteChapters(dialog.toDelete) },
-                                    )
-                                }
-                                is UpdatesScreenModel.Dialog.FilterSheet -> {
-                                    UpdatesFilterDialog(
-                                        onDismissRequest = onDismissDialog,
-                                        screenModel = settingsScreenModel,
-                                    )
-                                }
-                                null -> {}
-                            }
-
-                            LaunchedEffect(Unit) {
-                                screenModel.events.collectLatest { event ->
-                                    when (event) {
-                                        Event.InternalError -> screenModel.snackbarHostState.showSnackbar(
-                                            context.stringResource(MR.strings.internal_error),
-                                        )
-                                        is Event.LibraryUpdateTriggered -> {
-                                            val msg = if (event.started) {
-                                                MR.strings.updating_library
-                                            } else {
-                                                MR.strings.update_already_running
-                                            }
-                                            screenModel.snackbarHostState.showSnackbar(context.stringResource(msg))
-                                        }
-                                    }
-                                }
-                            }
-
-                            LaunchedEffect(state.selectionMode) {
-                                HomeScreen.showBottomNav(!state.selectionMode)
-                            }
-
-                            LaunchedEffect(state.isLoading) {
-                                if (!state.isLoading) {
-                                    (context as? MainActivity)?.ready = true
-                                    with(DiscordRPCService) {
-                                        discordScope.launchIO { setScreen(context, DiscordScreen.UPDATES) }
-                                    }
-                                }
-                            }
-
-                            DisposableEffect(Unit) {
-                                screenModel.resetNewUpdatesCount()
-                                onDispose {
-                                    screenModel.resetNewUpdatesCount()
-                                }
-                            }
-                        }
-                    }
-                    2 -> {
-                        val animeScheduleScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenModel() }
-                        eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenContent(screenModel = animeScheduleScreenModel)
-                    }
-                }
-            }
-        }
+        UpdatesTabViewContent()
     }
 }
 
@@ -277,7 +336,6 @@ fun Screen.updatesTab(
     screenModel: UpdatesScreenModel,
     settingsScreenModel: UpdatesSettingsScreenModel,
 ): TabContent {
-    val navigator = LocalNavigator.currentOrThrow
     val state by screenModel.state.collectAsState()
 
     return TabContent(
@@ -292,7 +350,7 @@ fun Screen.updatesTab(
             AppBar.Action(
                 title = stringResource(MR.strings.action_view_upcoming),
                 icon = Icons.Outlined.CalendarMonth,
-                onClick = { navigator.push(UpcomingScreen()) },
+                onClick = { UpdatesTabEvents.selectSubTabEvent.trySend(0) },
             ),
             AppBar.Action(
                 title = stringResource(MR.strings.action_update_library),
@@ -300,96 +358,12 @@ fun Screen.updatesTab(
                 onClick = { screenModel.updateLibrary() },
             ),
         ),
-        content = { contentPadding, snackbarHostState ->
-            val context = LocalContext.current
-            val usePanoramaCover by settingsScreenModel.updatesPreferences.usePanoramaCover().collectAsState()
-
-            Box(modifier = Modifier) {
-                UpdateScreen(
-                    state = state,
-                    snackbarHostState = screenModel.snackbarHostState,
-                    lastUpdated = screenModel.lastUpdated,
-                    preserveReadingPosition = screenModel.preserveReadingPosition,
-                    onClickCover = { item -> navigator.push(MangaScreen(item.update.mangaId)) },
-                    onSelectAll = screenModel::toggleAllSelection,
-                    onInvertSelection = screenModel::invertSelection,
-                    onUpdateLibrary = screenModel::updateLibrary,
-                    onDownloadChapter = screenModel::downloadChapters,
-                    onMultiBookmarkClicked = screenModel::bookmarkUpdates,
-                    onMultiMarkAsReadClicked = screenModel::markUpdatesRead,
-                    onMultiDeleteClicked = screenModel::showConfirmDeleteChapters,
-                    updateSwipeStartAction = screenModel.chapterSwipeStartAction,
-                    updateSwipeEndAction = screenModel.chapterSwipeEndAction,
-                    onUpdateSwipe = screenModel::updateSwipe,
-                    onUpdateSelected = screenModel::toggleSelection,
-                    onOpenChapter = {
-                        val intent = ReaderActivity.newIntent(context, it.update.mangaId, it.update.chapterId)
-                        context.startActivity(intent)
-                    },
-                    onCalendarClicked = { navigator.push(UpcomingScreen()) },
-                    onFilterClicked = screenModel::showFilterDialog,
-                    hasActiveFilters = state.hasActiveFilters,
-                    usePanoramaCover = usePanoramaCover,
-                    collapseToggle = screenModel::toggleExpandedState,
-                    showAppBar = false,
-                )
-            }
-
-            val onDismissDialog = { screenModel.setDialog(null) }
-            when (val dialog = state.dialog) {
-                is UpdatesScreenModel.Dialog.DeleteConfirmation -> {
-                    UpdatesDeleteConfirmationDialog(
-                        onDismissRequest = onDismissDialog,
-                        onConfirm = { screenModel.deleteChapters(dialog.toDelete) },
-                    )
-                }
-                is UpdatesScreenModel.Dialog.FilterSheet -> {
-                    UpdatesFilterDialog(
-                        onDismissRequest = onDismissDialog,
-                        screenModel = settingsScreenModel,
-                    )
-                }
-                null -> {}
-            }
-
-            LaunchedEffect(Unit) {
-                screenModel.events.collectLatest { event ->
-                    when (event) {
-                        Event.InternalError -> screenModel.snackbarHostState.showSnackbar(
-                            context.stringResource(MR.strings.internal_error),
-                        )
-                        is Event.LibraryUpdateTriggered -> {
-                            val msg = if (event.started) {
-                                MR.strings.updating_library
-                            } else {
-                                MR.strings.update_already_running
-                            }
-                            screenModel.snackbarHostState.showSnackbar(context.stringResource(msg))
-                        }
-                    }
-                }
-            }
-
-            LaunchedEffect(state.selectionMode) {
-                HomeScreen.showBottomNav(!state.selectionMode)
-            }
-
-            LaunchedEffect(state.isLoading) {
-                if (!state.isLoading) {
-                    (context as? MainActivity)?.ready = true
-                    with(DiscordRPCService) {
-                        discordScope.launchIO { setScreen(context, DiscordScreen.UPDATES) }
-                    }
-                }
-            }
-
-            DisposableEffect(Unit) {
-                screenModel.resetNewUpdatesCount()
-
-                onDispose {
-                    screenModel.resetNewUpdatesCount()
-                }
-            }
+        content = { contentPadding, _ ->
+            UpdatesTabViewContent(
+                contentPadding = contentPadding,
+                screenModel = screenModel,
+                settingsScreenModel = settingsScreenModel,
+            )
         },
     )
 }

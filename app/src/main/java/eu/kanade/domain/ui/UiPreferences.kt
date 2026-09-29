@@ -113,7 +113,7 @@ class UiPreferences(
 
     fun previewsRowCount() = preferenceStore.getInt("pref_previews_row_count", 4)
 
-    fun useNewSourceNavigation() = preferenceStore.getBoolean("use_new_source_navigation", true)
+    fun useNewSourceNavigation() = preferenceStore.getBoolean("use_new_source_navigation", false)
 
     fun bottomBarLabels() = preferenceStore.getBoolean("pref_show_bottom_bar_labels", true)
 
@@ -273,11 +273,18 @@ class UiPreferences(
     fun novelSearchSources() = preferenceStore.getStringSet("kisara_novel_search_sources", emptySet())
     fun searchRecentQueries() = preferenceStore.getStringSet("kisara_search_recent_queries", emptySet())
     fun anilistHomeEnabledSections() = preferenceStore.getStringSet("kisara_anilist_home_enabled_sections", emptySet())
+    fun trackTabPreviousSeasonsCount() = preferenceStore.getInt("kisara_track_tab_previous_seasons_count", 3)
     fun trackerPrioritizedMangaSources() = preferenceStore.getString("kisara_tracker_prioritized_manga_sources", "")
     fun trackerPrioritizedAnimeSources() = preferenceStore.getString("kisara_tracker_prioritized_anime_sources", "")
     fun trackerPrioritizedNovelSources() = preferenceStore.getString("kisara_tracker_prioritized_novel_sources", "")
     fun animatedAuroraBackground() = preferenceStore.getBoolean("pref_animated_aurora_background", true)
     fun specialBackgroundStyle() = preferenceStore.getString("pref_special_background_style", "none")
+    fun globalSearchStyle() = preferenceStore.getEnum("kisara_global_search_style", GlobalSearchStyle.BOTTOM_SHEET)
+
+    enum class GlobalSearchStyle(val titleRes: StringResource) {
+        TOP_BAR(KMR.strings.pref_global_search_style_top_bar),
+        BOTTOM_SHEET(KMR.strings.pref_global_search_style_bottom_sheet),
+    }
     // KMK <--
 
     // SY <--

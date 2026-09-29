@@ -40,31 +40,41 @@ class ArchiveInputStream(
     }
 
     private val oneByteBuffer = ByteBuffer.allocateDirect(1)
+    private val directBuffer = ByteBuffer.allocateDirect(64 * 1024)
 
     override fun read(): Int {
-        read(oneByteBuffer)
-        return if (oneByteBuffer.hasRemaining()) oneByteBuffer.get().toUByte().toInt() else -1
+        synchronized(lock) {
+            if (isClosed) return -1
+            oneByteBuffer.clear()
+            oneByteBuffer.limit(1)
+            Archive.readData(archive, oneByteBuffer)
+            oneByteBuffer.flip()
+            return if (oneByteBuffer.hasRemaining()) oneByteBuffer.get().toUByte().toInt() else -1
+        }
     }
 
     override fun read(b: ByteArray, off: Int, len: Int): Int {
-        val buffer = ByteBuffer.wrap(b, off, len)
-        read(buffer)
-        return if (buffer.hasRemaining()) buffer.remaining() else -1
-    }
-
-    private fun read(buffer: ByteBuffer) {
-        buffer.clear()
-        Archive.readData(archive, buffer)
-        buffer.flip()
+        if (len <= 0) return 0
+        synchronized(lock) {
+            if (isClosed) return -1
+            val toRead = minOf(len, directBuffer.capacity())
+            directBuffer.clear()
+            directBuffer.limit(toRead)
+            Archive.readData(archive, directBuffer)
+            directBuffer.flip()
+            val readBytes = directBuffer.remaining()
+            if (readBytes <= 0) return -1
+            directBuffer.get(b, off, readBytes)
+            return readBytes
+        }
     }
 
     override fun close() {
         synchronized(lock) {
             if (isClosed) return
             isClosed = true
+            Archive.readFree(archive)
         }
-
-        Archive.readFree(archive)
     }
 
     fun getNextEntry(): MihonArchiveEntry? {

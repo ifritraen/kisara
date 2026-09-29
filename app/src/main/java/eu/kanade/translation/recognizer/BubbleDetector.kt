@@ -183,7 +183,7 @@ class BubbleDetector(private val context: Context) : AutoCloseable {
     private fun bitmapToTensor(bitmap: Bitmap, size: Int): OnnxTensor {
         val pixels = IntArray(size * size)
         bitmap.getPixels(pixels, 0, size, 0, 0, size, size)
-        val buf = FloatBuffer.allocate(3 * size * size)
+        val buf = eu.kanade.tachiyomi.data.ai.AiBufferUtils.allocateDirectFloatBuffer(3 * size * size)
         for (c in 0..2) {
             for (px in pixels) {
                 buf.put(

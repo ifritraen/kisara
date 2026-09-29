@@ -314,6 +314,14 @@ object SettingsMainScreen : Screen() {
             badgeColor = Color(0xFFC4EED0),
             badgeIconTint = Color(0xFF146C2E),
         ),
+        Item(
+            titleRes = KMR.strings.pref_category_colorizer,
+            subtitleRes = KMR.strings.pref_colorizer_summary,
+            icon = Icons.Outlined.Palette,
+            screen = SettingsColorizerScreen,
+            badgeColor = Color(0xFFFFD8E4),
+            badgeIconTint = Color(0xFFC2185B),
+        ),
         // KMK <--
         Item(
             titleRes = MR.strings.browse,

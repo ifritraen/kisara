@@ -18,6 +18,7 @@ import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen
 import eu.kanade.tachiyomi.ui.category.sources.SourceCategoryScreen
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableMap
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
@@ -62,6 +63,11 @@ object SettingsBrowseScreen : SearchableSettings {
                 title = stringResource(MR.strings.label_sources),
                 preferenceItems = persistentListOf(
                     // KMK -->
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.globalSearchStyle(),
+                        entries = UiPreferences.GlobalSearchStyle.entries.associateWith { stringResource(it.titleRes) }.toImmutableMap(),
+                        title = stringResource(KMR.strings.pref_global_search_style),
+                    ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = sourcePreferences.relatedMangas(),
                         title = stringResource(KMR.strings.pref_source_related_mangas),
@@ -100,11 +106,6 @@ object SettingsBrowseScreen : SearchableSettings {
                         preference = sourcePreferences.sourcesTabCategoriesFilter(),
                         title = stringResource(SYMR.strings.pref_source_source_filtering),
                         subtitle = stringResource(SYMR.strings.pref_source_source_filtering_summery),
-                    ),
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.useNewSourceNavigation(),
-                        title = stringResource(SYMR.strings.pref_source_navigation),
-                        subtitle = stringResource(SYMR.strings.pref_source_navigation_summery),
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = sourcePreferences.allowLocalSourceHiddenFolders(),

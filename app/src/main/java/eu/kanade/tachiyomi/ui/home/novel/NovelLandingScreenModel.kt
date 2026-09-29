@@ -73,6 +73,7 @@ class NovelLandingScreenModel(
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val networkToLocalNovel: NetworkToLocalNovel = Injekt.get(),
     private val getTrackerRecommendations: GetTrackerRecommendations = Injekt.get(),
+    private val getTrackerContinueReading: eu.kanade.domain.manga.interactor.GetTrackerContinueReading = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
 ) : StateScreenModel<NovelLandingScreenModel.State>(State()) {
 
@@ -132,12 +133,13 @@ class NovelLandingScreenModel(
 
         // 5. Load Tracker Recommendations & Feed Cache
         loadTrackerRecommendations(force = false)
+        loadTrackerContinue(force = false)
         loadFeedCache()
         triggerBackgroundFeedFetch(force = false)
     }
 
     private fun extractTopTags(library: List<tachiyomi.domain.library.novel.LibraryNovel>): List<String> {
-        return library.flatMap { item ->
+        val extracted = library.flatMap { item ->
             item.novel.genre.orEmpty()
                 .flatMap { it.split(",", ";", "/").map(String::trim) }
                 .filter { it.isNotBlank() }
@@ -146,8 +148,14 @@ class NovelLandingScreenModel(
             .eachCount()
             .entries
             .sortedByDescending { it.value }
-            .take(10)
+            .take(15)
             .map { it.key }
+
+        return if (extracted.isNotEmpty()) {
+            extracted
+        } else {
+            listOf("Action", "Romance", "Fantasy", "Comedy", "Sci-Fi", "Adventure", "Drama", "Mystery", "Supernatural", "Slice of Life", "Isekai", "Xianxia", "Wuxia")
+        }
     }
 
     fun loadSpotlightSuggestions() {
@@ -155,7 +163,6 @@ class NovelLandingScreenModel(
             try {
                 val library = getLibraryNovel.await()
                 val topTags = extractTopTags(library)
-                val topTag = topTags.firstOrNull()
 
                 val sources = sourceManager.getCatalogueSources()
                 val suggestions = mutableListOf<Novel>()
@@ -163,7 +170,7 @@ class NovelLandingScreenModel(
                 val favoriteTitles = library.map { it.novel.title.lowercase().trim() }.toSet()
                 val favoriteIds = library.map { it.novel.id }.toSet()
 
-                for (tag in topTags.take(3)) {
+                for (tag in topTags.take(10)) {
                     val jobs = sources.take(4).map { source ->
                         async {
                             try {
@@ -181,7 +188,7 @@ class NovelLandingScreenModel(
                     })
                 }
 
-                if (suggestions.isEmpty()) {
+                if (suggestions.size < 10) {
                     val jobs = sources.take(4).map { source ->
                         async {
                             try {
@@ -199,12 +206,12 @@ class NovelLandingScreenModel(
                     })
                 }
 
-                val finalSpotlight = suggestions.distinctBy { it.id }.shuffled().take(10)
+                val finalSpotlight = suggestions.distinctBy { it.id }.shuffled().take(15)
                 if (finalSpotlight.isNotEmpty()) {
                     mutableState.update {
                         it.copy(
                             spotlightNovel = finalSpotlight.toImmutableList(),
-                            spotlightTagName = topTag?.let { tag -> "Spotlight: $tag" },
+                            spotlightTagName = null,
                         )
                     }
                     fetchMissingSpotlightDetails(finalSpotlight)
@@ -268,6 +275,23 @@ class NovelLandingScreenModel(
                 }
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Failed to load novel tracker recommendations" }
+            }
+        }
+    }
+
+    fun loadTrackerContinue(force: Boolean = false) {
+        screenModelScope.launchIO {
+            try {
+                val cached = getTrackerContinueReading.getCached(MediaType.NOVEL)
+                if (cached.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerContinue = cached.toImmutableList()) }
+                }
+                val fresh = getTrackerContinueReading.fetch(MediaType.NOVEL, force = force)
+                if (fresh.isNotEmpty()) {
+                    mutableState.update { it.copy(trackerContinue = fresh.toImmutableList()) }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Failed to load novel tracker continue items" }
             }
         }
     }
@@ -545,6 +569,7 @@ class NovelLandingScreenModel(
         val updates: ImmutableList<NovelUpdatesWithRelations> = persistentListOf(),
         val libraryRandom: ImmutableList<Novel> = persistentListOf(),
         val trackerRecommendations: ImmutableList<TrackerRecommendation> = persistentListOf(),
+        val trackerContinue: ImmutableList<eu.kanade.domain.manga.interactor.TrackerContinueItem> = persistentListOf(),
         val feed: ImmutableList<CachedFeedNovel> = persistentListOf(),
         val isFeedRefreshing: Boolean = false,
         val dialog: Dialog? = null,

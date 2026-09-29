@@ -86,7 +86,11 @@ internal class DownloadPageLoader(
         val dbChapter = chapter.chapter
         val pages = downloadManager.buildPageList(source, manga, dbChapter.toDomainChapter()!!)
         return pages.map { page ->
-            val pageName = page.uri?.path?.substringAfterLast("/")
+            val pageName = page.uri?.let { uri ->
+                val decoded = try { Uri.decode(uri.toString()) } catch (_: Exception) { uri.toString() }
+                decoded.substringAfterLast("/").substringAfterLast(":")
+            } ?: page.imageUrl?.substringAfterLast("/")
+
             ReaderPage(page.index, page.url, page.imageUrl) {
                 val superResFile = if (pageName != null) {
                     superResolutionManager.getSuperResolutionPageFile(
@@ -120,9 +124,19 @@ internal class DownloadPageLoader(
             }.apply {
                 status = Page.State.Ready
                 // KMK -->
-                if (pageName != null) {
-                    translation = translations[pageName]
-                    translationKey = pageName
+                val matchedTranslation = if (translations.isNotEmpty()) {
+                    translations[pageName]
+                        ?: (if (pageName != null) translations.entries.firstOrNull { it.key.equals(pageName, ignoreCase = true) || it.key.substringBeforeLast(".") == pageName.substringBeforeLast(".") }?.value else null)
+                        ?: translations.entries.firstOrNull { entry ->
+                            val digits = entry.key.filter { it.isDigit() }.toIntOrNull()
+                            digits != null && (digits == page.index + 1 || digits == page.index)
+                        }?.value
+                } else {
+                    null
+                }
+                if (matchedTranslation != null) {
+                    translation = matchedTranslation
+                    translationKey = pageName ?: "${page.index + 1}.jpg"
                 }
                 // KMK <--
             }
