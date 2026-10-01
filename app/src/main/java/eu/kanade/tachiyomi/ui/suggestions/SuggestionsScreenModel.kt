@@ -2,9 +2,13 @@ package eu.kanade.tachiyomi.ui.suggestions
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker
+import eu.kanade.tachiyomi.util.NsfwDetector
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.CheckboxState
@@ -25,13 +29,27 @@ class SuggestionsScreenModel(
     private val getSuggestions: GetSuggestions = Injekt.get(),
     private val getSuggestionTags: GetSuggestionTags = Injekt.get(),
     private val getSuggestionSources: GetSuggestionSources = Injekt.get(),
+    private val suggestionRepository: tachiyomi.domain.suggestions.repository.SuggestionRepository = Injekt.get(),
 ) : StateScreenModel<SuggestionsScreenModel.State>(State()) {
 
     var initialCount: Int = 0
 
     init {
         screenModelScope.launch {
-            getSuggestions.subscribe().collectLatest { list ->
+            val uiPreferences = Injekt.get<UiPreferences>()
+            combine(
+                getSuggestions.subscribe(),
+                uiPreferences.kisaraHideNsfwSuggestions().changes(),
+                suggestionRepository.observeDismissed().distinctUntilChanged(),
+            ) { list, hideNsfw, dismissedUrls ->
+                val dismissedUrlSet = dismissedUrls.toSet()
+                val undismissed = list.filter { it.manga.url !in dismissedUrlSet }
+                if (hideNsfw) {
+                    undismissed.filterNot { NsfwDetector.isNsfw(it.manga, it.manga.title) }
+                } else {
+                    undismissed
+                }
+            }.collectLatest { list ->
                 mutableState.update { state ->
                     state.copy(
                         suggestions = list,
@@ -95,8 +113,7 @@ class SuggestionsScreenModel(
 
     fun dismissSuggestion(mangaUrl: String, title: String) {
         screenModelScope.launch {
-            val repository = Injekt.get<tachiyomi.domain.suggestions.repository.SuggestionRepository>()
-            repository.dismiss(mangaUrl, title)
+            suggestionRepository.dismiss(mangaUrl, title)
             mutableState.update { state ->
                 state.copy(suggestions = state.suggestions.filter { it.manga.url != mangaUrl })
             }

@@ -91,7 +91,7 @@ class DefaultNovelExtensionManager(
     private var installedKotlinExtensionsSnapshot: List<KotlinNovelExtensionLoadResult> = emptyList()
 
     override val installedSourcesFlow: Flow<List<NovelSource>> = installedSources.asStateFlow()
-    override val installedPluginsFlow: Flow<List<NovelPlugin.Installed>> = installedPlugins.asStateFlow()
+    override val installedPluginsFlow: kotlinx.coroutines.flow.StateFlow<List<NovelPlugin.Installed>> = installedPlugins.asStateFlow()
     override val availablePluginsFlow: Flow<List<NovelPlugin.Available>> = availablePlugins.asStateFlow()
     override val untrustedPluginsFlow: Flow<List<NovelPlugin.Untrusted>> = untrustedPlugins.asStateFlow()
     override val updatesFlow: Flow<List<NovelPlugin.Installed>> = updates.asStateFlow()

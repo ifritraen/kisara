@@ -50,9 +50,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -573,17 +575,14 @@ private fun AnimeScreenSmallImpl(
         val minHeightDp by uiPreferences.chapterSheetMinHeightDp().collectAsState()
         val maxHeightPct by uiPreferences.chapterSheetMaxHeightPct().collectAsState()
         val targetMaxHeight = maxHeight * (maxHeightPct / 100f)
-        val estimatedContentHeight = 64.dp + (episodes.size * 56).dp
-        val calculatedExpandedHeight = if (episodes.isEmpty()) minHeightDp.dp else minOf(targetMaxHeight, maxOf(minHeightDp.dp, estimatedContentHeight))
-
-        val sheetHeight by animateDpAsState(
-            targetValue = if (isSheetExpanded) calculatedExpandedHeight else minHeightDp.dp,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
-            label = "Episodes Sheet Height",
-        )
+        val density = LocalDensity.current
+        var episodeSheetHeaderHeightDp by remember { mutableStateOf(110.dp) }
+        val singleEpisodeHeight = if (episodes.isNotEmpty()) 72.dp else 0.dp
+        val collapsedSheetHeight = remember(episodeSheetHeaderHeightDp, episodes.size) {
+            episodeSheetHeaderHeightDp + singleEpisodeHeight
+        }
+        val estimatedContentHeight = episodeSheetHeaderHeightDp + (episodes.size * 68).dp
+        val calculatedExpandedHeight = if (episodes.isEmpty()) collapsedSheetHeight else minOf(targetMaxHeight, maxOf(collapsedSheetHeight, estimatedContentHeight))
 
         Scaffold(
             topBar = {
@@ -673,7 +672,7 @@ private fun AnimeScreenSmallImpl(
                         contentPadding = PaddingValues(
                             start = contentPadding.calculateStartPadding(layoutDirection),
                             end = contentPadding.calculateEndPadding(layoutDirection),
-                            bottom = contentPadding.calculateBottomPadding() + minHeightDp.dp + 16.dp,
+                            bottom = contentPadding.calculateBottomPadding() + collapsedSheetHeight + 16.dp,
                         ),
                     ) {
                         item(key = EntryScreenItem.INFO_BOX) {
@@ -764,10 +763,19 @@ private fun AnimeScreenSmallImpl(
                         }
                     }
 
+                    val sheetBottomInset = contentPadding.calculateBottomPadding()
+                    val sheetHeight by animateDpAsState(
+                        targetValue = if (isSheetExpanded) calculatedExpandedHeight + sheetBottomInset else collapsedSheetHeight + sheetBottomInset,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        label = "Episodes Sheet Height",
+                    )
+
                     GlassSurface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(start = 16.dp, end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 8.dp)
                             .fillMaxWidth()
                             .height(sheetHeight)
                             .nestedScroll(nestedScrollConnection)
@@ -780,113 +788,144 @@ private fun AnimeScreenSmallImpl(
                                     }
                                 }
                             },
-                        shape = RoundedCornerShape(20.dp),
-                        style = GlassDefaults.regularStyle(),
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+                        style = GlassDefaults.prominentStyle(),
+                        isStandardSurface = true,
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { isSheetExpanded = !isSheetExpanded }
-                                    .pointerInput(Unit) {
-                                        detectVerticalDragGestures { _, dragAmount ->
-                                            if (dragAmount > 10f) {
-                                                isSheetExpanded = false
-                                            } else if (dragAmount < -10f) {
-                                                isSheetExpanded = true
+                                    .onSizeChanged { size ->
+                                        episodeSheetHeaderHeightDp = with(density) { size.height.toDp() }
+                                    },
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { isSheetExpanded = !isSheetExpanded }
+                                        .pointerInput(Unit) {
+                                            detectVerticalDragGestures { _, dragAmount ->
+                                                if (dragAmount > 10f) {
+                                                    isSheetExpanded = false
+                                                } else if (dragAmount < -10f) {
+                                                    isSheetExpanded = true
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    ) {
+                                        val dragIcon = if (isSheetExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp
+                                        Icon(
+                                            imageVector = dragIcon,
+                                            contentDescription = "Expand/Collapse",
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                        Column {
+                                            Text(
+                                                text = "${episodes.size} Episodes",
+                                                style = MaterialTheme.typography.titleMedium,
+                                            )
+                                            if (nextUnseenEpisode != null) {
+                                                val ep = nextUnseenEpisode.episode
+                                                val epTitle = if (state.anime.displayMode == 0L) {
+                                                    ep.name
+                                                } else {
+                                                    "Episode ${formatChapterNumber(ep.episodeNumber)}"
+                                                }
+                                                val progressText = if (ep.lastSecondSeen > 0 && ep.totalSeconds > 0) {
+                                                    val curMin = ep.lastSecondSeen / 60
+                                                    val curSec = ep.lastSecondSeen % 60
+                                                    val totMin = ep.totalSeconds / 60
+                                                    val totSec = ep.totalSeconds % 60
+                                                    " • %d:%02d / %d:%02d".format(curMin, curSec, totMin, totSec)
+                                                } else {
+                                                    ""
+                                                }
+                                                Text(
+                                                    text = "$epTitle$progressText",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
                                             }
                                         }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.weight(1f, fill = false),
-                                ) {
-                                    val dragIcon = if (isSheetExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp
-                                    Icon(
-                                        imageVector = dragIcon,
-                                        contentDescription = "Expand/Collapse",
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                    Column {
-                                        Text(
-                                            text = "${episodes.size} Episodes",
-                                            style = MaterialTheme.typography.titleMedium,
-                                        )
-                                        if (nextUnseenEpisode != null) {
-                                            val ep = nextUnseenEpisode.episode
-                                            val epTitle = if (state.anime.displayMode == 0L) {
-                                                ep.name
-                                            } else {
-                                                "Episode ${formatChapterNumber(ep.episodeNumber)}"
-                                            }
-                                            val progressText = if (ep.lastSecondSeen > 0 && ep.totalSeconds > 0) {
-                                                val curMin = ep.lastSecondSeen / 60
-                                                val curSec = ep.lastSecondSeen % 60
-                                                val totMin = ep.totalSeconds / 60
-                                                val totSec = ep.totalSeconds % 60
-                                                " • %d:%02d / %d:%02d".format(curMin, curSec, totMin, totSec)
-                                            } else {
-                                                ""
-                                            }
-                                            Text(
-                                                text = "$epTitle$progressText",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        IconButton(
+                                            onClick = onFilterClicked,
+                                            modifier = Modifier.size(36.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FilterList,
+                                                contentDescription = "Filter",
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
+
+                                        // Resume Button
+                                        val isWatching = remember(episodes) {
+                                            episodes.fastAny { it.episode.seen || it.episode.lastSecondSeen > 0 }
+                                        }
+                                        FilledIconButton(
+                                            onClick = {
+                                                val ep = nextUnseenEpisode ?: episodes.lastOrNull() ?: episodes.firstOrNull()
+                                                ep?.let {
+                                                    onEpisodeClicked(it.episode, alwaysUseExternalPlayer)
+                                                }
+                                            },
+                                            modifier = Modifier.size(40.dp),
+                                            colors = IconButtonDefaults.filledIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.primary,
+                                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                            ),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = stringResource(
+                                                    if (isWatching) MR.strings.action_resume else MR.strings.action_start,
+                                                ),
+                                                modifier = Modifier.size(24.dp),
                                             )
                                         }
                                     }
                                 }
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    IconButton(
-                                        onClick = onFilterClicked,
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.FilterList,
-                                            contentDescription = "Filter",
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
+                                HorizontalDivider()
+                            }
 
-                                    // Resume Button
-                                    val isWatching = remember(episodes) {
-                                        episodes.fastAny { it.episode.seen || it.episode.lastSecondSeen > 0 }
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            nextUnseenEpisode?.let { ep ->
-                                                onEpisodeClicked(ep.episode, alwaysUseExternalPlayer)
-                                            }
-                                        },
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.PlayArrow,
-                                            contentDescription = stringResource(
-                                                if (isWatching) MR.strings.action_resume else MR.strings.action_start,
-                                            ),
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
+                            val targetMiniEpisodeIndex = remember(episodes, nextUnseenIndex) {
+                                val lastSeen = episodes.indexOfLast { it.episode.seen }
+                                when {
+                                    lastSeen >= 0 -> lastSeen
+                                    nextUnseenIndex >= 0 -> nextUnseenIndex
+                                    else -> 0
                                 }
                             }
 
-                            HorizontalDivider()
+                            LaunchedEffect(isSheetExpanded, targetMiniEpisodeIndex) {
+                                if (!isSheetExpanded && targetMiniEpisodeIndex in episodes.indices) {
+                                    episodeListState.scrollToItem(targetMiniEpisodeIndex)
+                                }
+                            }
 
                             LazyColumn(
                                 state = episodeListState,
                                 modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = if (!isSheetExpanded) 0.dp else (contentPadding.calculateBottomPadding() + 16.dp)),
+                                userScrollEnabled = isSheetExpanded,
                             ) {
                                 items(
                                     items = listItem,

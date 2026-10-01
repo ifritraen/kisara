@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.novel
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -7,6 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import eu.kanade.presentation.manga.ChapterSheetExpansion
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,9 +62,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -86,6 +90,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -357,7 +362,19 @@ fun NovelScreen(
     }
     val contentListState = rememberLazyListState()
     val chapterListState = rememberLazyListState()
-    var isSheetExpanded by remember { mutableStateOf(false) }
+    // KMK -->
+    var sheetExpansion by remember { mutableStateOf(ChapterSheetExpansion.COLLAPSED) }
+
+    BackHandler(onBack = {
+        if (sheetExpansion == ChapterSheetExpansion.FULL) {
+            sheetExpansion = ChapterSheetExpansion.PARTIAL
+        } else if (sheetExpansion == ChapterSheetExpansion.PARTIAL) {
+            sheetExpansion = ChapterSheetExpansion.COLLAPSED
+        } else {
+            onBack()
+        }
+    })
+    // KMK <--
     val hazeState = remember { HazeState() }
 
     val nextUnreadChapter = remember(chapters, state.bookState) {
@@ -418,17 +435,14 @@ fun NovelScreen(
         val minHeightDp by uiPreferences.chapterSheetMinHeightDp().collectAsState()
         val maxHeightPct by uiPreferences.chapterSheetMaxHeightPct().collectAsState()
         val targetMaxHeight = maxHeight * (maxHeightPct / 100f)
-        val estimatedContentHeight = 64.dp + (visibleRows.size * 56).dp
-        val calculatedExpandedHeight = if (visibleRows.isEmpty()) minHeightDp.dp else minOf(targetMaxHeight, maxOf(minHeightDp.dp, estimatedContentHeight))
-
-        val sheetHeight by animateDpAsState(
-            targetValue = if (isSheetExpanded) calculatedExpandedHeight else minHeightDp.dp,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
-            label = "Chapters Sheet Height",
-        )
+        val density = LocalDensity.current
+        var novelSheetHeaderHeightDp by remember { mutableStateOf(110.dp) }
+        val singleNovelChapterHeight = if (visibleRows.isNotEmpty()) 72.dp else 0.dp
+        val collapsedSheetHeight = remember(novelSheetHeaderHeightDp, visibleRows.size) {
+            novelSheetHeaderHeightDp + singleNovelChapterHeight
+        }
+        val estimatedContentHeight = novelSheetHeaderHeightDp + (visibleRows.size * 56).dp
+        val calculatedExpandedHeight = if (visibleRows.isEmpty()) collapsedSheetHeight else minOf(targetMaxHeight, maxOf(collapsedSheetHeight, estimatedContentHeight))
 
         Scaffold(
             topBar = {
@@ -630,7 +644,7 @@ fun NovelScreen(
                         .padding(paddingValues),
                     state = contentListState,
                     contentPadding = PaddingValues(
-                        bottom = minHeightDp.dp + 16.dp,
+                        bottom = collapsedSheetHeight + 16.dp,
                     ),
                 ) {
                     // 1. Hero Header Box
@@ -1064,13 +1078,18 @@ fun NovelScreen(
                 }
 
                 // Floating frosted glass Chapter Sheet
-                val nestedScrollConnection = remember(isSheetExpanded) {
+                val nestedScrollConnection = remember(sheetExpansion) {
                     object : NestedScrollConnection {
                         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                            if (isSheetExpanded && available.y > 0f) {
+                            if (available.y > 0f) {
                                 if (chapterListState.firstVisibleItemIndex == 0 && chapterListState.firstVisibleItemScrollOffset == 0) {
-                                    isSheetExpanded = false
-                                    return available
+                                    if (sheetExpansion == ChapterSheetExpansion.FULL) {
+                                        sheetExpansion = ChapterSheetExpansion.PARTIAL
+                                        return available
+                                    } else if (sheetExpansion == ChapterSheetExpansion.PARTIAL) {
+                                        sheetExpansion = ChapterSheetExpansion.COLLAPSED
+                                        return available
+                                    }
                                 }
                             }
                             return Offset.Zero
@@ -1078,180 +1097,244 @@ fun NovelScreen(
                     }
                 }
 
+                val sheetBottomInset = paddingValues.calculateBottomPadding()
+                val targetFullHeight = (maxHeight - paddingValues.calculateTopPadding()).coerceAtLeast(calculatedExpandedHeight + sheetBottomInset)
+
+                val sheetHeight by animateDpAsState(
+                    targetValue = when (sheetExpansion) {
+                        ChapterSheetExpansion.COLLAPSED -> collapsedSheetHeight + sheetBottomInset
+                        ChapterSheetExpansion.PARTIAL -> calculatedExpandedHeight + sheetBottomInset
+                        ChapterSheetExpansion.FULL -> targetFullHeight
+                    },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    label = "Chapters Sheet Height",
+                )
+
                 GlassSurface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(start = 16.dp, end = 16.dp, bottom = paddingValues.calculateBottomPadding() + 8.dp)
                         .fillMaxWidth()
                         .height(sheetHeight)
                         .nestedScroll(nestedScrollConnection)
-                        .pointerInput(isSheetExpanded) {
-                            if (!isSheetExpanded) {
+                        .pointerInput(sheetExpansion) {
+                            if (sheetExpansion == ChapterSheetExpansion.COLLAPSED) {
                                 detectVerticalDragGestures { _, dragAmount ->
                                     if (dragAmount < -10f) {
-                                        isSheetExpanded = true
+                                        sheetExpansion = ChapterSheetExpansion.PARTIAL
                                     }
                                 }
                             }
                         },
-                    shape = RoundedCornerShape(20.dp),
-                    style = GlassDefaults.regularStyle(),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+                    style = GlassDefaults.prominentStyle(),
+                    isStandardSurface = true,
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isSheetExpanded = !isSheetExpanded }
-                                .pointerInput(Unit) {
-                                    detectVerticalDragGestures { _, dragAmount ->
-                                        if (dragAmount > 10f) {
-                                            isSheetExpanded = false
-                                        } else if (dragAmount < -10f) {
-                                            isSheetExpanded = true
-                                        }
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                                .onSizeChanged { size ->
+                                    novelSheetHeaderHeightDp = with(density) { size.height.toDp() }
+                                },
                         ) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f, fill = false),
-                            ) {
-                                val dragIcon = if (isSheetExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp
-                                Icon(
-                                    imageVector = dragIcon,
-                                    contentDescription = "Expand/Collapse",
-                                    modifier = Modifier.size(24.dp),
-                                )
-                                Column {
-                                    Text(
-                                        text = "$totalChapterCount Chapters",
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    if (nextUnreadChapter != null) {
-                                        val chTitle = if (state.novel.displayMode == 0L) {
-                                            nextUnreadChapter.name
-                                        } else {
-                                            "Chapter ${formatChapterNumber(nextUnreadChapter.chapterNumber)}"
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        sheetExpansion = when (sheetExpansion) {
+                                            ChapterSheetExpansion.COLLAPSED -> ChapterSheetExpansion.PARTIAL
+                                            ChapterSheetExpansion.PARTIAL -> ChapterSheetExpansion.FULL
+                                            ChapterSheetExpansion.FULL -> ChapterSheetExpansion.COLLAPSED
                                         }
-                                        val progressText = if (nextUnreadChapter.lastPageRead > 0) {
-                                            " • Page ${nextUnreadChapter.lastPageRead}"
-                                        } else {
-                                            ""
-                                        }
-                                        Text(
-                                            text = "$chTitle$progressText",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
                                     }
-                                }
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                IconButton(
-                                    onClick = onFilterButtonClicked,
-                                    modifier = Modifier.size(36.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.FilterList,
-                                        contentDescription = "Filter",
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-
-                                // Resume Button
-                                val isReading = remember(chapters) {
-                                    chapters.any { it.read || it.lastPageRead > 0 }
-                                }
-                                IconButton(
-                                    onClick = {
-                                        nextUnreadChapter?.let { ch ->
-                                            onChapterClick(ch.id)
+                                    .pointerInput(sheetExpansion) {
+                                        detectVerticalDragGestures { _, dragAmount ->
+                                            if (dragAmount > 10f) {
+                                                sheetExpansion = when (sheetExpansion) {
+                                                    ChapterSheetExpansion.FULL -> ChapterSheetExpansion.PARTIAL
+                                                    ChapterSheetExpansion.PARTIAL -> ChapterSheetExpansion.COLLAPSED
+                                                    ChapterSheetExpansion.COLLAPSED -> ChapterSheetExpansion.COLLAPSED
+                                                }
+                                            } else if (dragAmount < -10f) {
+                                                sheetExpansion = when (sheetExpansion) {
+                                                    ChapterSheetExpansion.COLLAPSED -> ChapterSheetExpansion.PARTIAL
+                                                    ChapterSheetExpansion.PARTIAL -> ChapterSheetExpansion.FULL
+                                                    ChapterSheetExpansion.FULL -> ChapterSheetExpansion.FULL
+                                                }
+                                            }
                                         }
-                                    },
-                                    modifier = Modifier.size(36.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = stringResource(
-                                            if (isReading) MR.strings.action_resume else MR.strings.action_start,
-                                        ),
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
-                        }
-
-                        if (state.showScanlatorSelector) {
-                            ScanlatorBranchSelector(
-                                scanlatorChapterCounts = scanlatorChapterCounts,
-                                selectedScanlator = selectedScanlator,
-                                onScanlatorSelected = onScanlatorSelected,
-                                showAllOption = false,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                            )
-                        }
-
-                        if (chapterPageEnabled) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                IconButton(
-                                    onClick = { onChapterPageChange(chapterPageCurrent - 1) },
-                                    enabled = !chapterPageLoading && chapterPageCurrent > 1,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.ChevronLeft,
-                                        contentDescription = stringResource(MR.strings.spen_previous_page),
-                                    )
-                                }
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f, fill = false),
                                 ) {
-                                    Text(
-                                        text = "$chapterPageCurrent / $chapterPageTotal",
-                                        style = MaterialTheme.typography.labelLarge,
+                                    val dragIcon = when (sheetExpansion) {
+                                        ChapterSheetExpansion.FULL -> Icons.Default.KeyboardArrowDown
+                                        ChapterSheetExpansion.PARTIAL -> Icons.Default.KeyboardArrowUp
+                                        ChapterSheetExpansion.COLLAPSED -> Icons.Default.KeyboardArrowUp
+                                    }
+                                    Icon(
+                                        imageVector = dragIcon,
+                                        contentDescription = "Expand/Collapse",
+                                        modifier = Modifier.size(24.dp),
                                     )
-                                    if (chapterPageLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
+                                    Column {
+                                        Text(
+                                            text = "$totalChapterCount Chapters",
+                                            style = MaterialTheme.typography.titleMedium,
+                                        )
+                                        if (nextUnreadChapter != null) {
+                                            val chTitle = if (state.novel.displayMode == 0L) {
+                                                nextUnreadChapter.name
+                                            } else {
+                                                "Chapter ${formatChapterNumber(nextUnreadChapter.chapterNumber)}"
+                                            }
+                                            val progressText = if (nextUnreadChapter.lastPageRead > 0) {
+                                                " • Page ${nextUnreadChapter.lastPageRead}"
+                                            } else {
+                                                ""
+                                            }
+                                            Text(
+                                                text = "$chTitle$progressText",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    IconButton(
+                                        onClick = onFilterButtonClicked,
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.FilterList,
+                                            contentDescription = "Filter",
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+
+                                    // Resume Button
+                                    val isReading = remember(chapters) {
+                                        chapters.any { it.read || it.lastPageRead > 0 }
+                                    }
+                                    FilledIconButton(
+                                        onClick = {
+                                            val target = nextUnreadChapter ?: chapters.lastOrNull() ?: chapters.firstOrNull()
+                                            if (target != null) {
+                                                onChapterClick(target.id)
+                                            }
+                                        },
+                                        modifier = Modifier.size(40.dp),
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = stringResource(
+                                                if (isReading) MR.strings.action_resume else MR.strings.action_start,
+                                            ),
+                                            modifier = Modifier.size(24.dp),
                                         )
                                     }
                                 }
-                                IconButton(
-                                    onClick = { onChapterPageChange(chapterPageCurrent + 1) },
-                                    enabled = !chapterPageLoading && chapterPageCurrent < chapterPageTotal,
+                            }
+
+                            if (state.showScanlatorSelector) {
+                                ScanlatorBranchSelector(
+                                    scanlatorChapterCounts = scanlatorChapterCounts,
+                                    selectedScanlator = selectedScanlator,
+                                    onScanlatorSelected = onScanlatorSelected,
+                                    showAllOption = false,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                )
+                            }
+
+                            if (chapterPageEnabled) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.ChevronRight,
-                                        contentDescription = stringResource(MR.strings.spen_next_page),
-                                    )
+                                    IconButton(
+                                        onClick = { onChapterPageChange(chapterPageCurrent - 1) },
+                                        enabled = !chapterPageLoading && chapterPageCurrent > 1,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ChevronLeft,
+                                            contentDescription = stringResource(MR.strings.spen_previous_page),
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = "$chapterPageCurrent / $chapterPageTotal",
+                                            style = MaterialTheme.typography.labelLarge,
+                                        )
+                                        if (chapterPageLoading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { onChapterPageChange(chapterPageCurrent + 1) },
+                                        enabled = !chapterPageLoading && chapterPageCurrent < chapterPageTotal,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ChevronRight,
+                                            contentDescription = stringResource(MR.strings.spen_next_page),
+                                        )
+                                    }
                                 }
+                            }
+
+                            HorizontalDivider()
+                        }
+
+                        val targetMiniChapterIndex = remember(chapters, nextUnreadIndex) {
+                            val lastRead = chapters.indexOfLast { it.chapter.read }
+                            when {
+                                lastRead >= 0 -> lastRead
+                                nextUnreadIndex >= 0 -> nextUnreadIndex
+                                else -> 0
                             }
                         }
 
-                        HorizontalDivider()
+                        LaunchedEffect(sheetExpansion, targetMiniChapterIndex) {
+                            if (sheetExpansion == ChapterSheetExpansion.COLLAPSED && targetMiniChapterIndex in chapters.indices) {
+                                chapterListState.scrollToItem(targetMiniChapterIndex)
+                            }
+                        }
 
                         LazyColumn(
                             state = chapterListState,
                             modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = if (sheetExpansion == ChapterSheetExpansion.COLLAPSED) 0.dp else (paddingValues.calculateBottomPadding() + 16.dp)),
+                            userScrollEnabled = sheetExpansion != ChapterSheetExpansion.COLLAPSED,
                         ) {
                             items(
                                 items = visibleRows,

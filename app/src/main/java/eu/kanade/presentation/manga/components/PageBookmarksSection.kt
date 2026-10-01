@@ -41,118 +41,172 @@ fun PageBookmarksSection(
     onClickBookmark: (chapterId: Long, pageNumber: Int) -> Unit,
     onDeleteBookmark: (bookmarkId: Long) -> Unit,
     modifier: Modifier = Modifier,
+    // KMK -->
+    onBookmarkCurrentPage: (() -> Unit)? = null,
+    currentPageNumber: Int? = null,
+    isCurrentPageBookmarked: Boolean = false,
+    // KMK <--
 ) {
-    if (bookmarks.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(vertical = 32.dp, horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.BookmarkBorder,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "No page bookmarks yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Long-tap or use page actions while reading to bookmark a page.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-        return
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = stringResource(KMR.strings.page_bookmarks),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            bookmarks.forEach { bookmark ->
-                val chapter = chapters.find { it.id == bookmark.chapterId }
-                val chapterName = chapter?.name ?: "Chapter"
-
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
+        // KMK --> Bookmark Current Page Card
+        if (onBookmarkCurrentPage != null && currentPageNumber != null) {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isCurrentPageBookmarked) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onBookmarkCurrentPage() },
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onClickBookmark(bookmark.chapterId, bookmark.pageNumber) },
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Row(
+                    Icon(
+                        imageVector = if (isCurrentPageBookmarked) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = null,
+                        tint = if (isCurrentPageBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isCurrentPageBookmarked) {
+                                stringResource(KMR.strings.action_remove_page_bookmark)
+                            } else {
+                                stringResource(KMR.strings.action_bookmark_page)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isCurrentPageBookmarked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Current Page: Page $currentPageNumber",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isCurrentPageBookmarked) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        // KMK <--
+
+        if (bookmarks.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = if (onBookmarkCurrentPage != null) 16.dp else 32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.BookmarkBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "No saved page bookmarks",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Bookmark pages using the button above or by holding a page.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(KMR.strings.page_bookmarks),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                bookmarks.forEach { bookmark ->
+                    val chapter = chapters.find { it.id == bookmark.chapterId }
+                    val chapterName = chapter?.name ?: "Chapter"
+
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .clickable { onClickBookmark(bookmark.chapterId, bookmark.pageNumber) },
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Bookmark,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = chapterName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Bookmark,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
                             )
-                            Text(
-                                text = "Page ${bookmark.pageNumber}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            val comment = bookmark.comment
-                            if (!comment.isNullOrBlank()) {
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = comment,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.tertiary,
+                                    text = chapterName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                Text(
+                                    text = "Page ${bookmark.pageNumber}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                val comment = bookmark.comment
+                                if (!comment.isNullOrBlank()) {
+                                    Text(
+                                        text = comment,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
-                        }
 
-                        IconButton(onClick = { onDeleteBookmark(bookmark.id) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
+                            IconButton(onClick = { onDeleteBookmark(bookmark.id) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                     }
                 }

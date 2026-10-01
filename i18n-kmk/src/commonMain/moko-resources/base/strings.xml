@@ -373,6 +373,8 @@
     <string name="pref_glass_color_mix_summary">Adjust the blending ratio of the selected mix color</string>
     <string name="pref_kisara_show_item_count_in_tabs">Show item count in tabs</string>
     <string name="pref_kisara_show_item_count_in_tabs_summary">Display the number of items next to categories and subcategories in the sub-tabs bar</string>
+    <string name="pref_kisara_show_subcategories_at_top">Show subcategories at top</string>
+    <string name="pref_kisara_show_subcategories_at_top_summary">Display subcategory filter chips at the top of the library</string>
     <string name="translation_completed_toast">Translation from %1$s to %2$s completed by %3$s</string>
     <!-- KMK -->
     <!-- Manga Translations -->
@@ -425,6 +427,7 @@
     <string name="pref_category_bar_selected_font_custom_color">Custom selected font color</string>
     <string name="pref_suggestions_title">Enable Suggestions</string>
     <string name="pref_suggestions_summary">Show recommended manga based on your reading history and favorites</string>
+    <string name="pref_suggestions_fetch_interval">Fetch Frequency</string>
     <string name="action_suggestions">Suggestion</string>
     <string name="pref_download_concurrent_chapters">Concurrent chapter downloads</string>
     <string name="pref_download_concurrent_chapters_summary">Number of chapters to download at the same time from each source</string>
@@ -3595,5 +3598,22 @@
     <string name="mini_mode_slots_full">All 10 mini slots are in use. Remove one first.</string>
     <string name="mini_mode_installed">Installed as Mini App</string>
     <string name="mini_mode_removed">Mini App removed</string>
+    <!-- KMK: Auto-scroll swipe sensitivity -->
+    <string name="pref_autoscroll_swipe_sensitivity">Auto-scroll swipe sensitivity</string>
+    <string name="pref_autoscroll_swipe_sensitivity_summary">Adjust horizontal swipe gesture sensitivity for auto-scroll speed adjustment</string>
+    <!-- KMK: Spotlight & Suggestions 18+ Block -->
+    <string name="pref_block_18plus_spotlight">Block 18+ in Spotlight &amp; Suggestions</string>
+    <string name="pref_block_18plus_spotlight_summary">Exclude 18+ (NSFW) recommendations from Spotlight carousel, suggestions and home feed</string>
+    <string name="spotlight_nsfw_all_blocked_hint">18+ suggestions are hidden. Tap 18+ above to view.</string>
+    <!-- KMK: Extension 18+ Filter -->
+    <string name="extension_nsfw_title">Extension 18+ Filter</string>
+    <string name="extension_nsfw_subtitle">Configure 18+ status and overrides for installed extensions</string>
+    <string name="extension_nsfw_search_hint">Search installed extensions…</string>
+    <string name="extension_nsfw_overridden_sfw">Override: SFW (Allowed)</string>
+    <string name="extension_nsfw_overridden_nsfw">Override: 18+ (Blocked)</string>
+    <string name="extension_nsfw_native_18">18+ Extension</string>
+    <string name="extension_nsfw_standard">Standard Extension</string>
+    <string name="extension_nsfw_empty">No installed extensions found</string>
+    <string name="extension_nsfw_configure_tooltip">Configure 18+ Extensions</string>
     <!-- KMK -->
 </resources>

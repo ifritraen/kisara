@@ -33,7 +33,7 @@ import java.io.File
 
 class StorageManager(
     private val context: Context,
-    storagePreferences: StoragePreferences,
+    private val storagePreferences: StoragePreferences,
 ) {
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -63,6 +63,12 @@ class StorageManager(
                 parent.createDirectory(SUPER_RESOLUTION_PATH).also {
                     DiskUtil.createNoMediaFile(it, context)
                 }
+                parent.createDirectory(MODELS_PATH).also {
+                    DiskUtil.createNoMediaFile(it, context)
+                }
+                parent.createDirectory(EXTENSIONS_PATH).also {
+                    DiskUtil.createNoMediaFile(it, context)
+                }
                 // KMK <--
             }
         }
@@ -88,6 +94,12 @@ class StorageManager(
                     parent.createDirectory(SUPER_RESOLUTION_PATH).also {
                         DiskUtil.createNoMediaFile(it, context)
                     }
+                    parent.createDirectory(MODELS_PATH).also {
+                        DiskUtil.createNoMediaFile(it, context)
+                    }
+                    parent.createDirectory(EXTENSIONS_PATH).also {
+                        DiskUtil.createNoMediaFile(it, context)
+                    }
                     // KMK <--
                 }
                 _changes.send(Unit)
@@ -96,79 +108,128 @@ class StorageManager(
     }
 
     private fun getBaseDir(uri: String): UniFile? {
-        return UniFile.fromUri(context, uri.toUri())
-            .takeIf {
-                // KMK -->
-                it?.isAccessibleDirectory == true
-                // KMK <--
+        if (uri.isBlank()) return null
+        val parsedUri = uri.toUri()
+        val uniFile = UniFile.fromUri(context, parsedUri) ?: return null
+
+        // KMK --> Prefer direct RawFile if physical file path is accessible (e.g. MANAGE_EXTERNAL_STORAGE)
+        var path = uniFile.filePath
+        if (path.isNullOrBlank() && parsedUri.scheme == "content" && parsedUri.authority == "com.android.externalstorage.documents") {
+            try {
+                val docId = android.provider.DocumentsContract.getTreeDocumentId(parsedUri)
+                if (docId.startsWith("primary:")) {
+                    path = File(Environment.getExternalStorageDirectory(), docId.substringAfter("primary:")).absolutePath
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (!path.isNullOrBlank()) {
+            val file = File(path)
+            if (file.exists() && file.canRead() && file.canWrite()) {
+                val rawFile = UniFile.fromFile(file)
+                if (rawFile?.isAccessibleDirectory == true) {
+                    return rawFile
+                }
             }
+        }
+        // KMK <--
+
+        return uniFile.takeIf {
+            // KMK -->
+            it.isAccessibleDirectory
+            // KMK <--
+        }
+    }
+
+    private fun ensureBaseDir(): UniFile? {
+        return baseDir ?: getBaseDir(storagePreferences.baseStorageDirectory().get())?.also { baseDir = it }
     }
 
     fun getAutomaticBackupsDirectory(): UniFile? {
-        return baseDir?.createDirectory(AUTOMATIC_BACKUPS_PATH)
+        return ensureBaseDir()?.createDirectory(AUTOMATIC_BACKUPS_PATH)
     }
 
     fun getDownloadsDirectory(): UniFile? {
-        return baseDir?.createDirectory(DOWNLOADS_PATH)
+        return ensureBaseDir()?.createDirectory(DOWNLOADS_PATH)
     }
 
     fun getLocalSourceDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOCAL_SOURCE_PATH)
+        return ensureBaseDir()?.createDirectory(LOCAL_SOURCE_PATH)
     }
 
     fun getLocalAnimeSourceDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOCAL_ANIME_SOURCE_PATH)
+        return ensureBaseDir()?.createDirectory(LOCAL_ANIME_SOURCE_PATH)
     }
 
     fun getLocalNovelSourceDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOCAL_NOVEL_SOURCE_PATH)
+        return ensureBaseDir()?.createDirectory(LOCAL_NOVEL_SOURCE_PATH)
     }
 
     fun getAnimeDownloadsDirectory(): UniFile? {
-        return baseDir?.createDirectory(ANIME_DOWNLOADS_PATH)
+        return ensureBaseDir()?.createDirectory(ANIME_DOWNLOADS_PATH)
     }
 
     fun getNovelDownloadsDirectory(): UniFile? {
-        return baseDir?.createDirectory(NOVEL_DOWNLOADS_PATH)
+        return ensureBaseDir()?.createDirectory(NOVEL_DOWNLOADS_PATH)
     }
 
     // SY -->
     fun getLogsDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOGS_PATH)
+        return ensureBaseDir()?.createDirectory(LOGS_PATH)
     }
     // SY <--
 
     // KMK -->
     fun getTranslationsDirectory(): UniFile? {
-        return baseDir?.findFile(TRANSLATION_PATH) ?: baseDir?.createDirectory(TRANSLATION_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(TRANSLATION_PATH) ?: dir?.createDirectory(TRANSLATION_PATH)
     }
 
     fun getColorizerDirectory(): UniFile? {
-        return baseDir?.findFile(COLORIZER_PATH) ?: baseDir?.createDirectory(COLORIZER_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(COLORIZER_PATH) ?: dir?.createDirectory(COLORIZER_PATH)
     }
 
     fun getSuperResolutionDirectory(): UniFile? {
-        return baseDir?.findFile(SUPER_RESOLUTION_PATH) ?: baseDir?.createDirectory(SUPER_RESOLUTION_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(SUPER_RESOLUTION_PATH) ?: dir?.createDirectory(SUPER_RESOLUTION_PATH)
     }
 
     fun getFontsDirectory(): UniFile? {
-        return baseDir?.findFile(FONTS_PATH) ?: baseDir?.createDirectory(FONTS_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(FONTS_PATH) ?: dir?.createDirectory(FONTS_PATH)
     }
 
     fun getScriptsDirectory(): UniFile? {
-        return baseDir?.findFile(SCRIPTS_PATH) ?: baseDir?.createDirectory(SCRIPTS_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(SCRIPTS_PATH) ?: dir?.createDirectory(SCRIPTS_PATH)
     }
 
     fun getScriptOptsDirectory(): UniFile? {
-        return baseDir?.findFile(SCRIPT_OPTS_PATH) ?: baseDir?.createDirectory(SCRIPT_OPTS_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(SCRIPT_OPTS_PATH) ?: dir?.createDirectory(SCRIPT_OPTS_PATH)
     }
 
     fun getShadersDirectory(): UniFile? {
-        return baseDir?.findFile(SHADERS_PATH) ?: baseDir?.createDirectory(SHADERS_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(SHADERS_PATH) ?: dir?.createDirectory(SHADERS_PATH)
     }
 
     fun getMPVConfigDirectory(): UniFile? {
-        return baseDir?.findFile(MPV_CONFIG_PATH) ?: baseDir?.createDirectory(MPV_CONFIG_PATH)
+        val dir = ensureBaseDir()
+        return dir?.findFile(MPV_CONFIG_PATH) ?: dir?.createDirectory(MPV_CONFIG_PATH)
+    }
+
+    fun getModelsDirectory(): UniFile? {
+        val dir = ensureBaseDir()
+        return dir?.findFile(MODELS_PATH) ?: dir?.createDirectory(MODELS_PATH)
+    }
+
+    fun getExtensionsDirectory(): UniFile? {
+        val dir = ensureBaseDir()
+        return dir?.findFile(EXTENSIONS_PATH)
+            ?: dir?.findFile(LEGACY_EXTENSIONS_PATH)
+            ?: dir?.createDirectory(EXTENSIONS_PATH)
     }
     // KMK <--
 
@@ -184,7 +245,25 @@ class StorageManager(
          * Check if a directory is accessible
          */
         fun directoryAccessible(context: Context, uri: String): Boolean {
-            return UniFile.fromUri(context, uri.toUri())?.isAccessibleDirectory == true
+            if (uri.isBlank()) return false
+            val parsedUri = uri.toUri()
+            val uniFile = UniFile.fromUri(context, parsedUri) ?: return false
+            var path = uniFile.filePath
+            if (path.isNullOrBlank() && parsedUri.scheme == "content" && parsedUri.authority == "com.android.externalstorage.documents") {
+                try {
+                    val docId = android.provider.DocumentsContract.getTreeDocumentId(parsedUri)
+                    if (docId.startsWith("primary:")) {
+                        path = File(Environment.getExternalStorageDirectory(), docId.substringAfter("primary:")).absolutePath
+                    }
+                } catch (_: Exception) {}
+            }
+            if (!path.isNullOrBlank()) {
+                val file = File(path)
+                if (file.exists() && file.canRead() && file.canWrite()) {
+                    return true
+                }
+            }
+            return uniFile.isAccessibleDirectory
         }
 
         /**
@@ -299,6 +378,10 @@ class StorageManager(
                 it.activityInfo.packageName != null && it.activityInfo.packageName != "com.android.tv.frameworkpackagestubs"
             }
         }
+        // KMK -->
+        const val MODELS_PATH = "models"
+        const val EXTENSIONS_PATH = "extensions"
+        const val LEGACY_EXTENSIONS_PATH = "sideloaded_extensions"
         // KMK <--
     }
 }
@@ -324,4 +407,7 @@ const val TRANSLATION_PATH = "translations"
 const val COLORIZER_PATH = "colorizer"
 const val SUPER_RESOLUTION_PATH = "superres"
 const val MPV_CONFIG_PATH = "mpv-config"
+const val MODELS_PATH = "models"
+const val EXTENSIONS_PATH = "extensions"
+const val LEGACY_EXTENSIONS_PATH = "sideloaded_extensions"
 // KMK <--

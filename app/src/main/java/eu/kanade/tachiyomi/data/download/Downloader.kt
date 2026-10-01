@@ -399,9 +399,13 @@ class Downloader(
                     DataSaver.NoOp
                 }
 
-                // Delete all temporary (unfinished) files
+                // Delete all temporary (unfinished) files and collision duplicates from previous SAF runs
                 tmpDir.listFiles()
-                    ?.filter { it.extension == "tmp" }
+                    ?.filter { file ->
+                        val name = file.name.orEmpty()
+                        file.extension.equals("tmp", ignoreCase = true) ||
+                            name.contains(SAF_DUPLICATE_REGEX)
+                    }
                     ?.forEach { it.delete() }
 
                 download.status = Download.State.DOWNLOADING
@@ -432,7 +436,20 @@ class Downloader(
                 // Do after download completes
 
                 if (!isDownloadSuccessful(download, tmpDir)) {
+                    val downloadedImagesCount = tmpDir.listFiles().orEmpty().count {
+                        val fileName = it.name.orEmpty()
+                        when {
+                            fileName in listOf(COMIC_INFO_FILE, NOMEDIA_FILE) -> false
+                            fileName.endsWith(".tmp", ignoreCase = true) -> false
+                            fileName.contains(SAF_DUPLICATE_REGEX) -> false
+                            fileName.contains("__") && !fileName.endsWith("__001.jpg", ignoreCase = true) -> false
+                            else -> true
+                        }
+                    }
+                    val msg = "Download verification failed: ready=${download.downloadedImages}, files=$downloadedImagesCount, expected=${download.pages?.size}"
+                    logcat(LogPriority.ERROR) { msg }
                     download.status = Download.State.ERROR
+                    notifier.onError(msg, download.chapter.name, download.manga.title, download.manga.id)
                     return
                 }
 
@@ -448,10 +465,9 @@ class Downloader(
                     archiveChapter(mangaDir, chapterDirname, tmpDir)
                 } else {
                     tmpDir.renameTo(chapterDirname)
+                    DiskUtil.createNoMediaFile(tmpDir, context)
                 }
                 cache.addChapter(chapterDirname, mangaDir, download.manga)
-
-                DiskUtil.createNoMediaFile(tmpDir, context)
 
                 download.status = Download.State.DOWNLOADED
 
@@ -500,6 +516,13 @@ class Downloader(
             it.name!!.startsWith("$filename.") || it.name!!.startsWith("${filename}__001")
         }
 
+        // Clean up any collision duplicates for this page if imageFile exists
+        if (imageFile != null) {
+            tmpDir.listFiles()
+                ?.filter { it.name.orEmpty().startsWith("$filename (") }
+                ?.forEach { it.delete() }
+        }
+
         try {
             // If the image is already downloaded, do nothing. Otherwise download from network
             val file = when {
@@ -510,7 +533,7 @@ class Downloader(
             }
 
             // When the page is ready, set page path, progress (just in case) and status
-            splitTallImageIfNeeded(page, tmpDir)
+            splitTallImageIfNeeded(page, tmpDir, filename, file)
 
             page.uri = file.uri
             page.progress = 100
@@ -547,7 +570,9 @@ class Downloader(
             try {
                 response.body.source().saveTo(file.openOutputStream())
                 val extension = getImageExtension(response, file)
-                file.renameTo("$filename.$extension")
+                val targetFilename = "$filename.$extension"
+                tmpDir.findFile(targetFilename)?.delete()
+                file.renameTo(targetFilename)
             } catch (e: Exception) {
                 response.close()
                 file.delete()
@@ -585,7 +610,9 @@ class Downloader(
             }
         }
         val extension = ImageUtil.findImageType(cacheFile.inputStream()) ?: return tmpFile
-        tmpFile.renameTo("$filename.${extension.extension}")
+        val targetFilename = "$filename.${extension.extension}"
+        tmpDir.findFile(targetFilename)?.delete()
+        tmpFile.renameTo(targetFilename)
         cacheFile.delete()
         return tmpFile
     }
@@ -602,21 +629,21 @@ class Downloader(
         return ImageUtil.getExtensionFromMimeType(mime) { file.openInputStream() }
     }
 
-    private fun splitTallImageIfNeeded(page: Page, tmpDir: UniFile) {
+    private fun splitTallImageIfNeeded(page: Page, tmpDir: UniFile, filename: String, file: UniFile? = null) {
         if (!downloadPreferences.splitTallImages().get()) return
 
         try {
-            val filenamePrefix = "%03d".format(Locale.ENGLISH, page.number)
-            val imageFile = tmpDir.listFiles()?.firstOrNull { it.name.orEmpty().startsWith(filenamePrefix) }
+            val imageFile = file?.takeIf { it.exists() }
+                ?: tmpDir.listFiles()?.firstOrNull { it.name.orEmpty().startsWith(filename) }
                 ?: error(context.stringResource(MR.strings.download_notifier_split_page_not_found, page.number))
 
             // If the original page was previously split, then skip
-            if (imageFile.name.orEmpty().startsWith("${filenamePrefix}__")) return
+            if (imageFile.name.orEmpty().startsWith("${filename}__")) return
 
             ImageUtil.splitTallImage(
                 tmpDir,
                 imageFile,
-                filenamePrefix,
+                filename,
             )
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to split downloaded image" }
@@ -634,25 +661,51 @@ class Downloader(
         tmpDir: UniFile,
     ): Boolean {
         // Page list hasn't been initialized
-        val downloadPageCount = download.pages?.size ?: return false
+        val pages = download.pages ?: return false
+        val downloadPageCount = pages.size
+        if (downloadPageCount == 0) return false
 
         // Ensure that all pages have been downloaded
         if (download.downloadedImages != downloadPageCount) {
             return false
         }
 
-        // Ensure that the chapter folder has all the pages
-        val downloadedImagesCount = tmpDir.listFiles().orEmpty().count {
+        // Clean up any remaining SAF duplicate files or temporary files
+        tmpDir.listFiles()
+            ?.filter { file ->
+                val name = file.name.orEmpty()
+                file.extension.equals("tmp", ignoreCase = true) ||
+                    name.contains(SAF_DUPLICATE_REGEX)
+            }
+            ?.forEach { it.delete() }
+
+        // Ensure that every expected page actually exists in tmpDir
+        val digitCount = downloadPageCount.toString().length.coerceAtLeast(3)
+        val files = tmpDir.listFiles().orEmpty()
+        val allPagesPresent = pages.all { page ->
+            val filename = "%0${digitCount}d".format(Locale.ENGLISH, page.number)
+            files.any { file ->
+                val name = file.name.orEmpty()
+                name.startsWith("$filename.") || name.startsWith("${filename}__001")
+            }
+        }
+        if (!allPagesPresent) {
+            return false
+        }
+
+        // Ensure that the chapter folder has at least the expected number of pages
+        val downloadedImagesCount = files.count {
             val fileName = it.name.orEmpty()
             when {
                 fileName in listOf(COMIC_INFO_FILE, NOMEDIA_FILE) -> false
-                fileName.endsWith(".tmp") -> false
+                fileName.endsWith(".tmp", ignoreCase = true) -> false
+                fileName.contains(SAF_DUPLICATE_REGEX) -> false
                 // Only count the first split page and not the others
-                fileName.contains("__") && !fileName.endsWith("__001.jpg") -> false
+                fileName.contains("__") && !fileName.endsWith("__001.jpg", ignoreCase = true) -> false
                 else -> true
             }
         }
-        return downloadedImagesCount == downloadPageCount
+        return downloadedImagesCount >= downloadPageCount
     }
 
     /**
@@ -670,10 +723,17 @@ class Downloader(
         val zip = mangaDir.createFile("$dirname.cbz$TMP_DIR_SUFFIX")
         if (zip?.isFile != true) throw Exception("Failed to create CBZ file for downloaded chapter")
         ZipWriter(context, zip, /* SY --> */ encrypt /* SY <-- */).use { writer ->
-            tmpDir.listFiles()?.forEach { file ->
-                writer.write(file)
-            }
+            tmpDir.listFiles()
+                ?.filterNot { file ->
+                    val name = file.name.orEmpty()
+                    file.extension.equals("tmp", ignoreCase = true) ||
+                        name.contains(SAF_DUPLICATE_REGEX)
+                }
+                ?.forEach { file ->
+                    writer.write(file)
+                }
         }
+        mangaDir.findFile("$dirname.cbz")?.delete()
         zip.renameTo("$dirname.cbz")
         tmpDir.delete()
     }
@@ -800,3 +860,5 @@ class Downloader(
 
 // Arbitrary minimum required space to start a download: 200 MB
 private const val MIN_DISK_SPACE = 200L * 1024 * 1024
+
+private val SAF_DUPLICATE_REGEX = Regex(""" \(\d+\)\.""")

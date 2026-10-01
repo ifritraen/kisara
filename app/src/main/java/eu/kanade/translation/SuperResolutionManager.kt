@@ -7,13 +7,16 @@ import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.data.ai.SuperResolutionEngine
 import eu.kanade.tachiyomi.data.download.DownloadProvider
+import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.tachiyomi.source.Source
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.translation.model.Translation
 import mihon.core.archive.archiveReader
 import tachiyomi.core.common.util.system.ImageUtil
+import tachiyomi.source.local.LocalSource
+import tachiyomi.source.local.io.Format
+import tachiyomi.source.local.isLocal
 import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -74,6 +77,22 @@ class SuperResolutionManager(
 
     private val srEngine by lazy { SuperResolutionEngine() }
     private val modelManager by lazy { AiModelManager(context) }
+    private var idleUnloadJob: kotlinx.coroutines.Job? = null
+    private var activeSuperResolutionJob: kotlinx.coroutines.Job? = null
+    private var activeChapterId: Long? = null
+
+    private fun scheduleIdleUnload(delayMs: Long = 5_000L) {
+        idleUnloadJob?.cancel()
+        idleUnloadJob = scope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            if (_queueState.value.isEmpty()) {
+                srEngine.unloadSession()
+                System.gc()
+                Runtime.getRuntime().gc()
+                logcat(LogPriority.INFO) { "Auto-freed RAM: SuperResolution ONNX session unloaded after ${delayMs / 1000}s idle." }
+            }
+        }
+    }
 
     private val superResDir: UniFile?
         get() = storageManager.getSuperResolutionDirectory()
@@ -83,7 +102,7 @@ class SuperResolutionManager(
     }
 
     fun superResolveChapter(manga: Manga, chapter: Chapter) {
-        val source = (sourceManager.get(manga.source) as? HttpSource) ?: return
+        val source = sourceManager.get(manga.source) ?: return
         val translation = Translation(source, manga, chapter)
 
         synchronized(_queueState) {
@@ -97,13 +116,20 @@ class SuperResolutionManager(
     }
 
     private fun processQueue() {
-        scope.launch {
+        if (activeSuperResolutionJob?.isActive == true) return
+
+        activeSuperResolutionJob = scope.launch {
             val next = synchronized(_queueState) {
                 _queueState.value.find { it.status == Translation.State.QUEUE }
-            } ?: return@launch
+            } ?: run {
+                activeChapterId = null
+                return@launch
+            }
 
+            activeChapterId = next.chapter.id
             next.status = Translation.State.TRANSLATING
             try {
+                idleUnloadJob?.cancel()
                 TranslationReport.clear()
                 TranslationReport.log("INFO", "SuperResolution", "Starting Super-Resolution for chapter: ${next.chapter.name}")
 
@@ -175,7 +201,18 @@ class SuperResolutionManager(
                     chapterUrl = next.chapter.url,
                     mangaTitle = next.manga.ogTitle,
                     source = next.source,
-                )
+                ) ?: if (next.source.isLocal()) {
+                    try {
+                        when (val format = (next.source as? LocalSource)?.getFormat(next.chapter.toSChapter())) {
+                            is Format.Directory -> format.file
+                            is Format.Archive -> format.file
+                            is Format.Epub -> format.file
+                            null -> null
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else null
 
                 val inputDir = if (colorizedChapterDir != null && colorizedChapterDir.exists() && colorizedChapterDir.listFiles()?.isNotEmpty() == true) {
                     TranslationReport.log("INFO", "SuperResolution", "Using colorized chapter images as input")
@@ -225,7 +262,8 @@ class SuperResolutionManager(
                     val outFile = outChapterDir.findFile(pageName) ?: outChapterDir.createFile(pageName) ?: continue
 
                     pagePair.second().use { inputStream ->
-                        val inputBitmap = BitmapFactory.decodeStream(inputStream)
+                        val bytes = inputStream.readBytes()
+                        val inputBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         if (inputBitmap != null) {
                             TranslationReport.log("INFO", "SuperResolution", "Page ${idx + 1} dimensions: ${inputBitmap.width}x${inputBitmap.height}")
 
@@ -287,18 +325,33 @@ class SuperResolutionManager(
                     context.toast(e.message ?: "Super-Resolution failed")
                 }
             } finally {
+                activeChapterId = null
+                activeSuperResolutionJob = null
                 _progressState.value = null
                 synchronized(_queueState) {
                     _queueState.value = _queueState.value - next
+                    if (_queueState.value.isEmpty()) {
+                        scheduleIdleUnload(2_000L)
+                    }
                 }
                 processQueue()
             }
         }
     }
 
+    fun cancelActiveSuperResolution() {
+        srEngine.cancelCurrentInference()
+        activeSuperResolutionJob?.cancel()
+        _progressState.value = null
+        TranslationReport.log("WARNING", "SuperResolution", "Active super-resolution cancellation requested by user.")
+    }
+
     fun cancelQueuedSuperResolution(translation: Translation) {
         synchronized(_queueState) {
             _queueState.value = _queueState.value - translation
+        }
+        if (activeChapterId == translation.chapter.id) {
+            cancelActiveSuperResolution()
         }
     }
 

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import eu.kanade.presentation.components.KisaraBottomSheet
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -410,47 +411,57 @@ fun GranularScoreCard(
     // Quick Numeric Edit Dialog
     quickEditCriterion?.let { criterion ->
         var tempScoreStr by remember { mutableStateOf(criterion.score.toInt().toString()) }
-        AlertDialog(
+        KisaraBottomSheet(
             onDismissRequest = { quickEditCriterion = null },
-            title = { Text(criterion.name) },
-            text = {
-                OutlinedTextField(
-                    value = tempScoreStr,
-                    onValueChange = { tempScoreStr = it.filter { c -> c.isDigit() }.take(3) },
-                    label = { Text("Score (0 - 100)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val parsed = tempScoreStr.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
-                        val updated = criteria.map { if (it.id == criterion.id) it.copy(score = parsed) else it }
-                        val (newTotal, newScale10) = GranularScoreCalculator.calculate(updated, ignoreUnrated)
-                        onSaveScore(
-                            GranularScoreEntry(
-                                mangaId = entry?.mangaId ?: 0L,
-                                templateName = currentTemplateName,
-                                criteria = updated,
-                                totalScore = newTotal,
-                                scale10Score = newScale10,
-                                ignoreUnrated = ignoreUnrated,
-                                autoSyncTracker = autoSyncTracker,
-                            ),
-                        )
-                        quickEditCriterion = null
-                    },
+            title = criterion.name,
+            subtitle = "Quick Score Adjustment (0 - 100)",
+            footer = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Set")
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { quickEditCriterion = null },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val parsed = tempScoreStr.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
+                            val updated = criteria.map { if (it.id == criterion.id) it.copy(score = parsed) else it }
+                            val (newTotal, newScale10) = GranularScoreCalculator.calculate(updated, ignoreUnrated)
+                            onSaveScore(
+                                GranularScoreEntry(
+                                    mangaId = entry?.mangaId ?: 0L,
+                                    templateName = currentTemplateName,
+                                    criteria = updated,
+                                    totalScore = newTotal,
+                                    scale10Score = newScale10,
+                                    ignoreUnrated = ignoreUnrated,
+                                    autoSyncTracker = autoSyncTracker,
+                                ),
+                            )
+                            quickEditCriterion = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Set")
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { quickEditCriterion = null }) {
-                    Text("Cancel")
-                }
-            },
-        )
+        ) {
+            OutlinedTextField(
+                value = tempScoreStr,
+                onValueChange = { tempScoreStr = it.filter { c -> c.isDigit() }.take(3) },
+                label = { Text("Score (0 - 100)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 
     // Add Criterion Dialog
@@ -458,105 +469,126 @@ fun GranularScoreCard(
         var name by remember { mutableStateOf("") }
         var weightStr by remember { mutableStateOf("10") }
 
-        AlertDialog(
+        KisaraBottomSheet(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Add Scoring Criterion") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Criterion Name (e.g. World Building)") },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = weightStr,
-                        onValueChange = { weightStr = it.filter { c -> c.isDigit() || c == '.' }.take(4) },
-                        label = { Text("Weight (e.g. 5, 10)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val weight = weightStr.toDoubleOrNull()?.coerceAtLeast(1.0) ?: 10.0
-                        val newCrit = GranularScoreCriterion(
-                            id = name.lowercase().replace(" ", "_"),
-                            name = name.trim(),
-                            score = 0.0,
-                            weight = weight,
-                        )
-                        val updated = criteria + newCrit
-                        val (newTotal, newScale10) = GranularScoreCalculator.calculate(updated, ignoreUnrated)
-                        onSaveScore(
-                            GranularScoreEntry(
-                                mangaId = entry?.mangaId ?: 0L,
-                                templateName = currentTemplateName,
-                                criteria = updated,
-                                totalScore = newTotal,
-                                scale10Score = newScale10,
-                                ignoreUnrated = ignoreUnrated,
-                                autoSyncTracker = autoSyncTracker,
-                            ),
-                        )
-                        showAddDialog = false
-                    },
-                    enabled = name.isNotBlank(),
+            title = "Add Scoring Criterion",
+            subtitle = "Add a custom metric to this score breakdown",
+            footer = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Add")
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { showAddDialog = false },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val weight = weightStr.toDoubleOrNull()?.coerceAtLeast(1.0) ?: 10.0
+                            val newCrit = GranularScoreCriterion(
+                                id = name.lowercase().replace(" ", "_"),
+                                name = name.trim(),
+                                score = 0.0,
+                                weight = weight,
+                            )
+                            val updated = criteria + newCrit
+                            val (newTotal, newScale10) = GranularScoreCalculator.calculate(updated, ignoreUnrated)
+                            onSaveScore(
+                                GranularScoreEntry(
+                                    mangaId = entry?.mangaId ?: 0L,
+                                    templateName = currentTemplateName,
+                                    criteria = updated,
+                                    totalScore = newTotal,
+                                    scale10Score = newScale10,
+                                    ignoreUnrated = ignoreUnrated,
+                                    autoSyncTracker = autoSyncTracker,
+                                ),
+                            )
+                            showAddDialog = false
+                        },
+                        enabled = name.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Add")
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Criterion Name (e.g. World Building)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = weightStr,
+                    onValueChange = { weightStr = it.filter { c -> c.isDigit() || c == '.' }.take(4) },
+                    label = { Text("Weight (e.g. 5, 10)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
     }
 
     // Save as New Template Dialog
     if (showSaveTemplateDialog) {
         var templateName by remember { mutableStateOf("") }
 
-        AlertDialog(
+        KisaraBottomSheet(
             onDismissRequest = { showSaveTemplateDialog = false },
-            title = { Text("Save as New Template") },
-            text = {
-                OutlinedTextField(
-                    value = templateName,
-                    onValueChange = { templateName = it },
-                    label = { Text("Template Name") },
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val templateCriteria = criteria.map {
-                            GranularTemplateCriterion(id = it.id, name = it.name, weight = it.weight)
-                        }
-                        onSaveNewTemplate(
-                            GranularScoreTemplate(
-                                name = templateName.trim(),
-                                mediaType = "ALL",
-                                criteria = templateCriteria,
-                            ),
-                        )
-                        showSaveTemplateDialog = false
-                    },
-                    enabled = templateName.isNotBlank(),
+            title = "Save as New Template",
+            subtitle = "Persist current scoring criteria as a reusable template",
+            footer = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Save")
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { showSaveTemplateDialog = false },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val templateCriteria = criteria.map {
+                                GranularTemplateCriterion(id = it.id, name = it.name, weight = it.weight)
+                            }
+                            onSaveNewTemplate(
+                                GranularScoreTemplate(
+                                    name = templateName.trim(),
+                                    mediaType = "ALL",
+                                    criteria = templateCriteria,
+                                ),
+                            )
+                            showSaveTemplateDialog = false
+                        },
+                        enabled = templateName.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Save")
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showSaveTemplateDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
+        ) {
+            OutlinedTextField(
+                value = templateName,
+                onValueChange = { templateName = it },
+                label = { Text("Template Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

@@ -6,11 +6,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -83,14 +88,33 @@ internal fun NovelTranslationBatchSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.Transparent,
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
+        tonalElevation = 0.dp,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        GlassSurface(
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.compose.material3.BottomSheetDefaults.DragHandle()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
             Text(
                 text = stringResource(KMR.strings.novel_batch_title),
                 style = MaterialTheme.typography.headlineSmall,
@@ -226,6 +250,8 @@ internal fun NovelTranslationBatchSheet(
             }
         }
     }
+}
+}
 }
 
 @Composable

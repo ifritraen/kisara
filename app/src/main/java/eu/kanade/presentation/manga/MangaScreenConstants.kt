@@ -41,3 +41,12 @@ enum class MangaScreenItem {
     GRANULAR_SCORE,
     // KMK <--
 }
+
+// KMK -->
+enum class ChapterSheetExpansion {
+    COLLAPSED,
+    PARTIAL,
+    FULL,
+}
+// KMK <--
+

@@ -132,6 +132,12 @@ fun Screen.sourcesTab(
                 onChangeSearchQuery = screenModel::search,
                 onSelectTag = screenModel::setSelectedTag,
                 onClickManageTags = { source -> screenModel.dialog = SourcesScreenModel.Dialog.SourceTags(source) },
+                onToggleSelectSource = screenModel::toggleSourceSelection,
+                onSelectAllSources = screenModel::selectAllSources,
+                onClearSourceSelection = screenModel::clearSourceSelection,
+                onClickBulkTags = screenModel::openBulkSourceTagsDialog,
+                onClickBulkPin = screenModel::bulkPinSources,
+                onClickBulkUninstall = screenModel::bulkUninstallSources,
                 // KMK <--
             )
 

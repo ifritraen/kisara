@@ -62,7 +62,10 @@ fun Screen.animeUpdatesTab(
                 AppBar.Action(
                     title = context.stringResource(MR.strings.action_view_upcoming),
                     icon = Icons.Outlined.CalendarMonth,
-                    onClick = { UpdatesTabEvents.selectSubTabEvent.trySend(0) },
+                    onClick = {
+                        UpdatesTabEvents.currentPageIndex = 0
+                        UpdatesTabEvents.selectSubTabEvent.trySend(0)
+                    },
                 ),
                 AppBar.Action(
                     title = context.stringResource(MR.strings.action_update_library),

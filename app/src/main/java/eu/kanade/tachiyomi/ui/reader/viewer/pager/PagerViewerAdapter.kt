@@ -351,11 +351,18 @@ class PagerViewerAdapter(
         // we need to set the page back correctly
         // We will however shift to the first page of the new chapter if the last page we were are
         // on is not in the new chapter that has loaded
+        // KMK -->
+        val oldChapter = (oldCurrent?.first as? ReaderPage)?.chapter
+            ?: (oldCurrent?.first as? ChapterTransition)?.from
+        val curChapter = currentChapter
         val newPage = when {
-            oldCurrent?.first is ReaderPage &&
-                (oldCurrent.first as ReaderPage).chapter != currentChapter &&
-                (oldCurrent.second as? ChapterTransition)?.from != currentChapter ->
-                subItems.find { it is ReaderPage && it.chapter == currentChapter }
+            oldChapter != null && curChapter != null && oldChapter != curChapter -> {
+                val pages = curChapter.pages
+                val targetPage = pages?.getOrNull(
+                    kotlin.math.min(curChapter.requestedPage, pages.lastIndex),
+                )
+                targetPage ?: subItems.find { it is ReaderPage && it.chapter == curChapter }
+            }
             useSecondPage -> oldCurrent?.second ?: oldCurrent?.first
             else -> oldCurrent?.first ?: return
         }
@@ -371,12 +378,15 @@ class PagerViewerAdapter(
                 } else {
                     filteredPages.maxByOrNull { (it.first as ReaderPage).index }?.first
                 }
-                joinedItems.indexOfFirst { it.first == page || it.second == page }
+                joinedItems.indexOfFirst { page != null && (it.first == page || it.second == page) }
             }
             else -> joinedItems.indexOfFirst { it.first == newPage || it.second == newPage }
         }
 
-        viewer.pager.setCurrentItem(index, false)
+        if (index != -1) {
+            viewer.pager.setCurrentItem(index, false)
+        }
+        // KMK <--
     }
 
     fun splitDoublePages(current: ReaderPage) {

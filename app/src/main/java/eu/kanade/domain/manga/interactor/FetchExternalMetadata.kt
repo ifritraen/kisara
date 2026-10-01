@@ -33,6 +33,7 @@ class FetchExternalMetadata(
     private val trackerManager: TrackerManager = Injekt.get(),
     private val networkHelper: NetworkHelper = Injekt.get(),
     private val json: Json = Injekt.get(),
+    private val context: android.app.Application = Injekt.get(),
 ) {
     private val client: OkHttpClient
         get() = networkHelper.client
@@ -48,20 +49,35 @@ class FetchExternalMetadata(
         // 1. Primary: MangaUpdates
         var metadata = fetchFromMangaUpdates(cleanTitle, manga.id)
 
-        // 2. Fallback 1: MangaBaka
-        if (metadata == null) {
-            metadata = fetchFromMangaBaka(cleanTitle, manga.id)
-        }
-
-        // 3. Fallback 2: AniList
+        // 2. Fallback 1: AniList
         if (metadata == null) {
             metadata = fetchFromAniList(cleanTitle, manga.id)
         }
 
-        if (metadata != null) {
-            getMangaExternalMetadata.upsert(metadata)
+        // 3. Fallback 2: MangaBaka
+        if (metadata == null) {
+            metadata = fetchFromMangaBaka(cleanTitle, manga.id)
         }
 
+        if (metadata != null) {
+            getMangaExternalMetadata.upsert(metadata)
+            eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.registerTags(context, metadata.tags)
+        }
+
+        metadata
+    }
+
+    suspend fun fetchFromSource(manga: Manga, sourceName: String): MangaExternalMetadata? = withContext(Dispatchers.IO) {
+        val cleanTitle = cleanMangaTitle(manga.title)
+        val metadata = when (sourceName.lowercase()) {
+            "anilist" -> fetchFromAniList(cleanTitle, manga.id)
+            "mangabaka" -> fetchFromMangaBaka(cleanTitle, manga.id)
+            else -> fetchFromMangaUpdates(cleanTitle, manga.id)
+        }
+        if (metadata != null) {
+            getMangaExternalMetadata.upsert(metadata)
+            eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.registerTags(context, metadata.tags)
+        }
         metadata
     }
 
@@ -74,13 +90,13 @@ class FetchExternalMetadata(
         val cleanTitle = cleanMangaTitle(novel.title)
         // 1. MangaUpdates
         var metadata = fetchFromMangaUpdates(cleanTitle, novel.id)
-        // 2. MangaBaka
-        if (metadata == null) {
-            metadata = fetchFromMangaBaka(cleanTitle, novel.id)
-        }
-        // 3. AniList
+        // 2. AniList
         if (metadata == null) {
             metadata = fetchFromAniList(cleanTitle, novel.id)
+        }
+        // 3. MangaBaka
+        if (metadata == null) {
+            metadata = fetchFromMangaBaka(cleanTitle, novel.id)
         }
         metadata
     }
@@ -102,6 +118,7 @@ class FetchExternalMetadata(
             val licensor = series.englishPublisher?.htmlDecode()
             val demographic = series.type?.htmlDecode()
             val synopsis = series.description?.htmlDecode() ?: bestMatch.description?.htmlDecode()
+            val matchedTitle = series.title?.htmlDecode() ?: bestMatch.title?.htmlDecode() ?: title
 
             MangaExternalMetadata(
                 mangaId = mangaId,
@@ -116,6 +133,7 @@ class FetchExternalMetadata(
                 synopsis = synopsis,
                 sourceName = "MangaUpdates",
                 fetchedAt = System.currentTimeMillis(),
+                title = matchedTitle,
             )
         } catch (e: Throwable) {
             logcat(LogPriority.DEBUG, e) { "MangaUpdates metadata fetch failed for: $title" }
@@ -138,6 +156,7 @@ class FetchExternalMetadata(
             val genres = series.genres.orEmpty()
             val tags = series.tags.orEmpty()
             val synopsis = series.description
+            val matchedTitle = series.title ?: title
 
             MangaExternalMetadata(
                 mangaId = mangaId,
@@ -152,6 +171,7 @@ class FetchExternalMetadata(
                 synopsis = synopsis,
                 sourceName = "MangaBaka",
                 fetchedAt = System.currentTimeMillis(),
+                title = matchedTitle,
             )
         } catch (e: Throwable) {
             logcat(LogPriority.DEBUG, e) { "MangaBaka metadata fetch failed for: $title" }
@@ -166,6 +186,7 @@ class FetchExternalMetadata(
                     Media(search: ${'$'}search, type: MANGA) {
                         id
                         title {
+                            userPreferred
                             romaji
                             english
                             native
@@ -205,7 +226,7 @@ class FetchExternalMetadata(
             val alResult = with(json) { response.parseAs<ALMetadataResponse>() }
             val media = alResult.data?.media ?: return null
 
-            val alTitles = listOfNotNull(media.title?.romaji, media.title?.english, media.title?.native)
+            val alTitles = listOfNotNull(media.title?.userPreferred, media.title?.romaji, media.title?.english, media.title?.native)
             if (alTitles.isNotEmpty() && !alTitles.any { isMatchingTitle(title, it) }) {
                 return null
             }
@@ -218,6 +239,7 @@ class FetchExternalMetadata(
             val tags = media.tags?.mapNotNull { it.name }.orEmpty()
             val rawSynopsis = media.description?.htmlDecode()
             val synopsis = cleanHtmlFormatting(rawSynopsis)
+            val matchedTitle = media.title?.userPreferred ?: media.title?.english ?: media.title?.romaji ?: media.title?.native ?: title
 
             MangaExternalMetadata(
                 mangaId = mangaId,
@@ -232,6 +254,7 @@ class FetchExternalMetadata(
                 synopsis = synopsis,
                 sourceName = "AniList",
                 fetchedAt = System.currentTimeMillis(),
+                title = matchedTitle,
             )
         } catch (e: Throwable) {
             logcat(LogPriority.DEBUG, e) { "AniList metadata fetch failed for: $title" }
@@ -407,6 +430,7 @@ private data class ALTitle(
     val romaji: String? = null,
     val english: String? = null,
     val native: String? = null,
+    val userPreferred: String? = null,
 )
 
 @Serializable

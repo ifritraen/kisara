@@ -4,9 +4,13 @@ import android.app.Application
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.manga.interactor.UpdateManga
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.MediaType
 import eu.kanade.tachiyomi.source.CatalogueSource
+import tachiyomi.domain.manga.interactor.GetManga
+import eu.kanade.tachiyomi.data.ai.NsfwTagClassifier
+import eu.kanade.tachiyomi.util.NsfwDetector
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +50,7 @@ import tachiyomi.domain.suggestions.interactor.GetSuggestions
 import tachiyomi.domain.suggestions.model.Suggestion
 import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
+import tachiyomi.domain.suggestions.repository.SuggestionRepository
 import tachiyomi.domain.updates.interactor.GetUpdates
 import tachiyomi.domain.updates.model.UpdatesWithRelations
 import uy.kohesive.injekt.Injekt
@@ -80,12 +85,21 @@ class LandingScreenModel(
     private val filterMangaByBlockedContent: tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent = Injekt.get(),
     private val getTrackerRecommendations: eu.kanade.domain.manga.interactor.GetTrackerRecommendations = Injekt.get(),
     private val getTrackerContinueReading: eu.kanade.domain.manga.interactor.GetTrackerContinueReading = Injekt.get(),
+    private val suggestionRepository: SuggestionRepository = Injekt.get(),
+    private val getManga: GetManga = Injekt.get(),
+    private val sourcePreferences: SourcePreferences = Injekt.get(),
 ) : StateScreenModel<LandingScreenModel.State>(State()) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val cacheFile = File(app.cacheDir, "home_feed_cache.json")
 
     init {
+        val nsfwFilterTrigger = combine(
+            uiPreferences.kisaraHideNsfwSuggestions().changes(),
+            sourcePreferences.nsfwOverrideSfwExtensions().changes(),
+            sourcePreferences.nsfwOverrideNsfwExtensions().changes(),
+        ) { hideNsfw, _, _ -> hideNsfw }
+
         // 1. Load feed cache immediately
         loadFeedCache()
 
@@ -93,41 +107,82 @@ class LandingScreenModel(
         loadTrackerRecommendations(force = false)
         loadTrackerContinue(force = false)
 
-        // 3. Subscribe to suggestions (dynamically filtered against active library)
+        // 3. Subscribe to suggestions (dynamically filtered against active library, dismissed items & NSFW preference)
         screenModelScope.launch {
             combine(
                 getSuggestions.subscribe().distinctUntilChanged(),
                 getSuggestionTags.subscribe().distinctUntilChanged(),
                 getLibraryManga.subscribe().distinctUntilChanged(),
-            ) { suggestions, tags, libraryManga ->
+                nsfwFilterTrigger,
+                suggestionRepository.observeDismissed().distinctUntilChanged(),
+            ) { suggestions, tags, libraryManga, hideNsfw, dismissedUrls ->
+                val dismissedUrlSet = dismissedUrls.toSet()
                 val libraryIds = libraryManga.map { it.id }.toSet()
                 val libraryUrls = libraryManga.map { it.manga.url }.toSet()
                 val nonLibrarySuggestions = suggestions.filter {
                     !it.manga.favorite &&
                         it.manga.id !in libraryIds &&
-                        it.manga.url !in libraryUrls
+                        it.manga.url !in libraryUrls &&
+                        it.manga.url !in dismissedUrlSet
                 }
                 val nonBlockedTags = tags.filter { !it.isBlocked }
-                val top10Tags = nonBlockedTags.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
-                val activeTags = nonBlockedTags.filter { top10Tags.contains(it.tag) || it.isUserAdded }
+                val eligibleTags = if (hideNsfw) nonBlockedTags.filterNot { NsfwTagClassifier.is18PlusTag(it.tag) } else nonBlockedTags
+                val top10Tags = eligibleTags.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
+                val activeTags = eligibleTags.filter { top10Tags.contains(it.tag) || it.isUserAdded }
                     .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
 
-                val finalSuggestions = nonLibrarySuggestions.take(15)
-                finalSuggestions to null
-            }.collectLatest { (suggestions, tag) ->
-                mutableState.update { it.copy(suggestions = suggestions.toImmutableList(), suggestionsTagName = tag) }
+                val hasUnfilteredSuggestions = nonLibrarySuggestions.isNotEmpty()
+                val filteredSuggestions = if (hideNsfw) {
+                    nonLibrarySuggestions.filterNot { NsfwDetector.isNsfw(it.manga, it.manga.title) }
+                } else {
+                    nonLibrarySuggestions
+                }
+
+                val finalSuggestions = filteredSuggestions.take(15)
+                // KMK --> Derive meaningful recommendation tag rather than statically defaulting:
+                val suggestionsGenres = finalSuggestions.flatMap { it.manga.genre.orEmpty() }
+                    .map { it.lowercase().trim() }
+                    .filter { it !in setOf("manga", "webtoon", "comic", "scanlation", "english") }
+                val genreCounts = suggestionsGenres.groupingBy { it }.eachCount()
+                val topMatchingActiveTag = activeTags.firstOrNull { genreCounts.containsKey(it.tag.lowercase().trim()) }?.tag
+                val mostFrequentGenre = genreCounts.maxByOrNull { it.value }?.key?.replaceFirstChar { it.uppercase() }
+                val tagName = topMatchingActiveTag ?: mostFrequentGenre ?: activeTags.firstOrNull()?.tag
+                Triple(finalSuggestions, tagName, hasUnfilteredSuggestions)
+                // KMK <--
+            }.collectLatest { (suggestions, tag, hasUnfiltered) ->
+                mutableState.update {
+                    it.copy(
+                        suggestions = suggestions.toImmutableList(),
+                        suggestionsTagName = tag,
+                        hasUnfilteredSuggestions = hasUnfiltered,
+                    )
+                }
             }
         }
 
         // 4. Subscribe to history (Continue Reading)
         screenModelScope.launch {
-            getHistory.subscribe("", unfinishedManga = null, unfinishedChapter = null, nonLibraryEntries = null)
-                .distinctUntilChanged()
+            combine(
+                getHistory.subscribe("", unfinishedManga = null, unfinishedChapter = null, nonLibraryEntries = null).distinctUntilChanged(),
+                nsfwFilterTrigger,
+                getLibraryManga.subscribe().distinctUntilChanged(),
+            ) { list, hideNsfw, libraryManga ->
+                val libraryMap = libraryManga.associate { it.id to it.manga }
+                val distinctHistory = list.distinctBy { it.mangaId }
+                val filtered = if (hideNsfw) {
+                    distinctHistory.filterNot { item ->
+                        if (NsfwTagClassifier.is18PlusSource(item.coverData.sourceId)) return@filterNot true
+                        val manga = libraryMap[item.mangaId] ?: runCatching { getManga.await(item.mangaId) }.getOrNull()
+                        NsfwDetector.isNsfw(manga, item.title)
+                    }
+                } else {
+                    distinctHistory
+                }
+                filtered.take(24)
+            }
                 .flowOn(Dispatchers.IO)
                 .catch { logcat(LogPriority.ERROR, it) }
-                .collectLatest { list ->
-                    // Distinct by manga to avoid multiple history items for same manga
-                    val distinctHistory = list.distinctBy { it.mangaId }.take(24)
+                .collectLatest { distinctHistory ->
                     mutableState.update { it.copy(history = distinctHistory.toImmutableList()) }
                 }
         }
@@ -135,13 +190,27 @@ class LandingScreenModel(
         // 5. Subscribe to updates (Fresh Releases) - last 3 months
         screenModelScope.launch {
             val limit = ZonedDateTime.now().minusMonths(3).toInstant()
-            getUpdates.subscribe(limit, unread = null, started = null, bookmarked = null, hideExcludedScanlators = false)
-                .distinctUntilChanged()
+            combine(
+                getUpdates.subscribe(limit, unread = null, started = null, bookmarked = null, hideExcludedScanlators = false).distinctUntilChanged(),
+                nsfwFilterTrigger,
+                getLibraryManga.subscribe().distinctUntilChanged(),
+            ) { list, hideNsfw, libraryManga ->
+                val libraryMap = libraryManga.associate { it.id to it.manga }
+                val distinctUpdates = list.distinctBy { it.mangaId }
+                val filtered = if (hideNsfw) {
+                    distinctUpdates.filterNot { item ->
+                        if (NsfwTagClassifier.is18PlusSource(item.sourceId)) return@filterNot true
+                        val manga = libraryMap[item.mangaId] ?: runCatching { getManga.await(item.mangaId) }.getOrNull()
+                        NsfwDetector.isNsfw(manga, item.mangaTitle)
+                    }
+                } else {
+                    distinctUpdates
+                }
+                filtered.take(20)
+            }
                 .flowOn(Dispatchers.IO)
                 .catch { logcat(LogPriority.ERROR, it) }
-                .collectLatest { list ->
-                    // Distinct by manga to keep it row-based
-                    val distinctUpdates = list.distinctBy { it.mangaId }.take(20)
+                .collectLatest { distinctUpdates ->
                     mutableState.update { it.copy(updates = distinctUpdates.toImmutableList()) }
                 }
         }
@@ -188,25 +257,34 @@ class LandingScreenModel(
     }
 
     fun loadForgottenFavorites() {
+        val nsfwFilterTrigger = combine(
+            uiPreferences.kisaraHideNsfwSuggestions().changes(),
+            sourcePreferences.nsfwOverrideSfwExtensions().changes(),
+            sourcePreferences.nsfwOverrideNsfwExtensions().changes(),
+        ) { hideNsfw, _, _ -> hideNsfw }
+
         screenModelScope.launch {
-            getLibraryManga.subscribe()
-                .distinctUntilChanged()
+            combine(
+                getLibraryManga.subscribe().distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { libraryManga, hideNsfw ->
+                if (libraryManga.isEmpty()) {
+                    return@combine emptyList<Manga>()
+                }
+
+                val eligible = if (hideNsfw) {
+                    libraryManga.filterNot { NsfwDetector.isNsfw(it.manga, it.manga.title) }
+                } else {
+                    libraryManga
+                }
+                val unreadLibrary = eligible.filter { it.unreadCount > 0 }
+                val candidates = unreadLibrary.ifEmpty { eligible }
+                candidates.map { it.manga }.shuffled().take(20)
+            }
                 .flowOn(Dispatchers.IO)
                 .catch { logcat(LogPriority.ERROR, it) }
-                .collectLatest { libraryManga ->
-                    if (libraryManga.isEmpty()) {
-                        mutableState.update { it.copy(libraryRandom = emptyList<Manga>().toImmutableList(), isLoading = false) }
-                        return@collectLatest
-                    }
-
-                    try {
-                        val unreadLibrary = libraryManga.filter { it.unreadCount > 0 }
-                        val candidates = unreadLibrary.ifEmpty { libraryManga }
-                        val shuffled = candidates.map { it.manga }.shuffled().take(20)
-                        mutableState.update { it.copy(libraryRandom = shuffled.toImmutableList(), isLoading = false) }
-                    } catch (e: Exception) {
-                        logcat(LogPriority.ERROR, e) { "Failed to load unread library manga" }
-                    }
+                .collectLatest { shuffled ->
+                    mutableState.update { it.copy(libraryRandom = shuffled.toImmutableList(), isLoading = false) }
                 }
         }
     }
@@ -274,17 +352,22 @@ class LandingScreenModel(
     fun dismissSuggestion(manga: Manga) {
         screenModelScope.launchIO {
             try {
-                val suggestionRepository = Injekt.get<tachiyomi.domain.suggestions.repository.SuggestionRepository>()
                 suggestionRepository.dismiss(manga.url, manga.title)
                 mutableState.update { state ->
+                    val remaining = state.suggestions.filterNot { it.manga.id == manga.id || it.manga.url == manga.url }
                     state.copy(
-                        suggestions = state.suggestions.filterNot { it.manga.id == manga.id || it.manga.url == manga.url }.toImmutableList(),
+                        suggestions = remaining.toImmutableList(),
+                        hasUnfilteredSuggestions = remaining.isNotEmpty() && state.hasUnfilteredSuggestions,
                     )
                 }
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Failed to dismiss suggestion: ${manga.title}" }
             }
         }
+    }
+
+    fun triggerSuggestionsRefresh() {
+        eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.triggerOnAppStart(app, force = true)
     }
 
     private fun updateLocalFavoriteState(mangaId: Long, favorite: Boolean) {
@@ -310,13 +393,26 @@ class LandingScreenModel(
 
     private fun loadFeedCache() {
         screenModelScope.launchIO {
-            if (cacheFile.exists()) {
-                try {
-                    val text = cacheFile.readText()
-                    val list = json.decodeFromString<List<CachedFeedManga>>(text)
-                    mutableState.update { it.copy(feed = list.toImmutableList()) }
-                } catch (e: Exception) {
-                    logcat(LogPriority.WARN, e) { "Failed to parse feed cache" }
+            val nsfwFilterTrigger = combine(
+                uiPreferences.kisaraHideNsfwSuggestions().changes(),
+                sourcePreferences.nsfwOverrideSfwExtensions().changes(),
+                sourcePreferences.nsfwOverrideNsfwExtensions().changes(),
+            ) { hideNsfw, _, _ -> hideNsfw }
+
+            nsfwFilterTrigger.collectLatest { isHideNsfw ->
+                if (cacheFile.exists()) {
+                    try {
+                        val text = cacheFile.readText()
+                        val list = json.decodeFromString<List<CachedFeedManga>>(text)
+                        val filtered = if (isHideNsfw) {
+                            list.filterNot { NsfwTagClassifier.is18PlusSource(it.sourceId) || NsfwDetector.isNsfw(null, it.title) }
+                        } else {
+                            list
+                        }
+                        mutableState.update { it.copy(feed = filtered.toImmutableList()) }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) { "Failed to parse feed cache" }
+                    }
                 }
             }
         }
@@ -370,6 +466,7 @@ class LandingScreenModel(
                     onlineSources.firstOrNull { it.id == suggestionSrc.sourceId } as? CatalogueSource
                 }
 
+                val isHideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
                 val blockedFilters = filterMangaByBlockedContent.getBlockedFilters()
                 val fetchJobs = targetSources.map { source ->
                     async {
@@ -383,7 +480,9 @@ class LandingScreenModel(
                             val mangas = mangaPage.mangas.mapNotNull { smanga ->
                                 val networkManga = smanga.toDomainManga(source.id)
                                 val localManga = networkToLocalManga(networkManga)
-                                if (filterMangaByBlockedContent.isMangaBlocked(localManga, blockedFilters)) {
+                                if (filterMangaByBlockedContent.isMangaBlocked(localManga, blockedFilters) ||
+                                    (isHideNsfw && NsfwDetector.isNsfw(localManga, localManga.title))
+                                ) {
                                     null
                                 } else {
                                     CachedFeedManga(
@@ -442,6 +541,7 @@ class LandingScreenModel(
     data class State(
         val suggestions: ImmutableList<Suggestion> = emptyList<Suggestion>().toImmutableList(),
         val suggestionsTagName: String? = null,
+        val hasUnfilteredSuggestions: Boolean = false,
         val history: ImmutableList<HistoryWithRelations> = emptyList<HistoryWithRelations>().toImmutableList(),
         val updates: ImmutableList<UpdatesWithRelations> = emptyList<UpdatesWithRelations>().toImmutableList(),
         val libraryRandom: ImmutableList<Manga> = emptyList<Manga>().toImmutableList(),

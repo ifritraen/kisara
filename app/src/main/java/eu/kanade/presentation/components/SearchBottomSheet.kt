@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -112,29 +114,40 @@ fun SearchBottomSheet(
 
     val colorScheme = MaterialTheme.colorScheme
     val isDark = colorScheme.background.luminance() < 0.5f
-    val containerColor = colorScheme.surface.copy(alpha = if (isDark) 0.88f else 0.92f)
     val scrimColor = colorScheme.scrim.copy(alpha = 0.32f)
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            )
-        },
+        dragHandle = null,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = containerColor,
+        containerColor = Color.Transparent,
         scrimColor = scrimColor,
         tonalElevation = 0.dp,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .verticalScroll(rememberScrollState()),
+        GlassSurface(
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BottomSheetDefaults.DragHandle(
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
             // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -492,4 +505,6 @@ fun SearchBottomSheet(
             }
         }
     }
+}
+}
 }

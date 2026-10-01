@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -65,6 +66,7 @@ import eu.kanade.presentation.browse.components.SourceIcon
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.data.ai.NsfwTagClassifier
 import eu.kanade.tachiyomi.data.suggestions.SuggestionsReport
 import eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -92,6 +94,12 @@ import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+enum class SuggestionPool(val displayName: String) {
+    ALL("All"),
+    SAFE("Safe"),
+    NSFW("18+"),
+}
 
 class SettingsSuggestionsScreen : Screen() {
 
@@ -127,7 +135,17 @@ class SettingsSuggestionsScreen : Screen() {
         var maxTagsToMatch by remember { mutableStateOf(suggestionsPreferences.maxTagsToMatch().get()) }
         var maxSourcesToFetch by remember { mutableStateOf(suggestionsPreferences.maxSourcesToFetch().get()) }
         var maxSuggestionsToDisplay by remember { mutableStateOf(suggestionsPreferences.maxSuggestionsToDisplay().get()) }
+        var suggestionsInterval by remember { mutableStateOf(suggestionsPreferences.suggestionsInterval().get()) }
         var suggestionsLoggingEnabled by remember { mutableStateOf(suggestionsPreferences.suggestionsLoggingEnabled().get()) }
+        var nsfwMode by remember { mutableStateOf(suggestionsPreferences.nsfwSuggestionMode().get()) }
+        var aiSynopsisTaggingEnabled by remember { mutableStateOf(suggestionsPreferences.aiSynopsisTaggingEnabled().get()) }
+        var manualSafeSources by remember { mutableStateOf(suggestionsPreferences.manuallySafeSources().get()) }
+
+        var masterPool by remember { mutableStateOf(SuggestionPool.ALL) }
+        var tagCountPool by remember { mutableStateOf(SuggestionPool.ALL) }
+        var sourceCountPool by remember { mutableStateOf(SuggestionPool.ALL) }
+        var tagOrderPool by remember { mutableStateOf(SuggestionPool.ALL) }
+        var sourceOrderPool by remember { mutableStateOf(SuggestionPool.ALL) }
 
         var isTagCountExpanded by remember { mutableStateOf(false) }
         var isSourceCountExpanded by remember { mutableStateOf(false) }
@@ -138,24 +156,77 @@ class SettingsSuggestionsScreen : Screen() {
         var isAuthorOrderExpanded by remember { mutableStateOf(true) }
         var isArtistOrderExpanded by remember { mutableStateOf(true) }
 
-        val tagCountList = remember(tags) { tags.sortedByDescending { it.count } }
-        val sourceCountList = remember(sources) { sources.sortedByDescending { it.count } }
+        val filteredTagCountList = remember(tags, tagCountPool) {
+            val sorted = tags.sortedByDescending { it.count }
+            when (tagCountPool) {
+                SuggestionPool.ALL -> sorted
+                SuggestionPool.SAFE -> sorted.filter { !NsfwTagClassifier.is18PlusTag(it.tag) }
+                SuggestionPool.NSFW -> sorted.filter { NsfwTagClassifier.is18PlusTag(it.tag) }
+            }
+        }
+        val filteredSourceCountList = remember(sources, sourceCountPool, manualSafeSources) {
+            val sorted = sources.sortedByDescending { it.count }
+            when (sourceCountPool) {
+                SuggestionPool.ALL -> sorted
+                SuggestionPool.SAFE -> sorted.filter { !NsfwTagClassifier.is18PlusSource(it.sourceId) }
+                SuggestionPool.NSFW -> sorted.filter { NsfwTagClassifier.is18PlusSource(it.sourceId) }
+            }
+        }
         val authorCountList = remember(authors) { authors.sortedByDescending { it.count } }
         val artistCountList = remember(artists) { artists.sortedByDescending { it.count } }
 
-        val activeTags = remember(tags) {
+        val activeAllTags = remember(tags) {
             val nonBlocked = tags.filter { !it.isBlocked }
             val top10Tags = nonBlocked.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
             nonBlocked.filter { top10Tags.contains(it.tag) || it.isUserAdded }
-                .sortedBy { it.sortOrder }
+                .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
                 .toMutableStateList()
         }
-        val activeSources = remember(sources) {
+        val activeSafeTags = remember(tags) {
+            val nonBlocked = tags.filter { !it.isBlocked && !NsfwTagClassifier.is18PlusTag(it.tag) }
+            val top10Tags = nonBlocked.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
+            nonBlocked.filter { top10Tags.contains(it.tag) || it.isUserAdded }
+                .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
+                .toMutableStateList()
+        }
+        val activeNsfwTags = remember(tags) {
+            val nonBlocked = tags.filter { !it.isBlocked && NsfwTagClassifier.is18PlusTag(it.tag) }
+            val top10Tags = nonBlocked.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
+            nonBlocked.filter { top10Tags.contains(it.tag) || it.isUserAdded }
+                .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
+                .toMutableStateList()
+        }
+        val currentActiveTags = when (tagOrderPool) {
+            SuggestionPool.ALL -> activeAllTags
+            SuggestionPool.SAFE -> activeSafeTags
+            SuggestionPool.NSFW -> activeNsfwTags
+        }
+
+        val activeAllSources = remember(sources) {
             val nonBlocked = sources.filter { !it.isBlocked }
             val top5Sources = nonBlocked.sortedByDescending { it.count }.take(5).map { it.sourceId }.toSet()
             nonBlocked.filter { top5Sources.contains(it.sourceId) || it.isUserAdded }
-                .sortedBy { it.sortOrder }
+                .sortedWith(compareBy<SuggestionSource> { it.sortOrder }.thenByDescending { it.count })
                 .toMutableStateList()
+        }
+        val activeSafeSources = remember(sources, manualSafeSources) {
+            val nonBlocked = sources.filter { !it.isBlocked && !NsfwTagClassifier.is18PlusSource(it.sourceId) }
+            val top5Sources = nonBlocked.sortedByDescending { it.count }.take(5).map { it.sourceId }.toSet()
+            nonBlocked.filter { top5Sources.contains(it.sourceId) || it.isUserAdded }
+                .sortedWith(compareBy<SuggestionSource> { it.sortOrder }.thenByDescending { it.count })
+                .toMutableStateList()
+        }
+        val activeNsfwSources = remember(sources, manualSafeSources) {
+            val nonBlocked = sources.filter { !it.isBlocked && NsfwTagClassifier.is18PlusSource(it.sourceId) }
+            val top5Sources = nonBlocked.sortedByDescending { it.count }.take(5).map { it.sourceId }.toSet()
+            nonBlocked.filter { top5Sources.contains(it.sourceId) || it.isUserAdded }
+                .sortedWith(compareBy<SuggestionSource> { it.sortOrder }.thenByDescending { it.count })
+                .toMutableStateList()
+        }
+        val currentActiveSources = when (sourceOrderPool) {
+            SuggestionPool.ALL -> activeAllSources
+            SuggestionPool.SAFE -> activeSafeSources
+            SuggestionPool.NSFW -> activeNsfwSources
         }
         val activeAuthors = remember(authors) {
             val nonBlocked = authors.filter { !it.isBlocked }
@@ -177,17 +248,18 @@ class SettingsSuggestionsScreen : Screen() {
         val reorderableTagsState = rememberReorderableLazyListState(lazyListState) { from, to ->
             val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
             val toKey = to.key as? String ?: return@rememberReorderableLazyListState
-            if (!fromKey.startsWith("tag-") || !toKey.startsWith("tag-")) return@rememberReorderableLazyListState
-            val fromTag = fromKey.removePrefix("tag-")
-            val toTag = toKey.removePrefix("tag-")
-            val fromIndex = activeTags.indexOfFirst { it.tag == fromTag }
-            val toIndex = activeTags.indexOfFirst { it.tag == toTag }
+            val prefix = "tag-${tagOrderPool.name}-"
+            if (!fromKey.startsWith(prefix) || !toKey.startsWith(prefix)) return@rememberReorderableLazyListState
+            val fromTag = fromKey.removePrefix(prefix)
+            val toTag = toKey.removePrefix(prefix)
+            val fromIndex = currentActiveTags.indexOfFirst { it.tag == fromTag }
+            val toIndex = currentActiveTags.indexOfFirst { it.tag == toTag }
             if (fromIndex != -1 && toIndex != -1) {
-                val item = activeTags[fromIndex]
-                activeTags.removeAt(fromIndex)
-                activeTags.add(toIndex, item)
+                val item = currentActiveTags[fromIndex]
+                currentActiveTags.removeAt(fromIndex)
+                currentActiveTags.add(toIndex, item)
                 scope.launch {
-                    modifySuggestionTag.reorder(activeTags)
+                    modifySuggestionTag.reorder(currentActiveTags.toList())
                 }
             }
         }
@@ -195,17 +267,18 @@ class SettingsSuggestionsScreen : Screen() {
         val reorderableSourcesState = rememberReorderableLazyListState(lazyListState) { from, to ->
             val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
             val toKey = to.key as? String ?: return@rememberReorderableLazyListState
-            if (!fromKey.startsWith("source-") || !toKey.startsWith("source-")) return@rememberReorderableLazyListState
-            val fromId = fromKey.removePrefix("source-").toLongOrNull() ?: return@rememberReorderableLazyListState
-            val toId = toKey.removePrefix("source-").toLongOrNull() ?: return@rememberReorderableLazyListState
-            val fromIndex = activeSources.indexOfFirst { it.sourceId == fromId }
-            val toIndex = activeSources.indexOfFirst { it.sourceId == toId }
+            val prefix = "source-${sourceOrderPool.name}-"
+            if (!fromKey.startsWith(prefix) || !toKey.startsWith(prefix)) return@rememberReorderableLazyListState
+            val fromId = fromKey.removePrefix(prefix).toLongOrNull() ?: return@rememberReorderableLazyListState
+            val toId = toKey.removePrefix(prefix).toLongOrNull() ?: return@rememberReorderableLazyListState
+            val fromIndex = currentActiveSources.indexOfFirst { it.sourceId == fromId }
+            val toIndex = currentActiveSources.indexOfFirst { it.sourceId == toId }
             if (fromIndex != -1 && toIndex != -1) {
-                val item = activeSources[fromIndex]
-                activeSources.removeAt(fromIndex)
-                activeSources.add(toIndex, item)
+                val item = currentActiveSources[fromIndex]
+                currentActiveSources.removeAt(fromIndex)
+                currentActiveSources.add(toIndex, item)
                 scope.launch {
-                    modifySuggestionSource.reorder(activeSources)
+                    modifySuggestionSource.reorder(currentActiveSources.toList())
                 }
             }
         }
@@ -354,6 +427,135 @@ class SettingsSuggestionsScreen : Screen() {
                                     steps = 19, // (1000-50)/50 = 19 steps
                                 )
 
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                val intervalLabels = mapOf(
+                                    6 to stringResource(MR.strings.update_6hour),
+                                    12 to stringResource(MR.strings.update_12hour),
+                                    24 to stringResource(MR.strings.update_24hour),
+                                    48 to stringResource(MR.strings.update_48hour),
+                                    72 to stringResource(MR.strings.update_72hour),
+                                    168 to stringResource(MR.strings.update_weekly),
+                                )
+                                Text(
+                                    text = "${stringResource(KMR.strings.pref_suggestions_fetch_interval)}: ${intervalLabels[suggestionsInterval] ?: "${suggestionsInterval}h"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    listOf(6, 12, 24, 48, 72, 168).forEach { hours ->
+                                        val isSelected = suggestionsInterval == hours
+                                        val chipLabel = when (hours) {
+                                            6 -> "6h"
+                                            12 -> "12h"
+                                            24 -> "1d"
+                                            48 -> "2d"
+                                            72 -> "3d"
+                                            168 -> "7d"
+                                            else -> "${hours}h"
+                                        }
+                                        androidx.compose.material3.FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                suggestionsInterval = hours
+                                                suggestionsPreferences.suggestionsInterval().set(hours)
+                                                eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.scheduleBackground(context, isEnabled = true, intervalHours = hours)
+                                            },
+                                            label = { Text(chipLabel, style = MaterialTheme.typography.labelSmall) },
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Text(
+                                    text = "18+ Suggestion Mode",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    listOf(
+                                        tachiyomi.domain.suggestions.service.SuggestionsPreferences.NsfwSuggestionMode.SAFE_ONLY to "Safe Only",
+                                        tachiyomi.domain.suggestions.service.SuggestionsPreferences.NsfwSuggestionMode.BALANCED to "Balanced",
+                                        tachiyomi.domain.suggestions.service.SuggestionsPreferences.NsfwSuggestionMode.NSFW_ONLY to "18+ Only",
+                                    ).forEach { (mode, label) ->
+                                        val isSelected = nsfwMode == mode
+                                        androidx.compose.material3.FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                nsfwMode = mode
+                                                suggestionsPreferences.nsfwSuggestionMode().set(mode)
+                                            },
+                                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Text(
+                                    text = "Pool Filter (Master Switch)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = "Quickly switch view pool across all Tag & Extension Count and Order lists below.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    SuggestionPool.values().forEach { pool ->
+                                        val isSelected = masterPool == pool
+                                        androidx.compose.material3.FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                masterPool = pool
+                                                tagCountPool = pool
+                                                sourceCountPool = pool
+                                                tagOrderPool = pool
+                                                sourceOrderPool = pool
+                                            },
+                                            label = { Text(pool.displayName, style = MaterialTheme.typography.labelSmall) },
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "AI Synopsis Tag Extraction",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = "Extract semantic tags from manga summaries and cache them permanently.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = aiSynopsisTaggingEnabled,
+                                        onCheckedChange = {
+                                            aiSynopsisTaggingEnabled = it
+                                            suggestionsPreferences.aiSynopsisTaggingEnabled().set(it)
+                                        },
+                                    )
+                                }
+
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Row(
@@ -389,31 +591,60 @@ class SettingsSuggestionsScreen : Screen() {
 
                     // 1. Tag Count List Header
                     item {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isTagCountExpanded = !isTagCountExpanded }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(vertical = 4.dp),
                         ) {
-                            Text(
-                                text = "Tag Count List (${tagCountList.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Icon(
-                                imageVector = if (isTagCountExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                                contentDescription = null,
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isTagCountExpanded = !isTagCountExpanded }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Tag Count List (${filteredTagCountList.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(
+                                    imageVector = if (isTagCountExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = null,
+                                )
+                            }
+                            if (isTagCountExpanded) {
+                                SuggestionPoolFilterChips(
+                                    selectedPool = tagCountPool,
+                                    onPoolSelected = { tagCountPool = it },
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
                         }
                     }
 
                     if (isTagCountExpanded) {
+                        if (filteredTagCountList.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                                ) {
+                                    Text(
+                                        text = "No ${tagCountPool.displayName.lowercase()} tags found.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(16.dp),
+                                    )
+                                }
+                            }
+                        }
                         itemsIndexed(
-                            items = tagCountList,
-                            key = { _, item -> "count-tag-${item.tag}" },
-                        ) { _, item ->
+                            items = filteredTagCountList,
+                            key = { _, item -> "count-tag-${tagCountPool.name}-${item.tag}" },
+                        ) { index, item ->
+                            val isNsfw = remember(item.tag) { NsfwTagClassifier.is18PlusTag(item.tag) }
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -428,18 +659,21 @@ class SettingsSuggestionsScreen : Screen() {
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
+                                    SuggestionRankBadge(rank = index + 1)
                                     Text(
                                         text = item.tag,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (item.isBlocked) FontWeight.Normal else FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f),
                                     )
+                                    SuggestionPoolBadge(isNsfw = isNsfw)
                                     Surface(
                                         shape = CircleShape,
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp),
                                     ) {
                                         Text(
                                             text = "${item.count} favs",
@@ -447,8 +681,8 @@ class SettingsSuggestionsScreen : Screen() {
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         )
                                     }
-                                    val isTagInOrderList = remember(activeTags, item.tag) {
-                                        activeTags.any { it.tag == item.tag }
+                                    val isTagInOrderList = remember(currentActiveTags, item.tag) {
+                                        currentActiveTags.any { it.tag == item.tag } || item.isUserAdded
                                     }
                                     if (!item.isBlocked && !isTagInOrderList) {
                                         IconButton(
@@ -485,32 +719,77 @@ class SettingsSuggestionsScreen : Screen() {
 
                     // 2. Extension Count List Header
                     item {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isSourceCountExpanded = !isSourceCountExpanded }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(vertical = 4.dp),
                         ) {
-                            Text(
-                                text = "Extension Count List (${sourceCountList.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Icon(
-                                imageVector = if (isSourceCountExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                                contentDescription = null,
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isSourceCountExpanded = !isSourceCountExpanded }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Extension Count List (${filteredSourceCountList.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(
+                                    imageVector = if (isSourceCountExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = null,
+                                )
+                            }
+                            if (isSourceCountExpanded) {
+                                SuggestionPoolFilterChips(
+                                    selectedPool = sourceCountPool,
+                                    onPoolSelected = { sourceCountPool = it },
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
                         }
                     }
 
                     if (isSourceCountExpanded) {
+                        if (filteredSourceCountList.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                                ) {
+                                    Text(
+                                        text = "No ${sourceCountPool.displayName.lowercase()} extensions found.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(16.dp),
+                                    )
+                                }
+                            }
+                        }
                         itemsIndexed(
-                            items = sourceCountList,
-                            key = { _, item -> "count-source-${item.sourceId}" },
-                        ) { _, item ->
+                            items = filteredSourceCountList,
+                            key = { _, item -> "count-source-${sourceCountPool.name}-${item.sourceId}" },
+                        ) { index, item ->
                             val source = remember(item.sourceId) { sourceManager.get(item.sourceId) }
+                            val isManualSafe = manualSafeSources.contains(item.sourceId.toString())
+                            val ext = remember(item.sourceId) {
+                                runCatching {
+                                    Injekt.get<eu.kanade.tachiyomi.extension.ExtensionManager>()
+                                        .installedExtensionsFlow
+                                        .value
+                                        .find { extension -> extension.sources.any { it.id == item.sourceId } }
+                                }.getOrNull()
+                            }
+                            val isNativelyNsfw = ext?.isNsfw == true ||
+                                (source?.name?.let { name ->
+                                    name.contains("nsfw", ignoreCase = true) ||
+                                    name.contains("hentai", ignoreCase = true) ||
+                                    name.contains("18+", ignoreCase = true)
+                                } == true)
+                            val is18Plus = isNativelyNsfw && !isManualSafe
+
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)),
@@ -520,8 +799,9 @@ class SettingsSuggestionsScreen : Screen() {
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
+                                    SuggestionRankBadge(rank = index + 1)
                                     if (source != null) {
                                         val domainSource = tachiyomi.domain.source.model.Source(
                                             id = source.id,
@@ -531,24 +811,27 @@ class SettingsSuggestionsScreen : Screen() {
                                             isStub = false,
                                         )
                                         SourceIcon(source = domainSource, modifier = Modifier.size(24.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = source.name,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = if (item.isBlocked) FontWeight.Normal else FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
                                     } else {
                                         Text(
                                             text = "Unknown Source (${item.sourceId})",
                                             style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
                                     }
+                                    SuggestionPoolBadge(isNsfw = is18Plus, isManualSafeOverride = isManualSafe)
                                     Surface(
                                         shape = CircleShape,
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp),
                                     ) {
                                         Text(
                                             text = "${item.count} favs",
@@ -556,8 +839,29 @@ class SettingsSuggestionsScreen : Screen() {
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         )
                                     }
-                                    val isSourceInOrderList = remember(activeSources, item.sourceId) {
-                                        activeSources.any { it.sourceId == item.sourceId }
+                                    val isSourceInOrderList = remember(currentActiveSources, item.sourceId) {
+                                        currentActiveSources.any { it.sourceId == item.sourceId } || item.isUserAdded
+                                    }
+                                    if (isNativelyNsfw) {
+                                        androidx.compose.material3.FilterChip(
+                                            selected = isManualSafe,
+                                            onClick = {
+                                                val updated = if (isManualSafe) {
+                                                    manualSafeSources - item.sourceId.toString()
+                                                } else {
+                                                    manualSafeSources + item.sourceId.toString()
+                                                }
+                                                manualSafeSources = updated
+                                                suggestionsPreferences.manuallySafeSources().set(updated)
+                                            },
+                                            label = {
+                                                Text(
+                                                    if (isManualSafe) "Safe (Override)" else "18+",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                )
+                                            },
+                                            modifier = Modifier.padding(end = 4.dp),
+                                        )
                                     }
                                     if (!item.isBlocked && !isSourceInOrderList) {
                                         IconButton(
@@ -618,7 +922,7 @@ class SettingsSuggestionsScreen : Screen() {
                         itemsIndexed(
                             items = authorCountList,
                             key = { _, item -> "count-author-${item.author}" },
-                        ) { _, item ->
+                        ) { index, item ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)),
@@ -628,12 +932,15 @@ class SettingsSuggestionsScreen : Screen() {
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
+                                    SuggestionRankBadge(rank = index + 1)
                                     Text(
                                         text = item.author,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (item.isBlocked) FontWeight.Normal else FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f),
                                     )
                                     Surface(
@@ -709,7 +1016,7 @@ class SettingsSuggestionsScreen : Screen() {
                         itemsIndexed(
                             items = artistCountList,
                             key = { _, item -> "count-artist-${item.artist}" },
-                        ) { _, item ->
+                        ) { index, item ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)),
@@ -719,12 +1026,15 @@ class SettingsSuggestionsScreen : Screen() {
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
+                                    SuggestionRankBadge(rank = index + 1)
                                     Text(
                                         text = item.artist,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (item.isBlocked) FontWeight.Normal else FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f),
                                     )
                                     Surface(
@@ -778,37 +1088,66 @@ class SettingsSuggestionsScreen : Screen() {
 
                     // 3. Tag Order List Header
                     item {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isTagOrderExpanded = !isTagOrderExpanded }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(vertical = 4.dp),
                         ) {
-                            Text(
-                                text = "Tag Order List (Drag and Drop)",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(onClick = { showAddTagDialog = true }) {
-                                Icon(Icons.Outlined.Add, contentDescription = "Add Tag")
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isTagOrderExpanded = !isTagOrderExpanded }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Tag Order List (Drag and Drop) (${currentActiveTags.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IconButton(onClick = { showAddTagDialog = true }) {
+                                    Icon(Icons.Outlined.Add, contentDescription = "Add Tag")
+                                }
+                                Icon(
+                                    imageVector = if (isTagOrderExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = null,
+                                )
                             }
-                            Icon(
-                                imageVector = if (isTagOrderExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                                contentDescription = null,
-                            )
+                            if (isTagOrderExpanded) {
+                                SuggestionPoolFilterChips(
+                                    selectedPool = tagOrderPool,
+                                    onPoolSelected = { tagOrderPool = it },
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
                         }
                     }
 
                     if (isTagOrderExpanded) {
+                        if (currentActiveTags.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                                ) {
+                                    Text(
+                                        text = "No ${tagOrderPool.displayName.lowercase()} tags in order list.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(16.dp),
+                                    )
+                                }
+                            }
+                        }
                         itemsIndexed(
-                            items = activeTags,
-                            key = { _, item -> "tag-${item.tag}" },
-                        ) { _, item ->
+                            items = currentActiveTags,
+                            key = { _, item -> "tag-${tagOrderPool.name}-${item.tag}" },
+                        ) { index, item ->
+                            val isNsfw = remember(item.tag) { NsfwTagClassifier.is18PlusTag(item.tag) }
                             ReorderableItem(
                                 state = reorderableTagsState,
-                                key = "tag-${item.tag}",
+                                key = "tag-${tagOrderPool.name}-${item.tag}",
                             ) {
                                 Card(
                                     modifier = Modifier
@@ -825,18 +1164,22 @@ class SettingsSuggestionsScreen : Screen() {
                                             .fillMaxWidth()
                                             .padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.DragHandle,
                                             contentDescription = "Drag to reorder",
                                             modifier = Modifier.draggableHandle(),
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        SuggestionRankBadge(rank = index + 1)
                                         Text(
                                             text = item.tag,
                                             style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
+                                        SuggestionPoolBadge(isNsfw = isNsfw)
                                         if (item.isUserAdded) {
                                             IconButton(
                                                 onClick = {
@@ -856,38 +1199,83 @@ class SettingsSuggestionsScreen : Screen() {
 
                     // 4. Extension Order List Header
                     item {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isSourceOrderExpanded = !isSourceOrderExpanded }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(vertical = 4.dp),
                         ) {
-                            Text(
-                                text = "Extension Order List (Drag and Drop)",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(onClick = { showAddSourceDialog = true }) {
-                                Icon(Icons.Outlined.Add, contentDescription = "Add Extension")
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isSourceOrderExpanded = !isSourceOrderExpanded }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Extension Order List (Drag and Drop) (${currentActiveSources.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IconButton(onClick = { showAddSourceDialog = true }) {
+                                    Icon(Icons.Outlined.Add, contentDescription = "Add Extension")
+                                }
+                                Icon(
+                                    imageVector = if (isSourceOrderExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = null,
+                                )
                             }
-                            Icon(
-                                imageVector = if (isSourceOrderExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                                contentDescription = null,
-                            )
+                            if (isSourceOrderExpanded) {
+                                SuggestionPoolFilterChips(
+                                    selectedPool = sourceOrderPool,
+                                    onPoolSelected = { sourceOrderPool = it },
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
                         }
                     }
 
                     if (isSourceOrderExpanded) {
+                        if (currentActiveSources.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                                ) {
+                                    Text(
+                                        text = "No ${sourceOrderPool.displayName.lowercase()} extensions in order list.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(16.dp),
+                                    )
+                                }
+                            }
+                        }
                         itemsIndexed(
-                            items = activeSources,
-                            key = { _, item -> "source-${item.sourceId}" },
-                        ) { _, item ->
+                            items = currentActiveSources,
+                            key = { _, item -> "source-${sourceOrderPool.name}-${item.sourceId}" },
+                        ) { index, item ->
                             val source = remember(item.sourceId) { sourceManager.get(item.sourceId) }
+                            val isManualSafe = manualSafeSources.contains(item.sourceId.toString())
+                            val ext = remember(item.sourceId) {
+                                runCatching {
+                                    Injekt.get<eu.kanade.tachiyomi.extension.ExtensionManager>()
+                                        .installedExtensionsFlow
+                                        .value
+                                        .find { extension -> extension.sources.any { it.id == item.sourceId } }
+                                }.getOrNull()
+                            }
+                            val isNativelyNsfw = ext?.isNsfw == true ||
+                                (source?.name?.let { name ->
+                                    name.contains("nsfw", ignoreCase = true) ||
+                                    name.contains("hentai", ignoreCase = true) ||
+                                    name.contains("18+", ignoreCase = true)
+                                } == true)
+                            val is18Plus = isNativelyNsfw && !isManualSafe
+
                             ReorderableItem(
                                 state = reorderableSourcesState,
-                                key = "source-${item.sourceId}",
+                                key = "source-${sourceOrderPool.name}-${item.sourceId}",
                             ) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -899,13 +1287,14 @@ class SettingsSuggestionsScreen : Screen() {
                                             .fillMaxWidth()
                                             .padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.DragHandle,
                                             contentDescription = "Drag to reorder",
                                             modifier = Modifier.draggableHandle(),
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        SuggestionRankBadge(rank = index + 1)
                                         if (source != null) {
                                             val domainSource = tachiyomi.domain.source.model.Source(
                                                 id = source.id,
@@ -915,17 +1304,41 @@ class SettingsSuggestionsScreen : Screen() {
                                                 isStub = false,
                                             )
                                             SourceIcon(source = domainSource, modifier = Modifier.size(24.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
                                             Text(
                                                 text = source.name,
                                                 style = MaterialTheme.typography.bodyLarge,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.weight(1f),
                                             )
                                         } else {
                                             Text(
                                                 text = "Unknown Source (${item.sourceId})",
                                                 style = MaterialTheme.typography.bodyLarge,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                        SuggestionPoolBadge(isNsfw = is18Plus, isManualSafeOverride = isManualSafe)
+                                        if (isNativelyNsfw) {
+                                            androidx.compose.material3.FilterChip(
+                                                selected = isManualSafe,
+                                                onClick = {
+                                                    val updated = if (isManualSafe) {
+                                                        manualSafeSources - item.sourceId.toString()
+                                                    } else {
+                                                        manualSafeSources + item.sourceId.toString()
+                                                    }
+                                                    manualSafeSources = updated
+                                                    suggestionsPreferences.manuallySafeSources().set(updated)
+                                                },
+                                                label = {
+                                                    Text(
+                                                        if (isManualSafe) "Safe (Override)" else "18+",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                    )
+                                                },
                                             )
                                         }
                                         if (item.isUserAdded) {
@@ -974,7 +1387,7 @@ class SettingsSuggestionsScreen : Screen() {
                         itemsIndexed(
                             items = activeAuthors,
                             key = { _, item -> "author-${item.author}" },
-                        ) { _, item ->
+                        ) { index, item ->
                             ReorderableItem(
                                 state = reorderableAuthorsState,
                                 key = "author-${item.author}",
@@ -989,16 +1402,19 @@ class SettingsSuggestionsScreen : Screen() {
                                             .fillMaxWidth()
                                             .padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.DragHandle,
                                             contentDescription = "Drag to reorder",
                                             modifier = Modifier.draggableHandle(),
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        SuggestionRankBadge(rank = index + 1)
                                         Text(
                                             text = item.author,
                                             style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
                                         if (item.isUserAdded) {
@@ -1047,7 +1463,7 @@ class SettingsSuggestionsScreen : Screen() {
                         itemsIndexed(
                             items = activeArtists,
                             key = { _, item -> "artist-${item.artist}" },
-                        ) { _, item ->
+                        ) { index, item ->
                             ReorderableItem(
                                 state = reorderableArtistsState,
                                 key = "artist-${item.artist}",
@@ -1062,16 +1478,19 @@ class SettingsSuggestionsScreen : Screen() {
                                             .fillMaxWidth()
                                             .padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.DragHandle,
                                             contentDescription = "Drag to reorder",
                                             modifier = Modifier.draggableHandle(),
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        SuggestionRankBadge(rank = index + 1)
                                         Text(
                                             text = item.artist,
                                             style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
                                         if (item.isUserAdded) {
@@ -1097,8 +1516,8 @@ class SettingsSuggestionsScreen : Screen() {
         // Tag Customization Dialog on Hold
         val tagToCustomize = selectedCustomizationTag
         if (tagToCustomize != null) {
-            val isTagInOrderList = remember(activeTags, tagToCustomize.tag) {
-                activeTags.any { it.tag == tagToCustomize.tag }
+            val isTagInOrderList = remember(currentActiveTags, tagToCustomize.tag) {
+                currentActiveTags.any { it.tag == tagToCustomize.tag } || tagToCustomize.isUserAdded
             }
             TagCustomizationDialog(
                 tag = tagToCustomize,
@@ -1487,3 +1906,109 @@ private fun TagCustomizationDialog(
         },
     )
 }
+
+@Composable
+private fun SuggestionRankBadge(
+    rank: Int,
+    modifier: Modifier = Modifier,
+) {
+    val (containerColor, contentColor) = when (rank) {
+        1 -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
+        2 -> MaterialTheme.colorScheme.secondary to MaterialTheme.colorScheme.onSecondary
+        3 -> MaterialTheme.colorScheme.tertiary to MaterialTheme.colorScheme.onTertiary
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = containerColor,
+        modifier = modifier,
+    ) {
+        Text(
+            text = "#$rank",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun SuggestionPoolBadge(
+    isNsfw: Boolean,
+    isManualSafeOverride: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    if (isManualSafeOverride) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            modifier = modifier,
+        ) {
+            Text(
+                text = "Safe (Override)",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    } else if (isNsfw) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.errorContainer,
+            modifier = modifier,
+        ) {
+            Text(
+                text = "18+",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    } else {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+            modifier = modifier,
+        ) {
+            Text(
+                text = "Safe",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SuggestionPoolFilterChips(
+    selectedPool: SuggestionPool,
+    onPoolSelected: (SuggestionPool) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SuggestionPool.values().forEach { pool ->
+            val isSelected = selectedPool == pool
+            androidx.compose.material3.FilterChip(
+                selected = isSelected,
+                onClick = { onPoolSelected(pool) },
+                label = {
+                    Text(
+                        text = pool.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                },
+            )
+        }
+    }
+}
+

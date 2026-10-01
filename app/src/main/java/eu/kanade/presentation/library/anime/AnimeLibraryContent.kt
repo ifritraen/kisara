@@ -1,6 +1,7 @@
 package eu.kanade.presentation.library.anime
 
 import eu.kanade.presentation.library.components.CategoryBadge
+import tachiyomi.core.common.util.lang.compareToWithCollator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -118,6 +119,7 @@ fun AnimeLibraryContent(
     onSubcategorySelected: (Long?) -> Unit = {},
     showSubcategories: Boolean = true,
     onGlobalSearchClicked: (() -> Unit)? = null,
+    sort: tachiyomi.domain.library.anime.model.AnimeLibrarySort = tachiyomi.domain.library.anime.model.AnimeLibrarySort.default,
 ) {
     val parentCategories = remember(categories) {
         categories.filter { it.parentId == null }.sortedBy { it.order }
@@ -167,24 +169,36 @@ fun AnimeLibraryContent(
         }
         val pagerState = rememberPagerState(initialPage) { tabCategories.size }
 
-        LaunchedEffect(tabCategories, currentPage()) {
+        LaunchedEffect(currentPage()) {
             val targetPage = when {
                 tabCategories.isEmpty() -> 0
-                currentPage() != pagerState.currentPage && currentPage() in tabCategories.indices -> currentPage()
+                currentPage() in tabCategories.indices -> currentPage()
                 pagerState.currentPage >= tabCategories.size -> tabCategories.size - 1
                 else -> pagerState.currentPage
             }
-            if (targetPage != pagerState.currentPage) {
-                pagerState.scrollToPage(targetPage)
+            if ((targetPage != pagerState.currentPage || pagerState.currentPageOffsetFraction != 0f) && targetPage != pagerState.targetPage) {
+                if (kotlin.math.abs(targetPage - pagerState.currentPage) <= 1 && pagerState.currentPageOffsetFraction == 0f) {
+                    pagerState.animateScrollToPage(targetPage)
+                } else {
+                    pagerState.scrollToPage(targetPage)
+                }
             }
         }
 
         LaunchedEffect(pagerState) {
-            snapshotFlow { pagerState.currentPage }.collect {
-                if (showParentFilters) {
-                    onSubcategorySelected(null)
+            var previousPage: Int? = null
+            snapshotFlow { pagerState.settledPage }.collect { settledPage ->
+                if (previousPage != null && previousPage != settledPage) {
+                    if (showParentFilters) {
+                        val newParent = parentCategories.getOrNull(settledPage)
+                        val sub = activeSubcategoryId?.let { id -> categories.firstOrNull { it.id == id } }
+                        if (sub == null || sub.parentId != newParent?.id) {
+                            onSubcategorySelected(null)
+                        }
+                    }
                 }
-                onChangeCurrentPage(it)
+                previousPage = settledPage
+                onChangeCurrentPage(settledPage)
             }
         }
 
@@ -194,12 +208,22 @@ fun AnimeLibraryContent(
                 categories = tabCategories,
                 pagerState = pagerState,
                 getItemCountForCategory = { getNumberOfAnimeForCategory(it) },
-                onTabItemClick = { scope.launch { pagerState.animateScrollToPage(it) } },
+                onTabItemClick = {
+                    scope.launch {
+                        if (it != pagerState.currentPage || pagerState.currentPageOffsetFraction != 0f) {
+                            if (kotlin.math.abs(it - pagerState.currentPage) <= 1 && pagerState.currentPageOffsetFraction == 0f) {
+                                pagerState.animateScrollToPage(it)
+                            } else {
+                                pagerState.scrollToPage(it)
+                            }
+                        }
+                    }
+                },
             )
         }
 
         // Subcategories Filter Chips Bar
-        val currentCategory = tabCategories.getOrNull(pagerState.currentPage)
+        val currentCategory = tabCategories.getOrNull(pagerState.settledPage.coerceIn(0, tabCategories.lastIndex))
         val activeParent = if (currentCategory?.parentId == null) currentCategory else parentCategories.find { it.id == currentCategory.parentId }
         val currentSubcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
 
@@ -290,7 +314,30 @@ fun AnimeLibraryContent(
                         (parentItems + childItems).forEach { item ->
                             if (seen.add(item.anime.id)) merged.add(item)
                         }
-                        merged
+                        val categorySort = tachiyomi.domain.library.anime.model.AnimeLibrarySort.valueOf(pageCategory.flags)
+                        val effectiveSort = if (categorySort != tachiyomi.domain.library.anime.model.AnimeLibrarySort.default) categorySort else sort
+                        if (merged.size > 1) {
+                            val comparator: Comparator<AnimeLibraryItem> = when (effectiveSort.type) {
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.Alphabetical -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.LastSeen -> compareBy { it.lastSeen }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.LastUpdate -> compareBy { it.anime.lastUpdate }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.UnseenCount -> compareBy { it.unseenCount }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.TotalEpisodes -> compareBy { it.totalEpisodes }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.LatestEpisode -> compareBy { it.libraryAnime.latestUpload }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.EpisodeFetchDate -> compareBy { it.libraryAnime.episodeFetchedAt }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.DateAdded -> compareBy { it.dateAdded }
+                                tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.Random -> compareBy { it.id }
+                                else -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+                            }
+                            val sorted = if (effectiveSort.isAscending) merged.sortedWith(comparator) else merged.sortedWith(comparator.reversed())
+                            if (effectiveSort.type != tachiyomi.domain.library.anime.model.AnimeLibrarySort.Type.Random) {
+                                sorted.sortedByDescending { it.pinned }
+                            } else {
+                                sorted
+                            }
+                        } else {
+                            merged
+                        }
                     } else {
                         getItemsForCategory(pageCategory)
                     }
@@ -424,6 +471,7 @@ fun AnimeLibraryContent(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1,
                 ) { page ->
                     val category = tabCategories.getOrNull(page) ?: return@HorizontalPager
                     val items = wrappedGetItemsForCategory(category)

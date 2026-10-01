@@ -3,8 +3,10 @@ package eu.kanade.tachiyomi.ui.home
 import android.content.Context
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +42,8 @@ import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -69,6 +73,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -211,6 +216,7 @@ fun landingTab(
                     screenModel.loadForgottenFavorites()
                     screenModel.loadTrackerRecommendations(force = true)
                     screenModel.loadTrackerContinue(force = true)
+                    screenModel.triggerSuggestionsRefresh()
                 },
             ) {
                 LazyColumn(
@@ -222,46 +228,20 @@ fun landingTab(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     // 1. Spotlight (Suggestions Carousel)
-                    if (showSuggestions) {
-                        when (activeMediaType) {
-                            MediaType.NOVEL -> {
-                                item {
-                                    NovelSpotlightCarousel(
-                                        novels = emptyList(),
-                                        onNovelClick = { novelId -> navigator.push(eu.kanade.tachiyomi.ui.entries.novel.NovelScreen(novelId)) },
-                                        onNovelLongClick = {},
-                                        onDismissNovel = {},
-                                    )
-                                }
-                            }
-                            MediaType.ANIME -> {
-                                item {
-                                    AnimeSpotlightCarousel(
-                                        animes = emptyList(),
-                                        onAnimeClick = { animeId -> navigator.push(eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen(animeId)) },
-                                        onAnimeLongClick = {},
-                                        onDismissAnime = {},
-                                    )
-                                }
-                            }
-                            MediaType.MANGA -> {
-                                if (state.suggestions.isNotEmpty()) {
-                                    item {
-                                        SpotlightCarousel(
-                                            suggestions = state.suggestions,
-                                            tagName = state.suggestionsTagName,
-                                            onMangaClick = { mangaId -> navigator.push(MangaScreen(mangaId)) },
-                                            onMangaLongClick = { manga ->
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                screenModel.toggleFavorite(manga.id, manga.favorite)
-                                            },
-                                            onDismissSuggestion = { manga ->
-                                                screenModel.dismissSuggestion(manga)
-                                            },
-                                        )
-                                    }
-                                }
-                            }
+                    if (showSuggestions && (state.suggestions.isNotEmpty() || state.hasUnfilteredSuggestions)) {
+                        item {
+                            SpotlightCarousel(
+                                suggestions = state.suggestions,
+                                tagName = state.suggestionsTagName,
+                                onMangaClick = { mangaId -> navigator.push(MangaScreen(mangaId)) },
+                                onMangaLongClick = { manga ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    screenModel.toggleFavorite(manga.id, manga.favorite)
+                                },
+                                onDismissSuggestion = { manga ->
+                                    screenModel.dismissSuggestion(manga)
+                                },
+                            )
                         }
                     }
 
@@ -302,7 +282,7 @@ fun landingTab(
                                             }
                                         }
                                     }
-                                    val coverTitleStyle = uiPreferences.kisaraCoverTitleStyle().collectAsState().value
+                                    val coverTitleStyle = coverTitleStyleKey
 
                                     val parsed = remember(historyItem.title) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(historyItem.title) }
                                     val numberMatch = remember(historyItem.title) { Regex("(\\d+)$").find(historyItem.title) }
@@ -364,7 +344,7 @@ fun landingTab(
                                     items = state.trackerContinue,
                                     key = { "tracker-continue-${it.id}" },
                                 ) { trackerItem ->
-                                    val coverTitleStyle = uiPreferences.kisaraCoverTitleStyle().collectAsState().value
+                                    val coverTitleStyle = coverTitleStyleKey
                                     val chapterSubtitle = if (trackerItem.lastReadChapter != null && trackerItem.lastReadChapter > 0) {
                                         val maxCh = if (trackerItem.totalChapters != null && trackerItem.totalChapters > 0) " / ${trackerItem.totalChapters}" else ""
                                         "Ch. ${trackerItem.lastReadChapter.toInt()}$maxCh"
@@ -543,7 +523,7 @@ fun landingTab(
                                     items = state.trackerRecommendations,
                                     key = { "rec-${it.sourceName}-${it.id}-${it.title}" },
                                 ) { rec ->
-                                    val coverTitleStyle = uiPreferences.kisaraCoverTitleStyle().collectAsState().value
+                                    val coverTitleStyle = coverTitleStyleKey
                                     val genreText = rec.genres.take(2).joinToString(" • ").ifBlank { rec.status ?: rec.sourceName }
 
                                     KisaraHomeSectionCard(
@@ -642,6 +622,69 @@ fun landingTab(
 }
 
 @Composable
+fun SpotlightNsfwChip(
+    isBlocked: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                if (isBlocked) {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                },
+            )
+            .border(
+                1.dp,
+                if (isBlocked) {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
+                } else {
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                },
+                shape,
+            )
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            }
+            .padding(horizontal = 7.dp, vertical = 2.5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            if (isBlocked) {
+                Icon(
+                    imageVector = Icons.Outlined.VisibilityOff,
+                    contentDescription = "18+ Blocked",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+            Text(
+                text = "18+",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    textDecoration = if (isBlocked) TextDecoration.LineThrough else TextDecoration.None,
+                ),
+                color = if (isBlocked) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                },
+            )
+        }
+    }
+}
+
+@Composable
 fun SpotlightCarousel(
     suggestions: List<Suggestion>,
     tagName: String?,
@@ -655,26 +698,45 @@ fun SpotlightCarousel(
 
     val pagerState = rememberPagerState { suggestions.size }
 
-    // Auto-scroll loop
-    LaunchedEffect(suggestions, autoplay, autoplayInterval) {
-        while (autoplay && suggestions.size > 1) {
-            delay(autoplayInterval * 1000L)
-            val next = (pagerState.currentPage + 1) % suggestions.size
-            pagerState.animateScrollToPage(next)
+    // Protect page clamping on dynamic suggestion changes (e.g. dismissal, filter toggle)
+    LaunchedEffect(suggestions.size) {
+        if (suggestions.isNotEmpty() && pagerState.currentPage >= suggestions.size) {
+            pagerState.scrollToPage((suggestions.size - 1).coerceAtLeast(0))
         }
     }
 
-    val currentSuggestion = suggestions.getOrNull(pagerState.currentPage)
+    // Auto-scroll loop with gesture protection
+    LaunchedEffect(suggestions, autoplay, autoplayInterval) {
+        while (autoplay && suggestions.size > 1) {
+            delay(autoplayInterval * 1000L)
+            if (!pagerState.isScrollInProgress && suggestions.isNotEmpty()) {
+                val next = (pagerState.currentPage + 1) % suggestions.size
+                pagerState.animateScrollToPage(next)
+            }
+        }
+    }
+
+    val safePageIndex = if (suggestions.isNotEmpty()) pagerState.currentPage.coerceIn(0, suggestions.size - 1) else 0
+    val currentSuggestion = suggestions.getOrNull(safePageIndex)
     val currentManga = currentSuggestion?.manga
     val currentCover = remember(currentManga) { currentManga?.asMangaCover() }
     val vibrantColor = currentCover?.vibrantCoverColor ?: currentCover?.dominantCoverColors?.first
-    val glowColor = vibrantColor?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant
+    val fallbackGlow = MaterialTheme.colorScheme.primaryContainer
+    val glowColor = vibrantColor?.let { Color(it) } ?: fallbackGlow
 
     val animatedGlowColor by animateColorAsState(
         targetValue = glowColor,
         animationSpec = tween(durationMillis = 800),
         label = "ambientGlow",
     )
+
+    val currentCardTag = remember(currentManga, tagName) {
+        val nonGeneric = currentManga?.genre?.firstOrNull { g ->
+            val clean = g.lowercase().trim()
+            clean != "manga" && clean != "webtoon" && clean != "comic" && clean != "scanlation" && clean != "english"
+        }
+        nonGeneric ?: tagName
+    }
 
     Column(
         modifier = Modifier
@@ -688,17 +750,85 @@ fun SpotlightCarousel(
                 ),
             ),
     ) {
-        if (tagName != null) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = "Recommended: #$tagName",
+                text = if (suggestions.isNotEmpty() && currentCardTag != null) {
+                    val cleanTag = currentCardTag.removePrefix("#").trim().replaceFirstChar { it.uppercase() }
+                    "Recommended: #$cleanTag"
+                } else {
+                    "Spotlight"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             )
+
+            val hideNsfwPref = remember { uiPreferences.kisaraHideNsfwSuggestions() }
+            val isNsfwBlocked by hideNsfwPref.collectAsState()
+            val navigator = LocalNavigator.currentOrThrow
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                SpotlightNsfwChip(
+                    isBlocked = isNsfwBlocked,
+                    onClick = { hideNsfwPref.set(!isNsfwBlocked) },
+                )
+
+                IconButton(
+                    onClick = { navigator.push(eu.kanade.tachiyomi.ui.browse.extension.ExtensionNsfwScreen(0)) },
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Tune,
+                        contentDescription = stringResource(KMR.strings.extension_nsfw_configure_tooltip),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
 
-        HorizontalPager(
+        if (suggestions.isEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                ),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.VisibilityOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Text(
+                        text = stringResource(KMR.strings.spotlight_nsfw_all_blocked_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            HorizontalPager(
             state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
@@ -706,7 +836,7 @@ fun SpotlightCarousel(
             contentPadding = PaddingValues(horizontal = 16.dp),
             pageSpacing = 12.dp,
         ) { page ->
-            val suggestion = suggestions[page]
+            val suggestion = suggestions.getOrNull(page) ?: return@HorizontalPager
             val manga = suggestion.manga
             val coverData = manga.asMangaCover()
             val parsed = remember(manga) { eu.kanade.tachiyomi.util.MangaTitleParser.parse(manga, manga.title) }
@@ -883,6 +1013,7 @@ fun SpotlightCarousel(
                     }
                 }
             }
+        }
         }
     }
 }

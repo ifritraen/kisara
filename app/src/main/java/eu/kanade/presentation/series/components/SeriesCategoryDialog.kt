@@ -1,6 +1,7 @@
 package eu.kanade.presentation.series.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import eu.kanade.presentation.components.KisaraBottomSheet
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -41,30 +42,31 @@ fun SeriesCategoryDialog(
     var selectedCategoryId by remember(initialCategoryId) { mutableLongStateOf(initialCategoryId) }
     var moveEntries by remember(initialMoveEntries) { mutableStateOf(initialMoveEntries) }
 
-    AlertDialog(
+    KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(selectedCategoryId, moveEntries)
-                    onDismissRequest()
-                },
+        title = stringResource(MR.strings.action_move_category),
+        footer = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
             ) {
-                Text(text = stringResource(MR.strings.action_ok))
+                TextButton(onClick = onDismissRequest) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+                TextButton(
+                    onClick = {
+                        onConfirm(selectedCategoryId, moveEntries)
+                        onDismissRequest()
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_ok))
+                }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_cancel))
-            }
-        },
-        title = {
-            Text(text = stringResource(MR.strings.action_move_category))
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-            ) {
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+        ) {
                 categories.forEach { category ->
                     Surface(
                         modifier = Modifier
@@ -116,9 +118,8 @@ fun SeriesCategoryDialog(
                     )
                 }
             }
-        },
-    )
-}
+        }
+    }
 
 data class SeriesCategoryOption(
     val id: Long,

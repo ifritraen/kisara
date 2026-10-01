@@ -22,6 +22,11 @@ class MangaExternalMetadataRepositoryImpl(
     }
 
     override suspend fun upsert(metadata: MangaExternalMetadata) {
+        val encodedSourceName = if (!metadata.title.isNullOrBlank()) {
+            "${metadata.sourceName}|${metadata.title}"
+        } else {
+            metadata.sourceName
+        }
         handler.await {
             manga_external_metadataQueries.upsert(
                 mangaId = metadata.mangaId,
@@ -34,7 +39,7 @@ class MangaExternalMetadataRepositoryImpl(
                 licensor = metadata.licensor,
                 demographic = metadata.demographic,
                 synopsis = metadata.synopsis,
-                sourceName = metadata.sourceName,
+                sourceName = encodedSourceName,
                 fetchedAt = metadata.fetchedAt,
             )
         }
@@ -60,6 +65,8 @@ class MangaExternalMetadataRepositoryImpl(
         sourceName: String,
         fetchedAt: Long,
     ): MangaExternalMetadata {
+        val cleanSourceName = sourceName.substringBefore("|")
+        val parsedTitle = sourceName.substringAfter("|", "").ifBlank { null }
         return MangaExternalMetadata(
             mangaId = mangaId,
             score = score,
@@ -71,8 +78,9 @@ class MangaExternalMetadataRepositoryImpl(
             licensor = licensor,
             demographic = demographic,
             synopsis = synopsis,
-            sourceName = sourceName,
+            sourceName = cleanSourceName,
             fetchedAt = fetchedAt,
+            title = parsedTitle,
         )
     }
 }

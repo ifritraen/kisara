@@ -49,11 +49,15 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -89,6 +93,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -107,6 +112,7 @@ import eu.kanade.presentation.components.DownloadDropdownMenu
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
+import eu.kanade.presentation.components.ScanlatorTabRow
 import eu.kanade.presentation.components.SuperResolutionDropdownMenu
 import eu.kanade.presentation.components.TranslationDropdownMenu
 import eu.kanade.presentation.components.relativeDateText
@@ -290,6 +296,8 @@ fun MangaScreen(
     onBulkFavoriteClicked: (() -> Unit)? = null,
     onSaveGranularScore: ((tachiyomi.domain.scoring.model.GranularScoreEntry) -> Unit)? = null,
     onSaveGranularTemplate: ((tachiyomi.domain.scoring.model.GranularScoreTemplate) -> Unit)? = null,
+    onSelectScanlator: (String?) -> Unit = {},
+    onSwitchExternalMetadataSource: ((String?) -> Unit)? = null,
     // KMK <--
 ) {
     val context = LocalContext.current
@@ -440,6 +448,8 @@ fun MangaScreen(
                     isTagMultiSelectMode = isTagMultiSelectMode,
                     onSaveGranularScore = onSaveGranularScore,
                     onSaveGranularTemplate = onSaveGranularTemplate,
+                    onSelectScanlator = onSelectScanlator,
+                    onSwitchExternalMetadataSource = onSwitchExternalMetadataSource,
                     // KMK <--
                 )
             } else {
@@ -491,6 +501,7 @@ fun MangaScreen(
                     // SY <--
                     onDeletePageBookmark = onDeletePageBookmark,
                     onMultiBookmarkClicked = onMultiBookmarkClicked,
+                    onSelectScanlator = onSelectScanlator,
                     onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onMultiDeleteClicked = onMultiDeleteClicked,
@@ -529,6 +540,7 @@ fun MangaScreen(
                     isTagMultiSelectMode = isTagMultiSelectMode,
                     onSaveGranularScore = onSaveGranularScore,
                     onSaveGranularTemplate = onSaveGranularTemplate,
+                    onSwitchExternalMetadataSource = onSwitchExternalMetadataSource,
                     // KMK <--
                 )
             }
@@ -676,6 +688,8 @@ private fun MangaScreenSmallImpl(
     isTagMultiSelectMode: Boolean = false,
     onSaveGranularScore: ((tachiyomi.domain.scoring.model.GranularScoreEntry) -> Unit)? = null,
     onSaveGranularTemplate: ((tachiyomi.domain.scoring.model.GranularScoreTemplate) -> Unit)? = null,
+    onSelectScanlator: (String?) -> Unit = {},
+    onSwitchExternalMetadataSource: ((String?) -> Unit)? = null,
     // KMK <--
 ) {
     val currentContext = LocalContext.current
@@ -722,6 +736,12 @@ private fun MangaScreenSmallImpl(
     val expandRelatedMangas by uiPreferences.expandRelatedMangas().collectAsState()
     val showRelatedMangasInOverflow by uiPreferences.relatedMangasInOverflow().collectAsState()
     val minHeightDp by uiPreferences.chapterSheetMinHeightDp().collectAsState()
+    val density = LocalDensity.current
+    var chapterSheetHeaderHeightDp by remember { mutableStateOf(if (state.availableScanlators.size > 1) 150.dp else 110.dp) }
+    val singleChapterHeight = if (chapters.isNotEmpty()) 72.dp else 0.dp
+    val collapsedSheetHeight = remember(chapterSheetHeaderHeightDp, chapters.size) {
+        chapterSheetHeaderHeightDp + singleChapterHeight
+    }
 
     var layoutSize by remember { mutableStateOf(IntSize.Zero) }
     var fabSize by remember { mutableStateOf(IntSize.Zero) }
@@ -731,7 +751,9 @@ private fun MangaScreenSmallImpl(
     val readButtonPosition = uiPreferences.readButtonPosition()
     // KMK <--
 
-    var isSheetExpanded by remember { mutableStateOf(false) }
+    // KMK -->
+    var sheetExpansion by remember { mutableStateOf(ChapterSheetExpansion.COLLAPSED) }
+    // KMK <--
     var showTranslationSettings by remember { mutableStateOf(false) }
 
     if (showTranslationSettings) {
@@ -743,8 +765,10 @@ private fun MangaScreenSmallImpl(
     BackHandler(onBack = {
         if (isAnySelected) {
             onAllChapterSelected(false)
-        } else if (isSheetExpanded) {
-            isSheetExpanded = false
+        } else if (sheetExpansion == ChapterSheetExpansion.FULL) {
+            sheetExpansion = ChapterSheetExpansion.PARTIAL
+        } else if (sheetExpansion == ChapterSheetExpansion.PARTIAL) {
+            sheetExpansion = ChapterSheetExpansion.COLLAPSED
         } else {
             navigateUp()
         }
@@ -877,7 +901,7 @@ private fun MangaScreenSmallImpl(
                         contentPadding = PaddingValues(
                             start = contentPadding.calculateStartPadding(layoutDirection),
                             end = contentPadding.calculateEndPadding(layoutDirection),
-                            bottom = contentPadding.calculateBottomPadding() + minHeightDp.dp + 16.dp, // Gaps/Padding for collapsed sheet
+                            bottom = contentPadding.calculateBottomPadding() + collapsedSheetHeight + 16.dp, // Gaps/Padding for collapsed sheet
                         ),
                     ) {
                         item(
@@ -950,6 +974,7 @@ private fun MangaScreenSmallImpl(
                                     onTagLongClick = onTagLongClick,
                                     selectedTags = selectedTags,
                                     isMultiSelectMode = isTagMultiSelectMode,
+                                    onSwitchSource = onSwitchExternalMetadataSource,
                                 )
                             }
                         } else if (state.isFetchingTrackerDetails) {
@@ -964,7 +989,10 @@ private fun MangaScreenSmallImpl(
                                 key = MangaScreenItem.TRACKER_DETAILS,
                                 contentType = MangaScreenItem.TRACKER_DETAILS,
                             ) {
-                                TrackerDetailsCard(trackDetails = state.trackerDetails)
+                                TrackerDetailsCard(
+                                    trackDetails = state.trackerDetails,
+                                    onSwitchSource = onSwitchExternalMetadataSource,
+                                )
                             }
                         }
 
@@ -1105,15 +1133,23 @@ private fun MangaScreenSmallImpl(
                         }
                     }
 
-                    // Floating frosted glass chapters sheet
+                    // KMK --> Frosted glass chapters bottom sheet with 3-stage expansion: Collapsed -> Partial (~60%) -> Full
                     val bottomBarOpacity by uiPreferences.bottomBarOpacity().collectAsState()
                     val maxHeightPct by uiPreferences.chapterSheetMaxHeightPct().collectAsState()
                     val targetMaxHeight = maxHeight * (maxHeightPct / 100f)
-                    val estimatedContentHeight = 64.dp + (chapters.size * 56).dp
-                    val calculatedExpandedHeight = if (chapters.isEmpty()) minHeightDp.dp else minOf(targetMaxHeight, maxOf(minHeightDp.dp, estimatedContentHeight))
+                    val estimatedContentHeight = chapterSheetHeaderHeightDp + (chapters.size * 68).dp
+                    val sheetBottomInset = contentPadding.calculateBottomPadding()
+                    val calculatedExpandedHeight = if (chapters.isEmpty()) collapsedSheetHeight else minOf(targetMaxHeight, maxOf(collapsedSheetHeight, estimatedContentHeight))
+                    val topBarPadding = contentPadding.calculateTopPadding()
+                    val targetFullHeight = (maxHeight - topBarPadding)
+                        .coerceAtLeast(calculatedExpandedHeight + sheetBottomInset)
 
                     val sheetHeight by animateDpAsState(
-                        targetValue = if (isSheetExpanded) calculatedExpandedHeight else minHeightDp.dp,
+                        targetValue = when (sheetExpansion) {
+                            ChapterSheetExpansion.COLLAPSED -> collapsedSheetHeight + sheetBottomInset
+                            ChapterSheetExpansion.PARTIAL -> calculatedExpandedHeight + sheetBottomInset
+                            ChapterSheetExpansion.FULL -> targetFullHeight
+                        },
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioLowBouncy,
                             stiffness = Spring.StiffnessMediumLow,
@@ -1121,13 +1157,18 @@ private fun MangaScreenSmallImpl(
                         label = "Chapters Sheet Height",
                     )
 
-                    val nestedScrollConnection = remember(isSheetExpanded) {
+                    val nestedScrollConnection = remember(sheetExpansion) {
                         object : NestedScrollConnection {
                             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                                if (isSheetExpanded && available.y > 0f) { // Scrolling down
+                                if (available.y > 0f) { // Scrolling down
                                     if (chapterListState.firstVisibleItemIndex == 0 && chapterListState.firstVisibleItemScrollOffset == 0) {
-                                        isSheetExpanded = false
-                                        return available // Consume the scroll
+                                        if (sheetExpansion == ChapterSheetExpansion.FULL) {
+                                            sheetExpansion = ChapterSheetExpansion.PARTIAL
+                                            return available // Consume the scroll
+                                        } else if (sheetExpansion == ChapterSheetExpansion.PARTIAL) {
+                                            sheetExpansion = ChapterSheetExpansion.COLLAPSED
+                                            return available // Consume the scroll
+                                        }
                                     }
                                 }
                                 return Offset.Zero
@@ -1138,34 +1179,55 @@ private fun MangaScreenSmallImpl(
                     GlassSurface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(start = 16.dp, end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 8.dp)
                             .fillMaxWidth()
                             .height(sheetHeight)
                             .nestedScroll(nestedScrollConnection)
-                            .pointerInput(isSheetExpanded) {
-                                if (!isSheetExpanded) {
+                            .pointerInput(sheetExpansion) {
+                                if (sheetExpansion == ChapterSheetExpansion.COLLAPSED) {
                                     detectVerticalDragGestures { _, dragAmount ->
                                         if (dragAmount < -10f) {
-                                            isSheetExpanded = true
+                                            sheetExpansion = ChapterSheetExpansion.PARTIAL
                                         }
                                     }
                                 }
                             },
-                        shape = RoundedCornerShape(20.dp),
-                        style = GlassDefaults.regularStyle(),
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+                        style = GlassDefaults.prominentStyle(),
+                        isStandardSurface = true,
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // Top Row: Drag Indicator & Action buttons
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { isSheetExpanded = !isSheetExpanded }
-                                    .pointerInput(Unit) {
+                                    .onSizeChanged { size ->
+                                        chapterSheetHeaderHeightDp = with(density) { size.height.toDp() }
+                                    },
+                            ) {
+                                // Top Row: Drag Indicator & Action buttons
+                                Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        sheetExpansion = when (sheetExpansion) {
+                                            ChapterSheetExpansion.COLLAPSED -> ChapterSheetExpansion.PARTIAL
+                                            ChapterSheetExpansion.PARTIAL -> ChapterSheetExpansion.FULL
+                                            ChapterSheetExpansion.FULL -> ChapterSheetExpansion.COLLAPSED
+                                        }
+                                    }
+                                    .pointerInput(sheetExpansion) {
                                         detectVerticalDragGestures { _, dragAmount ->
                                             if (dragAmount > 10f) {
-                                                isSheetExpanded = false
+                                                sheetExpansion = when (sheetExpansion) {
+                                                    ChapterSheetExpansion.FULL -> ChapterSheetExpansion.PARTIAL
+                                                    ChapterSheetExpansion.PARTIAL -> ChapterSheetExpansion.COLLAPSED
+                                                    ChapterSheetExpansion.COLLAPSED -> ChapterSheetExpansion.COLLAPSED
+                                                }
                                             } else if (dragAmount < -10f) {
-                                                isSheetExpanded = true
+                                                sheetExpansion = when (sheetExpansion) {
+                                                    ChapterSheetExpansion.COLLAPSED -> ChapterSheetExpansion.PARTIAL
+                                                    ChapterSheetExpansion.PARTIAL -> ChapterSheetExpansion.FULL
+                                                    ChapterSheetExpansion.FULL -> ChapterSheetExpansion.FULL
+                                                }
                                             }
                                         }
                                     }
@@ -1174,10 +1236,15 @@ private fun MangaScreenSmallImpl(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Row(
+                                    modifier = Modifier.weight(1f, fill = false),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    val dragIcon = if (isSheetExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp
+                                    val dragIcon = when (sheetExpansion) {
+                                        ChapterSheetExpansion.FULL -> Icons.Default.KeyboardArrowDown
+                                        ChapterSheetExpansion.PARTIAL -> Icons.Default.KeyboardArrowUp
+                                        ChapterSheetExpansion.COLLAPSED -> Icons.Default.KeyboardArrowUp
+                                    }
                                     Icon(
                                         imageVector = dragIcon,
                                         contentDescription = "Expand/Collapse",
@@ -1186,8 +1253,11 @@ private fun MangaScreenSmallImpl(
                                     Text(
                                         text = "${chapters.size} Chapters",
                                         style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
+                                // KMK <--
 
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1218,78 +1288,106 @@ private fun MangaScreenSmallImpl(
                                         }
                                     }
 
-                                    // Translate Button
-                                    if (onTranslateActionClicked != null) {
+                                    // AI Tools Button (Translate, Colorize, Super-Resolution)
+                                    if (onTranslateActionClicked != null || onColorizeActionClicked != null || onSuperResolutionActionClicked != null) {
+                                        var toolsMenuExpanded by remember { mutableStateOf(false) }
                                         var translateMenuExpanded by remember { mutableStateOf(false) }
-                                        Box {
-                                            IconButton(
-                                                onClick = { translateMenuExpanded = true },
-                                                modifier = Modifier.size(36.dp),
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Translate,
-                                                    contentDescription = "Translate Options",
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
-                                            TranslationDropdownMenu(
-                                                expanded = translateMenuExpanded,
-                                                onDismissRequest = { translateMenuExpanded = false },
-                                                onTranslateClicked = { action ->
-                                                translateMenuExpanded = false
-                                                    onTranslateActionClicked(action)
-                                                },
-                                            )
-                                        }
-                                    }
-
-                                    // Colorize Button
-                                    if (onColorizeActionClicked != null) {
                                         var colorizeMenuExpanded by remember { mutableStateOf(false) }
-                                        Box {
-                                            IconButton(
-                                                onClick = { colorizeMenuExpanded = true },
-                                                modifier = Modifier.size(36.dp),
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Palette,
-                                                    contentDescription = "Colorize Options",
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
-                                            ColorizerDropdownMenu(
-                                                expanded = colorizeMenuExpanded,
-                                                onDismissRequest = { colorizeMenuExpanded = false },
-                                                onColorizeClicked = { action ->
-                                                    colorizeMenuExpanded = false
-                                                    onColorizeActionClicked(action)
-                                                },
-                                            )
-                                        }
-                                    }
-
-                                    // Super-Resolution Button
-                                    if (onSuperResolutionActionClicked != null) {
                                         var superResMenuExpanded by remember { mutableStateOf(false) }
                                         Box {
                                             IconButton(
-                                                onClick = { superResMenuExpanded = true },
+                                                onClick = { toolsMenuExpanded = true },
                                                 modifier = Modifier.size(36.dp),
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.AutoAwesome,
-                                                    contentDescription = "Super-Resolution Options",
+                                                    contentDescription = "AI Tools",
                                                     modifier = Modifier.size(20.dp),
                                                 )
                                             }
-                                            SuperResolutionDropdownMenu(
-                                                expanded = superResMenuExpanded,
-                                                onDismissRequest = { superResMenuExpanded = false },
-                                                onSuperResolutionClicked = { action ->
-                                                    superResMenuExpanded = false
-                                                    onSuperResolutionActionClicked(action)
-                                                },
-                                            )
+                                            DropdownMenu(
+                                                expanded = toolsMenuExpanded,
+                                                onDismissRequest = { toolsMenuExpanded = false },
+                                            ) {
+                                                if (onTranslateActionClicked != null) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Translate") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Translate,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(20.dp),
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            toolsMenuExpanded = false
+                                                            translateMenuExpanded = true
+                                                        },
+                                                    )
+                                                }
+                                                if (onColorizeActionClicked != null) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Colorize") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Palette,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(20.dp),
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            toolsMenuExpanded = false
+                                                            colorizeMenuExpanded = true
+                                                        },
+                                                    )
+                                                }
+                                                if (onSuperResolutionActionClicked != null) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Super-Resolution") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.AutoAwesome,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(20.dp),
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            toolsMenuExpanded = false
+                                                            superResMenuExpanded = true
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            if (onTranslateActionClicked != null) {
+                                                TranslationDropdownMenu(
+                                                    expanded = translateMenuExpanded,
+                                                    onDismissRequest = { translateMenuExpanded = false },
+                                                    onTranslateClicked = { action ->
+                                                        translateMenuExpanded = false
+                                                        onTranslateActionClicked(action)
+                                                    },
+                                                )
+                                            }
+                                            if (onColorizeActionClicked != null) {
+                                                ColorizerDropdownMenu(
+                                                    expanded = colorizeMenuExpanded,
+                                                    onDismissRequest = { colorizeMenuExpanded = false },
+                                                    onColorizeClicked = { action ->
+                                                        colorizeMenuExpanded = false
+                                                        onColorizeActionClicked(action)
+                                                    },
+                                                )
+                                            }
+                                            if (onSuperResolutionActionClicked != null) {
+                                                SuperResolutionDropdownMenu(
+                                                    expanded = superResMenuExpanded,
+                                                    onDismissRequest = { superResMenuExpanded = false },
+                                                    onSuperResolutionClicked = { action ->
+                                                        superResMenuExpanded = false
+                                                        onSuperResolutionActionClicked(action)
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
 
@@ -1309,9 +1407,13 @@ private fun MangaScreenSmallImpl(
                                     val isReading = remember(chapters) {
                                         chapters.fastAny { it.chapter.read }
                                     }
-                                    IconButton(
+                                    FilledIconButton(
                                         onClick = onContinueReading,
-                                        modifier = Modifier.size(36.dp),
+                                        modifier = Modifier.size(40.dp),
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.PlayArrow,
@@ -1322,7 +1424,7 @@ private fun MangaScreenSmallImpl(
                                                     MR.strings.action_start
                                                 },
                                             ),
-                                            modifier = Modifier.size(20.dp),
+                                            modifier = Modifier.size(24.dp),
                                         )
                                     }
                                 }
@@ -1344,17 +1446,43 @@ private fun MangaScreenSmallImpl(
                                 onClick = onFilterClicked,
                             )
 
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                VerticalFastScroller(
-                                    listState = chapterListState,
-                                    topContentPadding = 0.dp,
-                                    endContentPadding = 0.dp,
+                            if (selectedChapterTab == 0 && state.availableScanlators.size > 1) {
+                                ScanlatorTabRow(
+                                    scanlators = remember(state.availableScanlators) { state.availableScanlators.toList() },
+                                    selectedScanlator = state.selectedScanlator,
+                                    onSelectScanlator = onSelectScanlator,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+
+                        val targetMiniChapterIndex = remember(listItem, nextUnreadIndex) {
+                            val lastRead = listItem.indexOfLast { it is ChapterList.Item && it.chapter.read }
+                            when {
+                                lastRead >= 0 -> lastRead
+                                nextUnreadIndex >= 0 -> nextUnreadIndex
+                                else -> 0
+                            }
+                        }
+
+                        LaunchedEffect(sheetExpansion, targetMiniChapterIndex) {
+                            if (sheetExpansion == ChapterSheetExpansion.COLLAPSED && targetMiniChapterIndex in listItem.indices) {
+                                chapterListState.scrollToItem(targetMiniChapterIndex)
+                            }
+                        }
+
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            VerticalFastScroller(
+                                listState = chapterListState,
+                                topContentPadding = 0.dp,
+                                endContentPadding = 0.dp,
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    state = chapterListState,
+                                    contentPadding = PaddingValues(bottom = if (sheetExpansion == ChapterSheetExpansion.COLLAPSED) 0.dp else (contentPadding.calculateBottomPadding() + 16.dp)),
+                                    userScrollEnabled = sheetExpansion != ChapterSheetExpansion.COLLAPSED,
                                 ) {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        state = chapterListState,
-                                        contentPadding = PaddingValues(bottom = 16.dp),
-                                    ) {
                                         sharedChapterItems(
                                             manga = state.manga,
                                             mergedData = state.mergedData,
@@ -1485,6 +1613,8 @@ private fun MangaScreenLargeImpl(
     isTagMultiSelectMode: Boolean = false,
     onSaveGranularScore: ((tachiyomi.domain.scoring.model.GranularScoreEntry) -> Unit)? = null,
     onSaveGranularTemplate: ((tachiyomi.domain.scoring.model.GranularScoreTemplate) -> Unit)? = null,
+    onSelectScanlator: (String?) -> Unit = {},
+    onSwitchExternalMetadataSource: ((String?) -> Unit)? = null,
     // KMK <--
 ) {
     val currentContext = LocalContext.current
@@ -1774,6 +1904,7 @@ private fun MangaScreenLargeImpl(
                                 onTagLongClick = onTagLongClick,
                                 selectedTags = selectedTags,
                                 isMultiSelectMode = isTagMultiSelectMode,
+                                onSwitchSource = onSwitchExternalMetadataSource,
                             )
                         }
 
@@ -1928,6 +2059,17 @@ private fun MangaScreenLargeImpl(
                                     missingChapterCount = missingChapterCount,
                                     onClick = onFilterButtonClicked,
                                 )
+                            }
+
+                            if (selectedChapterTab == 0 && state.availableScanlators.size > 1) {
+                                item(key = "scanlators_tab_row") {
+                                    ScanlatorTabRow(
+                                        scanlators = remember(state.availableScanlators) { state.availableScanlators.toList() },
+                                        selectedScanlator = state.selectedScanlator,
+                                        onSelectScanlator = onSelectScanlator,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    )
+                                }
                             }
 
                             if (selectedChapterTab == 1) {

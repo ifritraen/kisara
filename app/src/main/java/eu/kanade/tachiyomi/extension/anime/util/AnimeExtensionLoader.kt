@@ -207,18 +207,21 @@ internal object AnimeExtensionLoader {
             .map { AnimeExtensionInfo(packageInfo = it, isShared = false) }
             .toList()
 
-        val privateExtPkgs = legacyPrivateExtPkgs + sideloadedExtPkgs
-        val privateExtPkgsByPkgName = privateExtPkgs.associateBy { it.packageInfo.packageName }
-
-        val extPkgs = (sharedExtPkgs + privateExtPkgs.asSequence())
-            // Remove duplicates. Shared takes priority than private by default
-            .distinctBy { it.packageInfo.packageName }
-            // Compare version number
-            .mapNotNull { sharedPkg ->
-                val privatePkg = privateExtPkgsByPkgName[sharedPkg.packageInfo.packageName]
-                selectExtensionPackage(sharedPkg, privatePkg)
+        val deduplicatedPrivateExtPkgs = (legacyPrivateExtPkgs + sideloadedExtPkgs)
+            .groupBy { it.packageInfo.packageName }
+            .values
+            .mapNotNull { group ->
+                group.maxByOrNull { PackageInfoCompat.getLongVersionCode(it.packageInfo) }
             }
-            .toList()
+
+        val privateExtPkgsByPkgName = deduplicatedPrivateExtPkgs.associateBy { it.packageInfo.packageName }
+        val allPkgNames = (sharedExtPkgs.map { it.packageInfo.packageName } + deduplicatedPrivateExtPkgs.map { it.packageInfo.packageName }).distinct()
+
+        val extPkgs = allPkgNames.mapNotNull { pkgName ->
+            val shared = sharedExtPkgs.firstOrNull { it.packageInfo.packageName == pkgName }
+            val private = privateExtPkgsByPkgName[pkgName]
+            selectExtensionPackage(shared, private)
+        }.toList()
 
         if (extPkgs.isEmpty()) return emptyList()
 
@@ -296,11 +299,11 @@ internal object AnimeExtensionLoader {
             null
         }
 
-        var sideloadedFile = File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
-        if (!sideloadedFile.isFile) {
-            sideloadedFile = File(eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getSideloadDir(context), "$cleanPkgName.apk")
-        }
-        val sideloadedPkg = if (sideloadedFile.isFile) {
+        val sideloadedFile = eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.findApkForPackage(context, pkgName)
+            ?: eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.findApkForPackage(context, cleanPkgName)
+            ?: File(context.filesDir, "sideloaded_extensions/$pkgName.apk").takeIf { it.isFile }
+            ?: File(context.filesDir, "sideloaded_extensions/$cleanPkgName.apk").takeIf { it.isFile }
+        val sideloadedPkg = if (sideloadedFile != null && sideloadedFile.isFile) {
             eu.kanade.tachiyomi.extension.util.ExtensionLoader.getPackageArchiveInfoWithCache(
                 context,
                 sideloadedFile,
@@ -421,9 +424,7 @@ internal object AnimeExtensionLoader {
             }
             else -> pkgName
         }
-        val isSideloaded = eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getLocalApkFiles(context).any {
-            it.nameWithoutExtension == pkgName || it.nameWithoutExtension == cleanPkgName
-        }
+        val isSideloaded = !extensionInfo.isShared || eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.findApkForPackage(context, pkgName) != null
         val loadPath = if (isSideloaded) {
             eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.prepareLoadableApkPath(context, pkgName, appInfo.sourceDir)
         } else {
@@ -584,12 +585,8 @@ internal object AnimeExtensionLoader {
      * have sourceDir which breaks assets loading (used for getting icon here).
      */
     private fun ApplicationInfo.fixBasePaths(apkPath: String) {
-        if (sourceDir == null) {
-            sourceDir = apkPath
-        }
-        if (publicSourceDir == null) {
-            publicSourceDir = apkPath
-        }
+        sourceDir = apkPath
+        publicSourceDir = apkPath
     }
 
     private data class AnimeExtensionInfo(

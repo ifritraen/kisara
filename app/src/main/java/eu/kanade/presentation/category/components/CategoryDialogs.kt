@@ -1,5 +1,6 @@
 package eu.kanade.presentation.category.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,14 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -42,6 +43,7 @@ import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.core.preference.asToggleableState
@@ -388,29 +391,33 @@ fun ChangeCategoryDialog(
     // KMK <--
 ) {
     if (initialSelection.isEmpty()) {
-        AlertDialog(
+        eu.kanade.presentation.components.KisaraBottomSheet(
             onDismissRequest = onDismissRequest,
-            confirmButton = {
+            title = stringResource(MR.strings.action_move_category),
+            footer = {
                 tachiyomi.presentation.core.components.material.TextButton(
                     onClick = {
                         onDismissRequest()
                         onEditCategories()
                     },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(text = stringResource(MR.strings.action_edit_categories))
                 }
             },
-            title = {
-                Text(text = stringResource(MR.strings.action_move_category))
-            },
-            text = {
-                Text(text = stringResource(MR.strings.information_empty_category_dialog))
-            },
-        )
+        ) {
+            Text(
+                text = stringResource(MR.strings.information_empty_category_dialog),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
         return
     }
 
     var selection by remember(initialSelection) { mutableStateOf(initialSelection) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val trackerManager = remember { Injekt.get<TrackerManager>() }
     val trackPreferences = remember { Injekt.get<TrackPreferences>() }
@@ -427,6 +434,7 @@ fun ChangeCategoryDialog(
     val getMangaExternalMetadata = remember { Injekt.get<tachiyomi.domain.manga.interactor.GetMangaExternalMetadata>() }
     val fetchExternalMetadata = remember { Injekt.get<eu.kanade.domain.manga.interactor.FetchExternalMetadata>() }
     val createCategoryWithName = remember { Injekt.get<tachiyomi.domain.category.interactor.CreateCategoryWithName>() }
+    val getChaptersByMangaId = remember { Injekt.get<tachiyomi.domain.chapter.interactor.GetChaptersByMangaId>() }
 
     val effectiveTracker: Tracker? = remember(manga, anime, novel) {
         when {
@@ -437,6 +445,7 @@ fun ChangeCategoryDialog(
     }
 
     var externalMetadata by remember { mutableStateOf<tachiyomi.domain.manga.model.MangaExternalMetadata?>(null) }
+    var localChapterCount by remember { mutableStateOf<Int?>(null) }
     var isMetadataLoading by remember { mutableStateOf(false) }
     var isMetadataExpanded by remember { mutableStateOf(false) }
     var isSynopsisExpanded by remember { mutableStateOf(false) }
@@ -453,6 +462,9 @@ fun ChangeCategoryDialog(
     LaunchedEffect(manga, anime, novel) {
         when {
             manga != null -> {
+                try {
+                    localChapterCount = getChaptersByMangaId.await(manga.id).size
+                } catch (_: Exception) {}
                 val cached = getMangaExternalMetadata.await(manga.id)
                 if (cached != null) {
                     externalMetadata = cached
@@ -484,7 +496,10 @@ fun ChangeCategoryDialog(
                 } catch (e: Exception) {
                     emptyList()
                 }
-                val existing = tracks.find { it.trackerId == tracker.id }
+                var existing = tracks.find { it.trackerId == tracker.id }
+                if (existing == null && tracker.id != TrackerManager.ANILIST) {
+                    existing = tracks.find { it.trackerId == TrackerManager.ANILIST }
+                }
                 if (existing != null) {
                     currentTrack = existing
                     trackerTitle = existing.title.ifBlank { manga.title }
@@ -493,14 +508,38 @@ fun ChangeCategoryDialog(
                     trackerTitle = manga.title
                     trackerStatus = tracker.getReadingStatus()
                     try {
-                        val searchResults = tracker.search(manga.title)
-                        val match = searchResults.firstOrNull { it.title.equals(manga.title, ignoreCase = true) }
+                        var searchResults = tracker.search(manga.title)
+                        var match = searchResults.firstOrNull { it.title.equals(manga.title, ignoreCase = true) }
                             ?: searchResults.firstOrNull()
+                        if (match == null && tracker.id != TrackerManager.ANILIST) {
+                            val anilist = trackerManager.trackers.find { it.id == TrackerManager.ANILIST } ?: trackerManager.aniList
+                            try {
+                                val alResults = anilist.search(manga.title)
+                                match = alResults.firstOrNull { it.title.equals(manga.title, ignoreCase = true) }
+                                    ?: alResults.firstOrNull()
+                            } catch (_: Exception) {}
+                        }
                         if (match != null) {
                             trackerTitle = match.title
+                            if (match.tags.isNotEmpty()) {
+                                eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.registerTags(context, match.tags)
+                            }
                         }
                     } catch (e: Exception) {
-                        // Ignore search errors
+                        if (tracker.id != TrackerManager.ANILIST) {
+                            try {
+                                val anilist = trackerManager.trackers.find { it.id == TrackerManager.ANILIST } ?: trackerManager.aniList
+                                val alResults = anilist.search(manga.title)
+                                val match = alResults.firstOrNull { it.title.equals(manga.title, ignoreCase = true) }
+                                    ?: alResults.firstOrNull()
+                                if (match != null) {
+                                    trackerTitle = match.title
+                                    if (match.tags.isNotEmpty()) {
+                                        eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.registerTags(context, match.tags)
+                                    }
+                                }
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
             }
@@ -694,24 +733,53 @@ fun ChangeCategoryDialog(
         skipPartiallyExpanded = true,
     )
 
+    var contentHeight by remember { mutableIntStateOf(0) }
+    LaunchedEffect(contentHeight) {
+        if (contentHeight > 0 && sheetState.isVisible) {
+            sheetState.expand()
+        }
+    }
+    LaunchedEffect(externalMetadata, isMetadataLoading, isMetadataExpanded, isSynopsisExpanded, trackerTitle) {
+        if (sheetState.isVisible) {
+            sheetState.expand()
+        }
+    }
+
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = Color.Transparent,
         scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
-        dragHandle = {
-            androidx.compose.material3.BottomSheetDefaults.DragHandle(
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            )
-        },
+        dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        GlassSurface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.compose.material3.BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { size ->
+                            if (size.height != contentHeight) {
+                                contentHeight = size.height
+                            }
+                        }
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
             // KMK -->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -724,19 +792,39 @@ fun ChangeCategoryDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Box 1: Title
+                        // Box 1: Title & Chapter Count
                         androidx.compose.material3.Surface(
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(
-                                text = trackerTitle.orEmpty(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            )
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = trackerTitle.orEmpty(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (localChapterCount != null && localChapterCount!! > 0) {
+                                    androidx.compose.material3.Surface(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    ) {
+                                        Text(
+                                            text = "${localChapterCount} ch.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         // Box 2: Status
@@ -1010,7 +1098,8 @@ fun ChangeCategoryDialog(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f))
-                        .padding(12.dp),
+                        .padding(12.dp)
+                        .animateContentSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(
@@ -1041,19 +1130,42 @@ fun ChangeCategoryDialog(
                                     color = MaterialTheme.colorScheme.secondary,
                                 )
                             }
-                            val totalChapters = meta.totalChapters
-                            if (totalChapters != null && totalChapters > 0) {
+                            val displayChapters = localChapterCount ?: meta.totalChapters
+                            if (displayChapters != null && displayChapters > 0) {
                                 Text(
-                                    text = "• $totalChapters ch.",
+                                    text = "• $displayChapters ch.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.tertiary,
                                 )
                             }
-                            Text(
-                                text = "(${meta.sourceName})",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
+                            androidx.compose.material3.Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
+                                modifier = Modifier.clickable {
+                                    val nextSource = when (meta.sourceName.lowercase()) {
+                                        "mangaupdates" -> "AniList"
+                                        "anilist" -> "MangaBaka"
+                                        else -> "MangaUpdates"
+                                    }
+                                    scope.launch {
+                                        isMetadataLoading = true
+                                        val updated = if (manga != null) {
+                                            fetchExternalMetadata.fetchFromSource(manga, nextSource)
+                                        } else null
+                                        if (updated != null) {
+                                            externalMetadata = updated
+                                        }
+                                        isMetadataLoading = false
+                                    }
+                                },
+                            ) {
+                                Text(
+                                    text = "(${meta.sourceName}) ⇄",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                )
+                            }
                         }
                         Icon(
                             imageVector = if (isMetadataExpanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1180,10 +1292,14 @@ fun ChangeCategoryDialog(
             }
             // KMK <--
 
-            Column(
+            // KMK --> Use LazyColumn instead of Column+verticalScroll.
+            // Column+verticalScroll inside ModalBottomSheet causes hit-test coordinates
+            // to be stale when scrolled — clicks register at the original pre-scroll position.
+            // LazyColumn recomposes each item with correct coordinates on every scroll frame.
+            androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier
                     .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 parents.forEach { parentEntry ->
@@ -1194,111 +1310,124 @@ fun ChangeCategoryDialog(
                         is CheckboxState.State -> parentEntry.isChecked
                     }
 
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onDirectToggle(parent.id) },
-                            verticalAlignment = Alignment.CenterVertically,
+                    item(key = "parent-${parent.id}") {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            when (parentEntry) {
-                                is CheckboxState.TriState -> {
-                                    TriStateCheckbox(
-                                        state = parentEntry.asToggleableState(),
-                                        onClick = { onChange(parentEntry) },
-                                    )
-                                }
-                                is CheckboxState.State -> {
-                                    Checkbox(
-                                        checked = parentEntry.isChecked,
-                                        onCheckedChange = { onChange(parentEntry) },
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = parent.visualName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (isParentChecked) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                            )
-
-                            IconButton(
-                                onClick = { createSubcategoryParentId = parent.id },
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Add Subcategory",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        if (subcategories.isNotEmpty()) {
-                            androidx.compose.foundation.layout.FlowRow(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 32.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    .clickable { onDirectToggle(parent.id) },
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                subcategories.forEach { subEntry ->
-                                    val sub = subEntry.value
-                                    val isChecked = when (subEntry) {
-                                        is CheckboxState.TriState -> subEntry is CheckboxState.TriState.Include
-                                        is CheckboxState.State -> subEntry.isChecked
+                                when (parentEntry) {
+                                    is CheckboxState.TriState -> {
+                                        TriStateCheckbox(
+                                            state = parentEntry.asToggleableState(),
+                                            onClick = { onChange(parentEntry) },
+                                        )
                                     }
+                                    is CheckboxState.State -> {
+                                        Checkbox(
+                                            checked = parentEntry.isChecked,
+                                            onCheckedChange = { onChange(parentEntry) },
+                                        )
+                                    }
+                                }
 
-                                    androidx.compose.material3.Surface(
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                                        color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                        contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.clickable { onDirectToggle(sub.id) },
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(start = 6.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                Text(
+                                    text = parent.visualName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isParentChecked) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+
+                                IconButton(
+                                    onClick = { createSubcategoryParentId = parent.id },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add Subcategory",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+
+                            if (subcategories.isNotEmpty()) {
+                                androidx.compose.foundation.layout.FlowRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 32.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    subcategories.forEach { subEntry ->
+                                        val sub = subEntry.value
+                                        val isChecked = when (subEntry) {
+                                            is CheckboxState.TriState -> subEntry is CheckboxState.TriState.Include
+                                            is CheckboxState.State -> subEntry.isChecked
+                                        }
+
+                                        androidx.compose.material3.Surface(
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                            color = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            contentColor = if (isChecked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.clickable { onDirectToggle(sub.id) },
                                         ) {
-                                            // Check button to toggle without closing
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .clickable { onChange(subEntry) },
-                                                contentAlignment = Alignment.Center,
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(start = 6.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                             ) {
-                                                when (subEntry) {
-                                                    is CheckboxState.TriState.Include -> {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Check,
-                                                            contentDescription = null,
-                                                            modifier = Modifier.size(14.dp),
-                                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                        )
-                                                    }
-                                                    is CheckboxState.TriState.Exclude -> {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Close,
-                                                            contentDescription = null,
-                                                            modifier = Modifier.size(14.dp),
-                                                            tint = MaterialTheme.colorScheme.error,
-                                                        )
-                                                    }
-                                                    is CheckboxState.State -> {
-                                                        if (subEntry.isChecked) {
+                                                // Check button to toggle without closing
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .clickable { onChange(subEntry) },
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    when (subEntry) {
+                                                        is CheckboxState.TriState.Include -> {
                                                             Icon(
                                                                 imageVector = Icons.Default.Check,
                                                                 contentDescription = null,
                                                                 modifier = Modifier.size(14.dp),
                                                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                                             )
-                                                        } else {
+                                                        }
+                                                        is CheckboxState.TriState.Exclude -> {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Close,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(14.dp),
+                                                                tint = MaterialTheme.colorScheme.error,
+                                                            )
+                                                        }
+                                                        is CheckboxState.State -> {
+                                                            if (subEntry.isChecked) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Check,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(14.dp),
+                                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                                )
+                                                            } else {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(12.dp)
+                                                                        .border(
+                                                                            width = 1.5.dp,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                                            shape = RoundedCornerShape(3.dp),
+                                                                        ),
+                                                                )
+                                                            }
+                                                        }
+                                                        else -> {
                                                             Box(
                                                                 modifier = Modifier
                                                                     .size(12.dp)
@@ -1310,24 +1439,13 @@ fun ChangeCategoryDialog(
                                                             )
                                                         }
                                                     }
-                                                    else -> {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .size(12.dp)
-                                                                .border(
-                                                                    width = 1.5.dp,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                                                    shape = RoundedCornerShape(3.dp),
-                                                                ),
-                                                        )
-                                                    }
                                                 }
+                                                Text(
+                                                    text = sub.visualName,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = if (isChecked) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
+                                                )
                                             }
-                                            Text(
-                                                text = sub.visualName,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = if (isChecked) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
-                                            )
                                         }
                                     }
                                 }
@@ -1336,6 +1454,7 @@ fun ChangeCategoryDialog(
                     }
                 }
             }
+            // KMK <--
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1384,4 +1503,6 @@ fun ChangeCategoryDialog(
             }
         }
     }
+}
+}
 }

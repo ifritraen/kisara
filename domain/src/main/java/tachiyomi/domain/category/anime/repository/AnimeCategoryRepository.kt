@@ -24,7 +24,7 @@ interface AnimeCategoryRepository {
 
     fun getVisibleCategoriesByAnimeIdAsFlow(animeId: Long): Flow<List<Category>>
 
-    suspend fun insertAnimeCategory(category: Category)
+    suspend fun insertAnimeCategory(category: Category): Long
 
     suspend fun updatePartialAnimeCategory(update: CategoryUpdate)
 

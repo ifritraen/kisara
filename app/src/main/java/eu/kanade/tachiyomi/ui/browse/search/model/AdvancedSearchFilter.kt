@@ -3,15 +3,21 @@ package eu.kanade.tachiyomi.ui.browse.search.model
 // KMK -->
 enum class TagSelectionState {
     UNSELECTED,
-    INCLUDED, // +
-    EXCLUDED, // -
+    MUST_HAVE, // All must match (AND)
+    OPTIONAL,  // Matches any (OR), higher matches rank higher
+    EXCLUDED,  // Must not match (NOT / -)
+    ;
+
+    companion object {
+        val INCLUDED = MUST_HAVE
+    }
 }
 
 data class AdvancedSearchState(
     val query: String = "",
     val author: String = "",
     val artist: String = "",
-    val isIncludeAndMode: Boolean = true, // AND vs OR
+    val isIncludeAndMode: Boolean = true, // Retained for backwards-compatibility
     val tagStates: Map<String, TagSelectionState> = emptyMap(),
     val demographic: String = "All",
     val status: String = "All",
@@ -23,18 +29,24 @@ data class AdvancedSearchState(
     val fromYear: String = "",
     val toYear: String = "",
 ) {
-    val includedTags: List<String>
-        get() = tagStates.filterValues { it == TagSelectionState.INCLUDED }.keys.toList()
+    val mustHaveTags: List<String>
+        get() = tagStates.filterValues { it == TagSelectionState.MUST_HAVE }.keys.toList()
+
+    val optionalTags: List<String>
+        get() = tagStates.filterValues { it == TagSelectionState.OPTIONAL }.keys.toList()
 
     val excludedTags: List<String>
         get() = tagStates.filterValues { it == TagSelectionState.EXCLUDED }.keys.toList()
+
+    val includedTags: List<String>
+        get() = mustHaveTags + optionalTags
 
     val activeFilterCount: Int
         get() {
             var count = 0
             if (author.isNotBlank()) count++
             if (artist.isNotBlank()) count++
-            count += includedTags.size + excludedTags.size
+            count += mustHaveTags.size + optionalTags.size + excludedTags.size
             if (demographic != "All") count++
             if (status != "All") count++
             if (origin != "All") count++
@@ -47,6 +59,8 @@ data class AdvancedSearchState(
 
     /**
      * Compiles the advanced filters into a search query string suitable for source search.
+     * Must-have tags compile into individual AND tag clauses (tag:"...").
+     * Optional tags compile into an OR clause ((tag:"..." OR tag:"...")).
      */
     fun compileQuery(): String {
         val parts = mutableListOf<String>()
@@ -63,14 +77,20 @@ data class AdvancedSearchState(
             parts.add("artist:\"${artist.trim()}\"")
         }
 
-        if (includedTags.isNotEmpty()) {
-            if (isIncludeAndMode) {
-                includedTags.forEach { parts.add("tag:\"$it\"") }
+        // Must-have tags (AND)
+        mustHaveTags.forEach { parts.add("tag:\"$it\"") }
+
+        // Optional tags (OR)
+        if (optionalTags.isNotEmpty()) {
+            val orClause = optionalTags.joinToString(" OR ") { "tag:\"$it\"" }
+            if (mustHaveTags.isNotEmpty() || query.isNotBlank() || author.isNotBlank() || artist.isNotBlank()) {
+                parts.add("($orClause)")
             } else {
-                parts.add(includedTags.joinToString(" OR ") { "tag:\"$it\"" })
+                parts.add(orClause)
             }
         }
 
+        // Excluded tags (NOT)
         excludedTags.forEach { parts.add("-tag:\"$it\"") }
 
         if (demographic != "All" && demographic != "None") {

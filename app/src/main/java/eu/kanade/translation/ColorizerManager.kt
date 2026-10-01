@@ -7,13 +7,16 @@ import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.data.ai.MangaColorizeEngine
 import eu.kanade.tachiyomi.data.download.DownloadProvider
+import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.tachiyomi.source.Source
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.translation.model.Translation
 import mihon.core.archive.archiveReader
 import tachiyomi.core.common.util.system.ImageUtil
+import tachiyomi.source.local.LocalSource
+import tachiyomi.source.local.io.Format
+import tachiyomi.source.local.isLocal
 import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -101,7 +104,7 @@ class ColorizerManager(
     }
 
     fun colorizeChapter(manga: Manga, chapter: Chapter) {
-        val source = (sourceManager.get(manga.source) as? HttpSource) ?: return
+        val source = sourceManager.get(manga.source) ?: return
         val translation = Translation(source, manga, chapter)
 
         synchronized(_queueState) {
@@ -224,7 +227,18 @@ class ColorizerManager(
                     chapterUrl = next.chapter.url,
                     mangaTitle = next.manga.ogTitle,
                     source = next.source,
-                )
+                ) ?: if (next.source.isLocal()) {
+                    try {
+                        when (val format = (next.source as? LocalSource)?.getFormat(next.chapter.toSChapter())) {
+                            is Format.Directory -> format.file
+                            is Format.Archive -> format.file
+                            is Format.Epub -> format.file
+                            null -> null
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else null
 
                 if (chapterDir == null || !chapterDir.exists()) {
                     val err = "Downloaded chapter files not found."
@@ -266,7 +280,8 @@ class ColorizerManager(
                     val outFile = outChapterDir.findFile(pageName) ?: outChapterDir.createFile(pageName) ?: continue
 
                     pagePair.second().use { inputStream ->
-                        val inputBitmap = BitmapFactory.decodeStream(inputStream)
+                        val bytes = inputStream.readBytes()
+                        val inputBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         if (inputBitmap != null) {
                             val speedTier = translationPreferences.colorizerSpeedTier().get()
                             val colorizedBitmap = colorizeEngine.colorize(
@@ -355,16 +370,11 @@ class ColorizerManager(
     }
 
     fun cancelActiveColorizer() {
+        colorizeEngine.cancelCurrentInference()
         activeColorizeJob?.cancel()
-        activeColorizeJob = null
-        activeChapterId = null
         _progressState.value = null
         eu.kanade.tachiyomi.data.ai.WakeLockHelper.release()
-        colorizeEngine.unloadSession()
-        System.gc()
-        Runtime.getRuntime().gc()
-        TranslationReport.log("WARNING", "Colorizer", "Active colorization cancelled immediately by user and memory released.")
-        processQueue()
+        TranslationReport.log("WARNING", "Colorizer", "Active colorization cancelled by user.")
     }
 
     fun cancelQueuedColorizer(translation: Translation) {

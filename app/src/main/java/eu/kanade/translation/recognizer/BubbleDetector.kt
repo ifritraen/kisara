@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import eu.kanade.tachiyomi.data.ai.AiModelManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -31,8 +32,17 @@ import kotlin.math.roundToInt
  */
 class BubbleDetector(private val context: Context) : AutoCloseable {
 
-    private val modelDir = File(context.filesDir, "bubbledetector")
-    private val modelFile get() = File(modelDir, "comic_text_detector.onnx")
+    private val modelDir get() = AiModelManager.getModelSubdir(context, "bubbledetector")
+    private val modelFile: File
+        get() {
+            val externalFile = File(modelDir, "comic_text_detector.onnx")
+            if (externalFile.exists()) return externalFile
+            val aiModelFile = File(AiModelManager.getModelSubdir(context, "ai"), "comic_text_detector.onnx")
+            if (aiModelFile.exists()) return aiModelFile
+            val internalFile = File(context.filesDir, "bubbledetector/comic_text_detector.onnx")
+            if (internalFile.exists()) return internalFile
+            return externalFile
+        }
 
     private val env = OrtEnvironment.getEnvironment()
     private var session: OrtSession? = null

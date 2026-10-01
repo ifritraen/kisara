@@ -1,5 +1,11 @@
 package eu.kanade.presentation.reader
 
+import android.os.Build
+import android.view.Window
+import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -31,18 +37,23 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import eu.kanade.presentation.reader.settings.ColorFilterPage
 import eu.kanade.presentation.reader.settings.GeneralPage
 import eu.kanade.presentation.reader.settings.ReadingModePage
+import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
@@ -92,12 +103,47 @@ fun ReaderPageActionsDialog(
     val pagerState = rememberPagerState { tabTitles.size }
     val scope = rememberCoroutineScope()
 
+    val isCustomFilter = pagerState.currentPage == 3
+
     BoxWithConstraints {
+        val targetMaxHeight = if (isCustomFilter) maxHeight * 0.40f else maxHeight * 0.85f
+        val animatedMaxHeight by animateDpAsState(
+            targetValue = targetMaxHeight,
+            animationSpec = tween(durationMillis = 250),
+            label = "pageActionsMaxHeight",
+        )
+
         TabbedDialog(
-            modifier = Modifier.heightIn(max = maxHeight * 0.85f),
+            modifier = Modifier.heightIn(max = animatedMaxHeight),
             onDismissRequest = onDismissRequest,
             tabTitles = tabTitles,
             pagerState = pagerState,
+            actions = {
+                val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+                val activity = LocalActivity.current as? ReaderActivity
+
+                DisposableEffect(window) {
+                    if (window != null && activity != null) {
+                        activity.activeDialogWindow = window
+                        try {
+                            val params = WindowManager.LayoutParams().apply {
+                                copyFrom(window.attributes)
+                                screenBrightness = activity.window.attributes.screenBrightness
+                            }
+                            window.attributes = params
+                        } catch (_: Exception) {}
+                    }
+                    onDispose {
+                        if (activity?.activeDialogWindow === window) {
+                            activity?.activeDialogWindow = null
+                        }
+                    }
+                }
+
+                LaunchedEffect(isCustomFilter, window) {
+                    updateWindowBackgroundDimAndBlur(window, isCustomFilter)
+                }
+            },
         ) { page ->
             when (page) {
                 0 -> {
@@ -448,3 +494,37 @@ private fun SetCoverDialog(
         onDismissRequest = onDismiss,
     )
 }
+
+// KMK -->
+private fun updateWindowBackgroundDimAndBlur(
+    window: Window?,
+    isCustomFilter: Boolean,
+) {
+    val win = window ?: return
+    try {
+        if (isCustomFilter) {
+            win.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            win.setDimAmount(0f)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                win.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                val params = WindowManager.LayoutParams().apply {
+                    copyFrom(win.attributes)
+                    blurBehindRadius = 0
+                }
+                win.attributes = params
+            }
+        } else {
+            win.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            win.setDimAmount(0.5f)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                win.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                val params = WindowManager.LayoutParams().apply {
+                    copyFrom(win.attributes)
+                    blurBehindRadius = 60
+                }
+                win.attributes = params
+            }
+        }
+    } catch (_: Exception) {}
+}
+// KMK <--

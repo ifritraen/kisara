@@ -523,6 +523,8 @@ class MangaScreen(
             onBulkFavoriteClicked = bulkFavoriteScreenModel::addFavorite,
             onSaveGranularScore = screenModel::saveGranularScore,
             onSaveGranularTemplate = screenModel::saveGranularTemplate,
+            onSelectScanlator = screenModel::setSelectedScanlator,
+            onSwitchExternalMetadataSource = screenModel::switchExternalMetadataSource,
             // KMK <--
         )
 
@@ -729,7 +731,11 @@ class MangaScreen(
     }
 
     private fun continueReading(context: Context, unreadChapter: Chapter?) {
-        if (unreadChapter != null) openChapter(context, unreadChapter)
+        if (unreadChapter != null) {
+            openChapter(context, unreadChapter)
+        } else {
+            context.toast(MR.strings.no_next_chapter)
+        }
     }
 
     private fun openChapter(context: Context, chapter: Chapter) {

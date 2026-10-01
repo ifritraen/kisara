@@ -22,6 +22,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,6 +67,7 @@ fun ExternalMetadataCard(
     selectedTags: Set<String> = emptySet(),
     isMultiSelectMode: Boolean = false,
     onQuickBindTracker: (() -> Unit)? = null,
+    onSwitchSource: ((String?) -> Unit)? = null,
     // KMK <--
 ) {
     if (metadata == null && !isLoading) return
@@ -175,19 +180,75 @@ fun ExternalMetadataCard(
                         }
 
                         // Source Label
-                        Text(
-                            text = "via ${metadata.sourceName}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(start = 2.dp),
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .padding(start = 2.dp)
+                                .clickable(enabled = onSwitchSource != null) { onSwitchSource?.invoke(null) },
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = "via ${metadata.sourceName}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
                     }
                 }
 
                 // Action / Toggle Buttons
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
+                    if (onSwitchSource != null) {
+                        var showSourceMenu by rememberSaveable { mutableStateOf(false) }
+                        Box {
+                            IconButton(
+                                onClick = { showSourceMenu = true },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.SwapHoriz,
+                                    contentDescription = "Switch Tracker Details Source",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showSourceMenu,
+                                onDismissRequest = { showSourceMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("MangaUpdates") },
+                                    onClick = {
+                                        showSourceMenu = false
+                                        onSwitchSource("MangaUpdates")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AniList") },
+                                    onClick = {
+                                        showSourceMenu = false
+                                        onSwitchSource("AniList")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("MangaBaka") },
+                                    onClick = {
+                                        showSourceMenu = false
+                                        onSwitchSource("MangaBaka")
+                                    },
+                                )
+                            }
+                        }
+                    }
+
                     IconButton(
                         onClick = onAddToTracker,
                         modifier = Modifier.size(32.dp),
@@ -218,6 +279,18 @@ fun ExternalMetadataCard(
                             .fillMaxWidth()
                             .padding(top = MaterialTheme.padding.medium),
                     ) {
+                        val title = metadata.title
+                        if (!title.isNullOrBlank()) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
                         // Key Details Grid
                         Row(
                             modifier = Modifier.fillMaxWidth(),

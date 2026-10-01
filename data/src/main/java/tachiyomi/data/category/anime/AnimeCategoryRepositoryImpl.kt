@@ -55,8 +55,8 @@ class AnimeCategoryRepositoryImpl(
         }
     }
 
-    override suspend fun insertAnimeCategory(category: Category) {
-        handler.await { db ->
+    override suspend fun insertAnimeCategory(category: Category): Long {
+        return handler.awaitOneExecutable(true) { db ->
             db.categoriesQueries.insert(
                 name = category.name,
                 order = category.order,
@@ -65,6 +65,7 @@ class AnimeCategoryRepositoryImpl(
                 hiddenFromHomeHub = 0L,
                 parentId = category.parentId,
             )
+            db.categoriesQueries.selectLastInsertedRowId()
         }
     }
 

@@ -6,10 +6,13 @@ import java.io.File
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.hippo.unifile.UniFile
+import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.tachiyomi.data.download.DownloadProvider
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.system.toast
+import tachiyomi.source.local.LocalSource
+import tachiyomi.source.local.io.Format
+import tachiyomi.source.local.isLocal
 import eu.kanade.translation.data.TranslationProvider
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.Translation
@@ -209,7 +212,7 @@ class ChapterTranslator(
     }
 
     fun queueChapter(manga: Manga, chapter: Chapter) {
-        val source = sourceManager.get(manga.source) as? HttpSource ?: return
+        val source = sourceManager.get(manga.source) ?: return
         val existing = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.ogTitle, source)
         if (existing != null && existing.exists()) {
             existing.delete()
@@ -267,7 +270,24 @@ class ChapterTranslator(
                 chapterUrl = translation.chapter.url,
                 mangaTitle = translation.manga.ogTitle,
                 source = translation.source,
-            )!!
+            ) ?: if (translation.source.isLocal()) {
+                try {
+                    when (val format = (translation.source as? LocalSource)?.getFormat(translation.chapter.toSChapter())) {
+                        is Format.Directory -> format.file
+                        is Format.Archive -> format.file
+                        is Format.Epub -> format.file
+                        null -> null
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+            } else null
+
+            if (chapterPath == null || !chapterPath.exists()) {
+                val err = "Downloaded chapter files not found."
+                TranslationReport.log("ERROR", "Pipeline", err)
+                throw IllegalStateException(err)
+            }
 
             val pages = mutableMapOf<String, PageTranslation>()
             val streams = getChapterPages(chapterPath)

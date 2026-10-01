@@ -1,6 +1,11 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,6 +30,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -53,7 +65,25 @@ internal fun ReaderChapterListSheet(
     onChapterClick: (Long) -> Unit,
     onDownloadClick: (Long) -> Unit,
 ) {
-    val pageMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.7f).dp
+    // KMK --> Expandable bottom sheet: Partial (~60%) -> Full (~92%)
+    var isFullExpanded by remember { mutableStateOf(false) }
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val partialMaxHeight = (screenHeight * 0.6f).coerceIn(340.dp, 480.dp)
+    val fullMaxHeight = (screenHeight * 0.92f).coerceAtLeast(partialMaxHeight)
+
+    val contentMaxHeight by animateDpAsState(
+        targetValue = if (isFullExpanded) fullMaxHeight else partialMaxHeight,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "NovelReaderChapterListHeight",
+    )
+
+    BackHandler(enabled = isFullExpanded) {
+        isFullExpanded = false
+    }
+
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = items.indexOfFirst { it.isCurrent }.coerceAtLeast(0),
     )
@@ -64,14 +94,37 @@ internal fun ReaderChapterListSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = pageMaxHeight)
+                .heightIn(max = contentMaxHeight)
                 .padding(vertical = 16.dp),
         ) {
-            Text(
-                text = stringResource(MR.strings.chapters),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(MR.strings.chapters),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismissRequest) {
+                        Icon(
+                            imageVector = Icons.Outlined.PlayArrow,
+                            contentDescription = stringResource(MR.strings.action_resume),
+                        )
+                    }
+                    IconButton(onClick = { isFullExpanded = !isFullExpanded }) {
+                        Icon(
+                            imageVector = if (isFullExpanded) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (isFullExpanded) "Collapse" else "Expand full",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+            // KMK <--
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),

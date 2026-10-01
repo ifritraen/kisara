@@ -73,13 +73,18 @@ class SuggestionRepositoryImpl(
     override suspend fun replace(suggestions: List<Pair<Manga, Double>>) {
         handler.await(inTransaction = true) {
             suggestionsQueries.deleteAllSuggestions()
+            val dismissedUrls = suggestionsQueries.getDismissedSuggestions { mangaUrl, _, _ -> mangaUrl }
+                .executeAsList()
+                .toSet()
             val now = System.currentTimeMillis()
             suggestions.forEach { (manga, relevance) ->
-                suggestionsQueries.insertSuggestion(
-                    mangaId = manga.id,
-                    relevance = relevance,
-                    createdAt = now,
-                )
+                if (manga.url !in dismissedUrls) {
+                    suggestionsQueries.insertSuggestion(
+                        mangaId = manga.id,
+                        relevance = relevance,
+                        createdAt = now,
+                    )
+                }
             }
         }
     }
@@ -197,12 +202,13 @@ class SuggestionRepositoryImpl(
     }
 
     override suspend fun dismiss(mangaUrl: String, title: String) {
-        handler.await {
+        handler.await(inTransaction = true) {
             suggestionsQueries.insertDismissedSuggestion(
                 mangaUrl = mangaUrl,
                 title = title,
                 createdAt = System.currentTimeMillis(),
             )
+            suggestionsQueries.deleteSuggestionByUrl(mangaUrl)
         }
     }
 

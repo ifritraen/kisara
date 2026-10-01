@@ -9,14 +9,17 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
 import eu.kanade.domain.source.service.SourcePreferences
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import mihon.domain.manga.model.toDomainManga
 import tachiyomi.core.common.util.system.logcat
@@ -30,6 +33,8 @@ import tachiyomi.domain.suggestions.model.SuggestionSource
 import tachiyomi.domain.suggestions.model.SuggestionTag
 import tachiyomi.domain.suggestions.repository.SuggestionRepository
 import tachiyomi.domain.suggestions.service.SuggestionsPreferences
+import tachiyomi.domain.suggestions.service.SuggestionsPreferences.NsfwSuggestionMode
+import eu.kanade.tachiyomi.data.ai.NsfwTagClassifier
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.TimeUnit
@@ -46,8 +51,21 @@ class SuggestionsWorker(
         SuggestionsReport.log("INFO", "Starting suggestions updates in background (manual=$isManual, rankToLoad=$rankToLoad)")
         logcat(LogPriority.INFO) { "Starting suggestions updates in background" }
 
+        suspend fun awaitReaderClosed() {
+            if (isReaderActive.value) {
+                SuggestionsReport.log("INFO", "Reader is active. SuggestionsWorker paused/holding until reader closes.")
+                logcat(LogPriority.INFO) { "Reader is active. SuggestionsWorker paused." }
+                isReaderActive.first { !it }
+                SuggestionsReport.log("INFO", "Reader closed. Resuming suggestions fetch.")
+                logcat(LogPriority.INFO) { "Reader closed. Resuming suggestions fetch." }
+            }
+        }
+
+        awaitReaderClosed()
+
         if (!isManual) {
             delay(15000)
+            awaitReaderClosed()
         }
 
         try {
@@ -58,10 +76,14 @@ class SuggestionsWorker(
             val sourcePreferences = Injekt.get<SourcePreferences>()
             val suggestionsPreferences = Injekt.get<SuggestionsPreferences>()
 
+            var hasReplacedInCurrentRun = (rankToLoad != -1)
+
+            awaitReaderClosed()
+
             // 1. Scan favorites and history to update/populate taste database with deep engagement (duration + chapters)
             val favorites = mangaRepository.getFavorites()
             val readHistory = mangaRepository.getReadMangaNotInLibrary()
-            val seed = (favorites + readHistory).distinctBy { it.id }
+            val seed = (favorites.take(100) + readHistory.take(50)).distinctBy { it.id }
 
             // Sync tags with time decay, reading duration, chapter depth, and generic blacklist
             val genericTags = setOf("manga", "webtoon", "comic", "scanlation", "translation", "english", "raw", "doujinshi", "oneshot")
@@ -121,7 +143,7 @@ class SuggestionsWorker(
             val existingTagsMap = existingTags.associateBy { it.tag }
             var nextTagSortOrder = (existingTags.maxOfOrNull { it.sortOrder } ?: -1L) + 1
 
-            val sortedTagFreqs = tagFrequencies.entries.sortedByDescending { it.value }
+            val sortedTagFreqs = tagFrequencies.entries.sortedByDescending { it.value }.take(50)
             sortedTagFreqs.forEach { (tagText, countDouble) ->
                 val count = Math.round(Math.log(1.0 + countDouble) * 10.0).toLong().coerceAtLeast(1L)
                 val existing = existingTagsMap[tagText]
@@ -146,7 +168,7 @@ class SuggestionsWorker(
             val existingSourcesMap = existingSources.associateBy { it.sourceId }
             var nextSourceSortOrder = (existingSources.maxOfOrNull { it.sortOrder } ?: -1L) + 1
 
-            val sortedSourceFreqs = sourceFrequencies.entries.sortedByDescending { it.value }
+            val sortedSourceFreqs = sourceFrequencies.entries.sortedByDescending { it.value }.take(20)
             sortedSourceFreqs.forEach { (sourceId, count) ->
                 val existing = existingSourcesMap[sourceId]
                 if (existing != null) {
@@ -170,7 +192,7 @@ class SuggestionsWorker(
             val existingAuthorsMap = existingAuthors.associateBy { it.author }
             var nextAuthorSortOrder = (existingAuthors.maxOfOrNull { it.sortOrder } ?: -1L) + 1
 
-            val sortedAuthorFreqs = authorFrequencies.entries.sortedByDescending { it.value }
+            val sortedAuthorFreqs = authorFrequencies.entries.sortedByDescending { it.value }.take(20)
             sortedAuthorFreqs.forEach { (authorText, count) ->
                 val existing = existingAuthorsMap[authorText]
                 if (existing != null) {
@@ -194,7 +216,7 @@ class SuggestionsWorker(
             val existingArtistsMap = existingArtists.associateBy { it.artist }
             var nextArtistSortOrder = (existingArtists.maxOfOrNull { it.sortOrder } ?: -1L) + 1
 
-            val sortedArtistFreqs = artistFrequencies.entries.sortedByDescending { it.value }
+            val sortedArtistFreqs = artistFrequencies.entries.sortedByDescending { it.value }.take(20)
             sortedArtistFreqs.forEach { (artistText, count) ->
                 val existing = existingArtistsMap[artistText]
                 if (existing != null) {
@@ -212,103 +234,139 @@ class SuggestionsWorker(
                 }
             }
 
-            // 2. Fetch unblocked active configurations
+            // 2. Fetch unblocked active configurations with AI 18+ categorization
+            val isHideNsfwGlobally = Injekt.get<eu.kanade.domain.ui.UiPreferences>().kisaraHideNsfwSuggestions().get()
+            val nsfwModePref = suggestionsPreferences.nsfwSuggestionMode().get()
+            val effectiveNsfwMode = if (isHideNsfwGlobally) NsfwSuggestionMode.SAFE_ONLY else nsfwModePref
+
             val allTags = suggestionRepository.getTags()
             val nonBlockedTags = allTags.filter { !it.isBlocked }
-            val top10Tags = nonBlockedTags.sortedByDescending { it.count }.take(10).map { it.tag }.toSet()
-            val activeTags = nonBlockedTags.filter { top10Tags.contains(it.tag) || it.isUserAdded }
-                .sortedWith(compareBy<SuggestionTag> { it.sortOrder }.thenByDescending { it.count })
 
+            // Partition tags using AI Character N-gram & canonical taxonomy
+            val safeTags = nonBlockedTags.filter { !NsfwTagClassifier.is18PlusTag(it.tag) }
+            val nsfwTags = nonBlockedTags.filter { NsfwTagClassifier.is18PlusTag(it.tag) }
+
+            val allOnlineSources = sourceManager.getOnlineSources()
+            // Partition sources using extension metadata + manual safe whitelist overrides
+            val safeSources = allOnlineSources.filter { !NsfwTagClassifier.is18PlusSource(it.id, it.name) }
+            val nsfwSources = allOnlineSources.filter { NsfwTagClassifier.is18PlusSource(it.id, it.name) }
+
+            val random = java.util.Random()
+            val maxTagsToMatch = suggestionsPreferences.maxTagsToMatch().get().coerceAtLeast(3)
+
+            // Stochastic Top-X Pool -> Weighted Pick-Y Roulette
+            fun sampleTagsWithoutReplacement(
+                pool: List<SuggestionTag>,
+                count: Int,
+            ): List<SuggestionTag> {
+                if (pool.size <= count) return pool.shuffled(random)
+                val remaining = pool.toMutableList()
+                val selected = mutableListOf<SuggestionTag>()
+                while (selected.size < count && remaining.isNotEmpty()) {
+                    val weights = remaining.map { Math.log(1.0 + it.count.coerceAtLeast(1L)) }
+                    val totalWeight = weights.sum()
+                    if (totalWeight <= 0.0) {
+                        selected.add(remaining.removeAt(random.nextInt(remaining.size)))
+                        continue
+                    }
+                    val r = random.nextDouble() * totalWeight
+                    var cumulative = 0.0
+                    var chosenIndex = 0
+                    for (i in remaining.indices) {
+                        cumulative += weights[i]
+                        if (r <= cumulative) {
+                            chosenIndex = i
+                            break
+                        }
+                    }
+                    selected.add(remaining.removeAt(chosenIndex))
+                }
+                return selected
+            }
+
+            // Sample active tags based on effective 18+ mode
+            val sampledTags = when (effectiveNsfwMode) {
+                NsfwSuggestionMode.SAFE_ONLY -> {
+                    val pool = safeTags.sortedByDescending { it.count }.take(30)
+                    sampleTagsWithoutReplacement(pool, maxTagsToMatch)
+                }
+                NsfwSuggestionMode.NSFW_ONLY -> {
+                    val pool = nsfwTags.sortedByDescending { it.count }.take(30)
+                    if (pool.isNotEmpty()) {
+                        sampleTagsWithoutReplacement(pool, maxTagsToMatch)
+                    } else {
+                        val fallback = safeTags.sortedByDescending { it.count }.take(30)
+                        sampleTagsWithoutReplacement(fallback, maxTagsToMatch)
+                    }
+                }
+                NsfwSuggestionMode.BALANCED -> {
+                    val safeQuota = maxTagsToMatch / 2
+                    val nsfwQuota = maxTagsToMatch - safeQuota
+                    val pickedSafe = sampleTagsWithoutReplacement(safeTags.sortedByDescending { it.count }.take(25), safeQuota)
+                    val pickedNsfw = sampleTagsWithoutReplacement(nsfwTags.sortedByDescending { it.count }.take(25), nsfwQuota)
+                    (pickedSafe + pickedNsfw).shuffled(random)
+                }
+            }
+
+            val userAddedTags = when (effectiveNsfwMode) {
+                NsfwSuggestionMode.SAFE_ONLY -> nonBlockedTags.filter { it.isUserAdded && !NsfwTagClassifier.is18PlusTag(it.tag) }
+                NsfwSuggestionMode.NSFW_ONLY -> nonBlockedTags.filter { it.isUserAdded && NsfwTagClassifier.is18PlusTag(it.tag) }
+                NsfwSuggestionMode.BALANCED -> nonBlockedTags.filter { it.isUserAdded }
+            }
+            val finalTags = (userAddedTags + sampledTags).distinctBy { it.tag }
+
+            // Sample sources based on effective 18+ mode
             val allSources = suggestionRepository.getSources()
             val nonBlockedSources = allSources.filter { !it.isBlocked }
-            val top5Sources = nonBlockedSources.sortedByDescending { it.count }.take(5).map { it.sourceId }.toSet()
-            val activeSources = nonBlockedSources.filter { top5Sources.contains(it.sourceId) || it.isUserAdded }
-                .sortedWith(compareBy<SuggestionSource> { it.sortOrder }.thenByDescending { it.count })
+            val onlineSources = when (effectiveNsfwMode) {
+                NsfwSuggestionMode.SAFE_ONLY -> {
+                    val matchedSafe = safeSources.filter { src -> nonBlockedSources.any { it.sourceId == src.id } }
+                    val pool = matchedSafe.ifEmpty { safeSources }
+                    pool.shuffled(random).take(5)
+                }
+                NsfwSuggestionMode.NSFW_ONLY -> {
+                    val matchedNsfw = nsfwSources.filter { src -> nonBlockedSources.any { it.sourceId == src.id } }
+                    val pool = matchedNsfw.ifEmpty { nsfwSources.ifEmpty { allOnlineSources } }
+                    pool.shuffled(random).take(5)
+                }
+                NsfwSuggestionMode.BALANCED -> {
+                    val pickedSafe = safeSources.shuffled(random).take(3)
+                    val pickedNsfw = nsfwSources.shuffled(random).take(2)
+                    (pickedSafe + pickedNsfw).ifEmpty { allOnlineSources.take(5) }
+                }
+            }
 
             val allAuthors = suggestionRepository.getAuthors()
             val nonBlockedAuthors = allAuthors.filter { !it.isBlocked }
-            val top5Authors = nonBlockedAuthors.sortedByDescending { it.count }.take(5).map { it.author }.toSet()
-            val activeAuthors = nonBlockedAuthors.filter { top5Authors.contains(it.author) || it.isUserAdded }
-                .sortedWith(compareBy<SuggestionAuthor> { it.sortOrder }.thenByDescending { it.count })
+            val finalAuthors = nonBlockedAuthors.sortedByDescending { it.count }.take(2)
 
             val allArtists = suggestionRepository.getArtists()
             val nonBlockedArtists = allArtists.filter { !it.isBlocked }
-            val top5Artists = nonBlockedArtists.sortedByDescending { it.count }.take(5).map { it.artist }.toSet()
-            val activeArtists = nonBlockedArtists.filter { top5Artists.contains(it.artist) || it.isUserAdded }
-                .sortedWith(compareBy<SuggestionArtist> { it.sortOrder }.thenByDescending { it.count })
+            val finalArtists = nonBlockedArtists.sortedByDescending { it.count }.take(2)
 
-            // Fetch defaults if empty
-            val finalTags = if (activeTags.isEmpty()) {
-                allTags.filter { !it.isBlocked }.sortedByDescending { it.count }.take(5)
-            } else {
-                activeTags
+            val finalSources = onlineSources.map {
+                SuggestionSource(sourceId = it.id, count = 1L, isBlocked = false, isUserAdded = false, sortOrder = 0L)
             }
 
-            val finalSources = if (activeSources.isEmpty()) {
-                allSources.filter { !it.isBlocked }.sortedByDescending { it.count }.take(5)
-            } else {
-                activeSources
-            }
-
-            val finalAuthors = if (activeAuthors.isEmpty()) {
-                allAuthors.filter { !it.isBlocked }.sortedByDescending { it.count }.take(2)
-            } else {
-                activeAuthors
-            }
-
-            val finalArtists = if (activeArtists.isEmpty()) {
-                allArtists.filter { !it.isBlocked }.sortedByDescending { it.count }.take(2)
-            } else {
-                activeArtists
-            }
-
-            if (finalTags.isEmpty() || finalSources.isEmpty()) {
-                SuggestionsReport.log("WARNING", "No active tags (${finalTags.size}) or sources (${finalSources.size}) found in taste seed database.")
+            if (finalTags.isEmpty() || onlineSources.isEmpty()) {
+                SuggestionsReport.log("WARNING", "No active tags (${finalTags.size}) or sources (${onlineSources.size}) available for suggestions.")
                 logcat(LogPriority.INFO) { "No active tags or sources config found for suggestions." }
                 return Result.success()
             }
 
-            val showNsfw = sourcePreferences.showNsfwSource().get()
-            val onlineSources = sourceManager.getOnlineSources()
-                .filter { src ->
-                    finalSources.any { it.sourceId == src.id } &&
-                        (showNsfw || !src.name.contains("nsfw", ignoreCase = true))
-                }
-
-            SuggestionsReport.log("INFO", "Loaded suggestions active config. Selected tags: ${finalTags.map { it.tag }}. Searched extensions: ${onlineSources.map { "${it.name} (${it.id})" }}")
-
-            if (onlineSources.isEmpty()) {
-                SuggestionsReport.log("WARNING", "No online sources match active suggestions source config.")
-                logcat(LogPriority.INFO) { "No active online sources match suggestions config." }
-                return Result.success()
-            }
+            SuggestionsReport.log("INFO", "Loaded suggestions active config. Mode: $effectiveNsfwMode. Selected tags: ${finalTags.map { it.tag }}. Searched extensions: ${onlineSources.map { "${it.name} (${it.id})" }}")
 
             val favoriteAuthors = nonBlockedAuthors.map { it.author }.toSet()
             val favoriteArtists = nonBlockedArtists.map { it.artist }.toSet()
-
             val topAuthors = finalAuthors.map { it.author }
             val topArtists = finalArtists.map { it.artist }
 
-            val maxTagsToMatch = suggestionsPreferences.maxTagsToMatch().get()
             val searchTerms = mutableListOf<String>()
-
-            // Bucket 1: Explicit user-added tags & top authors/artists
-            finalTags.filter { it.isUserAdded }.forEach { searchTerms.add(it.tag) }
+            userAddedTags.forEach { searchTerms.add(it.tag) }
             searchTerms.addAll(topAuthors.take(1))
             searchTerms.addAll(topArtists.take(1))
-
-            // Bucket 2: Weighted Roulette Sampling across top and niche tags to avoid monopoly
-            val candidatePool = finalTags.filterNot { it.isUserAdded }.toMutableList()
-            if (candidatePool.isNotEmpty()) {
-                // Pick top ranked tag
-                searchTerms.add(candidatePool.removeAt(0).tag)
-
-                // Shuffle / roulette sample secondary niche tags
-                val remainingTags = (candidatePool + allTags.filter { !it.isBlocked && !finalTags.any { ft -> ft.tag == it.tag } })
-                    .distinctBy { it.tag }
-                    .shuffled()
-                searchTerms.addAll(remainingTags.take(maxTagsToMatch - searchTerms.size).map { it.tag })
-            }
+            // Sampled tags shuffled to prevent rank 0 monopolization
+            searchTerms.addAll(sampledTags.map { it.tag })
 
             val totalRanks = searchTerms.distinct().size
             val distinctSearchTerms = searchTerms.distinct()
@@ -324,22 +382,29 @@ class SuggestionsWorker(
 
             // Semaphore to throttle extension concurrent queries
             val semaphore = Semaphore(3)
-            val random = java.util.Random()
 
-            suspend fun processRank(rankIdx: Int, isFirstRank: Boolean) {
+            suspend fun processRank(rankIdx: Int) {
                 if (rankIdx < 0 || rankIdx >= distinctSearchTerms.size) return
+                awaitReaderClosed()
                 val currentSearchTerm = distinctSearchTerms[rankIdx]
                 SuggestionsReport.log("INFO", "Processing rank $rankIdx. Selected query/tag: '$currentSearchTerm'")
                 logcat(LogPriority.INFO) { "Fetching suggestions rank $rankIdx (query/tag: $currentSearchTerm)" }
 
-                // Dynamic page offset sampling (page 1 or 2) for deep exploration
-                val pageToFetch = if (random.nextFloat() < 0.35f) 2 else 1
+                // Dynamic deep page offset sampling (pages 1 to 4) for diverse catalog exploration
+                val pageRoll = random.nextInt(100)
+                val pageToFetch = when {
+                    pageRoll < 40 -> 1 // 40% page 1
+                    pageRoll < 70 -> 2 // 30% page 2
+                    pageRoll < 85 -> 3 // 15% page 3
+                    else -> 4          // 15% page 4
+                }
 
                 val candidates = mutableMapOf<String, Pair<eu.kanade.tachiyomi.source.model.SManga, Long>>()
                 coroutineScope {
                     val jobs = onlineSources.map { source ->
                         async {
                             semaphore.withPermit {
+                                awaitReaderClosed()
                                 try {
                                     SuggestionsReport.log("INFO", "Extension '${source.name}' starting search for: '$currentSearchTerm' (page $pageToFetch)")
                                     val results = source.getSearchManga(pageToFetch, currentSearchTerm, eu.kanade.tachiyomi.source.model.FilterList())
@@ -357,6 +422,7 @@ class SuggestionsWorker(
                                         }
                                     }
                                 } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
                                     SuggestionsReport.log("ERROR", "Failed to search '${source.name}': ${e.message}", e)
                                     logcat(LogPriority.WARN, e) { "Failed suggestions fetch for source: ${source.name}" }
 
@@ -398,120 +464,142 @@ class SuggestionsWorker(
                 }.toMap()
 
                 val blockedTagsGlobal = sourcePreferences.blockedTags().get().map { it.lowercase().trim() }.toSet()
+                val cooldownPrefs = context.getSharedPreferences("suggestions_cooldown_cache", Context.MODE_PRIVATE)
+                val cooldownUrls = cooldownPrefs.getStringSet("recent_suggested_urls", emptySet()) ?: emptySet()
 
                 val scoredSuggestions = mutableListOf<Pair<Manga, Double>>()
                 val candidatesBySource = filteredCandidates.groupBy { it.second }
 
-                // Dynamically compute candidates to initialize to fill suggestions limit
-                val combos = finalTags.size * onlineSources.size
-                val limitPref = suggestionsPreferences.maxSuggestionsToDisplay().get()
-                val candidatesToFetch = if (combos > 0) {
-                    Math.ceil(limitPref.toDouble() / combos).toInt().coerceIn(2, 10)
-                } else {
-                    5
-                }
+                // Allow each source to supply up to 8 candidates per rank for thorough diversity
+                val candidatesToFetch = 8
 
                 coroutineScope {
                     val jobs = candidatesBySource.flatMap { (sourceId, candidates) ->
                         val source = onlineSources.firstOrNull { it.id == sourceId } ?: return@flatMap emptyList()
                         candidates.take(candidatesToFetch).map { (smanga, _) ->
                             async {
-                                try {
-                                    val networkManga = smanga.toDomainManga(sourceId)
-                                    var localManga = networkToLocalManga(networkManga)
+                                semaphore.withPermit {
+                                    awaitReaderClosed()
+                                    try {
+                                        val networkManga = smanga.toDomainManga(sourceId)
 
-                                    if (localManga.favorite || favoriteUrls.contains(localManga.url) || favoriteTitles.contains(localManga.title.lowercase().trim())) {
-                                        return@async
-                                    }
-
-                                    if (!localManga.initialized) {
-                                        try {
-                                            logcat(LogPriority.INFO) { "Fetching details/genres for suggestion: ${smanga.title}" }
-                                            val details = source.getMangaDetails(smanga)
-                                            try {
-                                                if (details.url.isNullOrBlank()) {
-                                                    details.url = smanga.url
-                                                }
-                                            } catch (urlErr: Exception) {
-                                                details.url = smanga.url
-                                            }
-                                            localManga = networkToLocalManga(details.toDomainManga(sourceId))
-                                        } catch (e: Exception) {
-                                            logcat(LogPriority.WARN, e) { "Failed fetching details for: ${smanga.title}" }
+                                        if (networkManga.favorite || favoriteUrls.contains(networkManga.url) || favoriteTitles.contains(networkManga.title.lowercase().trim())) {
+                                            return@withPermit
                                         }
-                                    }
 
-                                    val hasBlockedTag = localManga.genre.orEmpty().any { genre ->
-                                        val clean = cleanAndFilterGenre(genre)
-                                        clean != null && blockedTagsGlobal.contains(clean)
-                                    }
-                                    val isHideNsfwEnabled = Injekt.get<eu.kanade.domain.ui.UiPreferences>().kisaraHideNsfwSuggestions().get()
-                                    val isNsfwManga = isHideNsfwEnabled && eu.kanade.tachiyomi.util.NsfwDetector.isNsfw(localManga, localManga.title)
-                                    if (!hasBlockedTag && !isNsfwManga) {
-                                        val extWeight = sourceWeightsMap[sourceId] ?: 0.1
-                                        if (localManga.initialized) {
-                                            var tagSum = 0.0
-                                            val matchedGenres = mutableListOf<String>()
-                                            localManga.genre.orEmpty().forEach { genre ->
-                                                val clean = cleanAndFilterGenre(genre)
-                                                if (clean != null) {
-                                                    val tagWeight = tagWeightsMap[clean]
-                                                    if (tagWeight != null) {
-                                                        tagSum += tagWeight
-                                                        matchedGenres.add("$clean (w: ${String.format("%.2f", tagWeight)})")
+                                        var candidateManga = networkManga
+                                        if (!candidateManga.initialized) {
+                                            try {
+                                                logcat(LogPriority.INFO) { "Fetching details/genres for suggestion: ${smanga.title}" }
+                                                val details = withTimeoutOrNull(15_000L) {
+                                                    source.getMangaDetails(smanga)
+                                                }
+                                                if (details != null) {
+                                                    try {
+                                                        if (details.url.isNullOrBlank()) {
+                                                            details.url = smanga.url
+                                                        }
+                                                    } catch (urlErr: Exception) {
+                                                        details.url = smanga.url
+                                                    }
+                                                    candidateManga = details.toDomainManga(sourceId)
+                                                }
+                                            } catch (e: Exception) {
+                                                if (e is CancellationException) throw e
+                                                logcat(LogPriority.WARN, e) { "Failed fetching details for: ${smanga.title}" }
+                                            }
+                                        }
+
+                                        val candTitleClean = candidateManga.title.lowercase().trim()
+                                        if (favoriteTitles.contains(candTitleClean) || historyTitles.contains(candTitleClean) || dismissedTitles.contains(candTitleClean)) {
+                                            return@withPermit
+                                        }
+
+                                        val hasBlockedTag = candidateManga.genre.orEmpty().any { genre ->
+                                            val clean = cleanAndFilterGenre(genre)
+                                            clean != null && blockedTagsGlobal.contains(clean)
+                                        }
+                                        val isManga18Plus = NsfwTagClassifier.is18PlusManga(candidateManga, candidateManga.title)
+                                        val isAllowedByMode = when (effectiveNsfwMode) {
+                                            NsfwSuggestionMode.SAFE_ONLY -> !isManga18Plus
+                                            NsfwSuggestionMode.NSFW_ONLY -> isManga18Plus
+                                            NsfwSuggestionMode.BALANCED -> true
+                                        }
+                                        if (!hasBlockedTag && isAllowedByMode) {
+                                            val extWeight = sourceWeightsMap[sourceId] ?: 0.1
+                                            var candidateScore = 0.0
+                                            if (candidateManga.initialized) {
+                                                var tagSum = 0.0
+                                                val matchedGenres = mutableListOf<String>()
+                                                candidateManga.genre.orEmpty().forEach { genre ->
+                                                    val clean = cleanAndFilterGenre(genre)
+                                                    if (clean != null) {
+                                                        val tagWeight = tagWeightsMap[clean]
+                                                        if (tagWeight != null) {
+                                                            tagSum += tagWeight
+                                                            matchedGenres.add("$clean (w: ${String.format("%.2f", tagWeight)})")
+                                                        }
                                                     }
                                                 }
+
+                                                val matchedAuthor = candidateManga.author?.lowercase()?.trim()
+                                                val matchedArtist = candidateManga.artist?.lowercase()?.trim()
+                                                if (!matchedAuthor.isNullOrBlank()) {
+                                                    if (recentAuthors.contains(matchedAuthor)) {
+                                                        tagSum += 2.5
+                                                        matchedGenres.add("Recent Author: $matchedAuthor (w: 2.50)")
+                                                    } else if (favoriteAuthors.contains(matchedAuthor)) {
+                                                        tagSum += 1.5
+                                                        matchedGenres.add("Author: $matchedAuthor (w: 1.50)")
+                                                    }
+                                                }
+                                                if (!matchedArtist.isNullOrBlank()) {
+                                                    if (recentArtists.contains(matchedArtist)) {
+                                                        tagSum += 2.5
+                                                        matchedGenres.add("Recent Artist: $matchedArtist (w: 2.50)")
+                                                    } else if (favoriteArtists.contains(matchedArtist)) {
+                                                        tagSum += 1.5
+                                                        matchedGenres.add("Artist: $matchedArtist (w: 1.50)")
+                                                    }
+                                                }
+
+                                                if (tagSum == 0.0) {
+                                                    SuggestionsReport.log("INFO", "Candidate '${smanga.title}' skipped: no matching tags or author/artist.")
+                                                    SuggestionsReport.zeroScoreCount.update { it + 1 }
+                                                    return@withPermit
+                                                }
+                                                var score = extWeight * tagSum
+                                                if (cooldownUrls.contains(smanga.url)) {
+                                                    // 60% recency cooldown penalty to rotate fresh titles
+                                                    score *= 0.4
+                                                }
+                                                SuggestionsReport.log("INFO", "Candidate '${smanga.title}' scored ${String.format("%.4f", score)} (extWeight: ${String.format("%.2f", extWeight)}, matchedTags: $matchedGenres, cooldown=${cooldownUrls.contains(smanga.url)})")
+                                                candidateScore = score
+                                            } else {
+                                                val cleanCurrent = cleanAndFilterGenre(currentSearchTerm) ?: currentSearchTerm.lowercase().trim()
+                                                val tagSum = tagWeightsMap[cleanCurrent] ?: 0.5
+                                                var score = extWeight * tagSum
+                                                if (cooldownUrls.contains(smanga.url)) {
+                                                    score *= 0.4
+                                                }
+                                                SuggestionsReport.log("INFO", "Candidate '${smanga.title}' (uninitialized) scored ${String.format("%.4f", score)} (extWeight: ${String.format("%.2f", extWeight)}, currentSearchTerm: '$cleanCurrent', weight: ${String.format("%.2f", tagSum)}, cooldown=${cooldownUrls.contains(smanga.url)})")
+                                                candidateScore = score
                                             }
 
-                                            val matchedAuthor = localManga.author?.lowercase()?.trim()
-                                            val matchedArtist = localManga.artist?.lowercase()?.trim()
-                                            if (!matchedAuthor.isNullOrBlank()) {
-                                                if (recentAuthors.contains(matchedAuthor)) {
-                                                    tagSum += 2.5
-                                                    matchedGenres.add("Recent Author: $matchedAuthor (w: 2.50)")
-                                                } else if (favoriteAuthors.contains(matchedAuthor)) {
-                                                    tagSum += 1.5
-                                                    matchedGenres.add("Author: $matchedAuthor (w: 1.50)")
-                                                }
-                                            }
-                                            if (!matchedArtist.isNullOrBlank()) {
-                                                if (recentArtists.contains(matchedArtist)) {
-                                                    tagSum += 2.5
-                                                    matchedGenres.add("Recent Artist: $matchedArtist (w: 2.50)")
-                                                } else if (favoriteArtists.contains(matchedArtist)) {
-                                                    tagSum += 1.5
-                                                    matchedGenres.add("Artist: $matchedArtist (w: 1.50)")
-                                                }
-                                            }
-
-                                            if (tagSum == 0.0) {
-                                                SuggestionsReport.log("INFO", "Candidate '${smanga.title}' skipped: no matching tags or author/artist.")
-                                                SuggestionsReport.zeroScoreCount.update { it + 1 }
-                                                return@async
-                                            }
-                                            val score = extWeight * tagSum
-                                            SuggestionsReport.log("INFO", "Candidate '${smanga.title}' scored ${String.format("%.4f", score)} (extWeight: ${String.format("%.2f", extWeight)}, matchedTags: $matchedGenres)")
-                                            if (score > 0.0) {
+                                            // SQLite Database Hygiene: only persist to DB if candidate passed all filters and has positive score
+                                            if (candidateScore > 0.0) {
+                                                val localManga = networkToLocalManga(candidateManga)
                                                 synchronized(scoredSuggestions) {
-                                                    scoredSuggestions.add(Pair(localManga, score))
+                                                    scoredSuggestions.add(Pair(localManga, candidateScore))
                                                 }
                                             }
                                         } else {
-                                            val cleanCurrent = cleanAndFilterGenre(currentSearchTerm) ?: currentSearchTerm.lowercase().trim()
-                                            val tagSum = tagWeightsMap[cleanCurrent] ?: 0.5
-                                            val score = extWeight * tagSum
-                                            SuggestionsReport.log("INFO", "Candidate '${smanga.title}' (uninitialized) scored ${String.format("%.4f", score)} (extWeight: ${String.format("%.2f", extWeight)}, currentSearchTerm: '$cleanCurrent', weight: ${String.format("%.2f", tagSum)})")
-                                            if (score > 0.0) {
-                                                synchronized(scoredSuggestions) {
-                                                    scoredSuggestions.add(Pair(localManga, score))
-                                                }
-                                            }
+                                            SuggestionsReport.log("INFO", "Candidate '${smanga.title}' skipped: has blocked tag(s) or violates 18+ mode ($effectiveNsfwMode).")
                                         }
-                                    } else {
-                                        SuggestionsReport.log("INFO", "Candidate '${smanga.title}' skipped: has blocked tag(s) or is NSFW.")
+                                    } catch (e: Exception) {
+                                        if (e is CancellationException) throw e
+                                        logcat(LogPriority.WARN, e) { "Failed processing suggestion: ${smanga.title}" }
                                     }
-                                } catch (e: Exception) {
-                                    logcat(LogPriority.WARN, e) { "Failed processing suggestion: ${smanga.title}" }
                                 }
                             }
                         }
@@ -519,58 +607,118 @@ class SuggestionsWorker(
                     jobs.awaitAll()
                 }
 
-                // Retrieve current suggestions to merge/deduplicate
-                val currentList = if (isFirstRank) {
-                    emptyList()
-                } else {
-                    try {
-                        suggestionRepository.observeAll().first()
-                    } catch (e: Exception) {
+                if (scoredSuggestions.isNotEmpty()) {
+                    // Retrieve current suggestions to merge/deduplicate
+                    val currentList = if (!hasReplacedInCurrentRun) {
                         emptyList()
+                    } else {
+                        try {
+                            suggestionRepository.observeAll().first()
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
                     }
-                }
 
-                val mergedMap = currentList.associateBy { it.manga.url }.toMutableMap()
-                scoredSuggestions.forEach { (manga, score) ->
-                    val existing = mergedMap[manga.url]
-                    if (existing == null || score > existing.relevance) {
-                        mergedMap[manga.url] = tachiyomi.domain.suggestions.model.Suggestion(
-                            manga = manga,
-                            relevance = score,
-                            createdAt = System.currentTimeMillis(),
-                        )
+                    val mergedMap = currentList.associateBy { it.manga.url }.toMutableMap()
+                    scoredSuggestions.forEach { (manga, score) ->
+                        val existing = mergedMap[manga.url]
+                        if (existing == null || score > existing.relevance) {
+                            mergedMap[manga.url] = tachiyomi.domain.suggestions.model.Suggestion(
+                                manga = manga,
+                                relevance = score,
+                                createdAt = System.currentTimeMillis(),
+                            )
+                        }
                     }
-                }
 
-                val maxSuggestions = limitPref + rankIdx * 50
-                val finalSuggestions = mergedMap.values
-                    .sortedByDescending { it.relevance }
-                    .take(maxSuggestions)
-                    .map { Pair(it.manga, it.relevance) }
+                    val limitPref = suggestionsPreferences.maxSuggestionsToDisplay().get()
+                    val maxSuggestions = limitPref + rankIdx * 50
 
-                SuggestionsReport.log("INFO", "Rank $rankIdx completed. Selected and returned back ${finalSuggestions.size} suggestions out of ${mergedMap.size} merged candidates.")
-                finalSuggestions.forEachIndexed { idx, (manga, relevance) ->
-                    if (idx < 5 || idx % 20 == 0) {
-                        SuggestionsReport.log("INFO", "Suggestion position #${idx + 1}: '${manga.title}' (relevance score: ${String.format("%.4f", relevance)})")
+                    // Epsilon-Greedy Discovery: 70% highest scoring + 30% stochastic exploration
+                    val sortedCandidates = mergedMap.values.sortedByDescending { it.relevance }
+                    val topQuota = (maxSuggestions * 0.70).toInt().coerceAtLeast(1)
+                    val exploreQuota = (maxSuggestions - topQuota).coerceAtLeast(0)
+
+                    val topPicks = sortedCandidates.take(topQuota)
+                    val explorePool = sortedCandidates.drop(topQuota).take(150)
+                    val explorePicks = explorePool.shuffled(random).take(exploreQuota)
+
+                    // Interleave exploration candidates into the top list at positions 4, 9, 14, 19...
+                    // so Spotlight (first 15 items) showcases genuine discoveries alongside top relevance
+                    val interleaved = mutableListOf<tachiyomi.domain.suggestions.model.Suggestion>()
+                    var topIdx = 0
+                    var exploreIdx = 0
+                    while (topIdx < topPicks.size || exploreIdx < explorePicks.size) {
+                        val currentPosition = interleaved.size
+                        val isExploreSlot = (currentPosition % 5 == 4)
+                        if (isExploreSlot && exploreIdx < explorePicks.size) {
+                            interleaved.add(explorePicks[exploreIdx++])
+                        } else if (topIdx < topPicks.size) {
+                            interleaved.add(topPicks[topIdx++])
+                        } else if (exploreIdx < explorePicks.size) {
+                            interleaved.add(explorePicks[exploreIdx++])
+                        }
                     }
-                }
 
-                suggestionRepository.replace(finalSuggestions)
+                    // Calibrate monotonic descending relevance across interleaved order
+                    // so that SQLite's 'ORDER BY suggestions.relevance DESC' and UI sorting preserve
+                    // the exact interleaved positions (including discovery picks at 4, 9, 14...)
+                    val maxScore = (sortedCandidates.firstOrNull()?.relevance ?: 2.0).coerceAtLeast(1.0)
+                    val rawMin = sortedCandidates.take(maxSuggestions).lastOrNull()?.relevance ?: 0.5
+                    val minScore = if (rawMin < maxScore) rawMin.coerceAtLeast(0.2) else (maxScore * 0.2)
+                    val scoreDenominator = (interleaved.size - 1).coerceAtLeast(1).toDouble()
+
+                    // Re-fetch latest dismissed URLs to ensure in-flight dismissals are not resurrected
+                    val latestDismissedUrls = try {
+                        suggestionRepository.getDismissed().map { it.first }.toSet()
+                    } catch (e: Exception) {
+                        emptySet()
+                    }
+
+                    val finalSuggestions = interleaved.mapIndexedNotNull { idx, suggestion ->
+                        if (suggestion.manga.url in latestDismissedUrls) return@mapIndexedNotNull null
+                        val calibratedScore = maxScore - (idx / scoreDenominator) * (maxScore - minScore)
+                        Pair(suggestion.manga, calibratedScore)
+                    }
+
+                    // Record newly suggested URLs to cooldown cache so next run features new titles
+                    val newlySuggestedUrls = finalSuggestions.take(50).map { it.first.url }.toSet()
+                    cooldownPrefs.edit().putStringSet("recent_suggested_urls", newlySuggestedUrls).apply()
+
+                    SuggestionsReport.log("INFO", "Rank $rankIdx completed. Saving ${finalSuggestions.size} suggestions (fresh replacement=${!hasReplacedInCurrentRun}) out of ${mergedMap.size} merged candidates.")
+                    finalSuggestions.forEachIndexed { idx, (manga, relevance) ->
+                        if (idx < 5 || idx % 20 == 0) {
+                            SuggestionsReport.log("INFO", "Suggestion position #${idx + 1}: '${manga.title}' (relevance score: ${String.format("%.4f", relevance)})")
+                        }
+                    }
+
+                    suggestionRepository.replace(finalSuggestions)
+
+                    if (!hasReplacedInCurrentRun) {
+                        hasReplacedInCurrentRun = true
+                        suggestionsPreferences.lastSuggestionsFetchTime().set(System.currentTimeMillis())
+                    }
+                } else {
+                    SuggestionsReport.log("INFO", "Rank $rankIdx completed with 0 scored suggestions.")
+                }
             }
 
             if (rankToLoad != -1) {
                 // Fetch a specific rank/page only (lazy scrolling trigger)
                 setProgress(androidx.work.workDataOf("progress" to 1, "total" to 1))
-                processRank(rankToLoad, isFirstRank = false)
+                awaitReaderClosed()
+                processRank(rankToLoad)
             } else {
                 // Full continuous update sequence starting from rank 0
                 for (rank in 0 until totalRanks) {
+                    awaitReaderClosed()
                     setProgress(androidx.work.workDataOf("progress" to rank + 1, "total" to totalRanks))
                     if (rank > 0) {
                         // Gentle background delay between ranks to protect CPU
                         delay(12000)
+                        awaitReaderClosed()
                     }
-                    processRank(rank, isFirstRank = (rank == 0))
+                    processRank(rank)
                 }
             }
 
@@ -579,6 +727,10 @@ class SuggestionsWorker(
             logcat(LogPriority.INFO) { "Suggestions updated successfully." }
             return Result.success()
         } catch (e: Exception) {
+            if (e is CancellationException) {
+                SuggestionsReport.log("INFO", "SuggestionsWorker cancelled/interrupted.")
+                throw e
+            }
             SuggestionsReport.log("ERROR", "SuggestionsWorker execution failed: ${e.message}", e)
             logcat(LogPriority.ERROR, e) { "Error in SuggestionsWorker" }
             try {
@@ -595,24 +747,33 @@ class SuggestionsWorker(
 
     companion object {
         private const val TAG = "SuggestionsWorker"
+        val isReaderActive = MutableStateFlow(false)
         private var hasTriggeredThisSession = false
 
-        fun triggerOnAppStart(context: Context) {
+        fun triggerOnAppStart(context: Context, force: Boolean = false) {
             val suggestionsPreferences = uy.kohesive.injekt.Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>()
             if (!suggestionsPreferences.isSuggestionsEnabled().get()) return
 
-            synchronized(this) {
-                if (hasTriggeredThisSession) return
-                hasTriggeredThisSession = true
+            if (!force) {
+                synchronized(this) {
+                    if (hasTriggeredThisSession) return
+                    hasTriggeredThisSession = true
+                }
             }
 
             val request = androidx.work.OneTimeWorkRequestBuilder<SuggestionsWorker>()
                 .setInputData(androidx.work.workDataOf("is_manual" to true))
                 .build()
 
+            val policy = if (force) {
+                androidx.work.ExistingWorkPolicy.REPLACE
+            } else {
+                androidx.work.ExistingWorkPolicy.KEEP
+            }
+
             androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
                 "SuggestionsSessionWork",
-                androidx.work.ExistingWorkPolicy.REPLACE,
+                policy,
                 request,
             )
         }
@@ -627,16 +788,19 @@ class SuggestionsWorker(
             return workInfos.any { !it.state.isFinished }
         }
 
-        fun scheduleBackground(context: Context, isEnabled: Boolean) {
+        fun scheduleBackground(context: Context, isEnabled: Boolean, intervalHours: Int? = null) {
+            val suggestionsPreferences = uy.kohesive.injekt.Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>()
             if (isEnabled) {
+                val hours = (intervalHours ?: suggestionsPreferences.suggestionsInterval().get()).coerceIn(6, 168)
+                // KMK --> Relaxed: CONNECTED (not UNMETERED) and no charging requirement.
                 val constraints = Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.UNMETERED)
-                    .setRequiresCharging(true)
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
                     .setRequiresBatteryNotLow(true)
                     .build()
+                // KMK <--
 
                 val request = PeriodicWorkRequestBuilder<SuggestionsWorker>(
-                    24,
+                    hours.toLong(),
                     TimeUnit.HOURS,
                     15,
                     TimeUnit.MINUTES,
@@ -648,10 +812,10 @@ class SuggestionsWorker(
 
                 androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                     TAG,
-                    ExistingPeriodicWorkPolicy.UPDATE,
+                    ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                     request,
                 )
-                logcat(LogPriority.INFO) { "Scheduled periodic suggestions updates background job." }
+                logcat(LogPriority.INFO) { "Scheduled periodic suggestions updates background job every ${hours}h." }
             } else {
                 cancelBackground(context)
             }

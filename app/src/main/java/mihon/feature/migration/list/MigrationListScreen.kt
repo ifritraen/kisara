@@ -23,6 +23,7 @@ import mihon.feature.migration.list.components.MigrationExitDialog
 import mihon.feature.migration.list.components.MigrationMangaDialog
 import mihon.feature.migration.list.components.MigrationProgressDialog
 import mihon.feature.migration.list.models.MigratingManga
+import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
 
 /**
@@ -36,7 +37,11 @@ class MigrationListScreen(
     // KMK <--
 ) : Screen() {
 
-    private var matchOverride: Pair<Long, Long>? = null
+    private var matchOverride: Pair<Long, Any>? = null
+
+    fun addMatchOverride(current: Long, target: Manga) {
+        matchOverride = current to target
+    }
 
     fun addMatchOverride(current: Long, target: Long) {
         matchOverride = current to target
@@ -65,13 +70,22 @@ class MigrationListScreen(
 
         LaunchedEffect(matchOverride) {
             val (current, target) = matchOverride ?: return@LaunchedEffect
-            screenModel.useMangaForMigration(
-                current = current,
-                target = target,
-                onMissingChapters = {
-                    context.toast(MR.strings.migrationListScreen_matchWithoutChapterToast, Toast.LENGTH_LONG)
-                },
-            )
+            when (target) {
+                is Manga -> screenModel.useMangaForMigration(
+                    current = current,
+                    target = target,
+                    onMissingChapters = {
+                        context.toast(MR.strings.migrationListScreen_matchWithoutChapterToast, Toast.LENGTH_LONG)
+                    },
+                )
+                is Long -> screenModel.useMangaForMigration(
+                    current = current,
+                    target = target,
+                    onMissingChapters = {
+                        context.toast(MR.strings.migrationListScreen_matchWithoutChapterToast, Toast.LENGTH_LONG)
+                    },
+                )
+            }
             matchOverride = null
         }
 
@@ -83,6 +97,7 @@ class MigrationListScreen(
                    Otherwise, just pop normally. */
                 if (mangaIds.size == 1 && navigator.items.any { it is MangaScreen }) {
                     val mangaId = (state.items.firstOrNull()?.searchResult?.value as? MigratingManga.SearchResult.Success)?.manga?.id
+                        ?: screenModel.lastMigratedTargetId
                     if (mangaId != null) {
                         val newStack = navigator.items.filter {
                             it !is MangaScreen &&
@@ -90,11 +105,9 @@ class MigrationListScreen(
                                 it !is MigrationConfigScreen
                         } + MangaScreen(mangaId)
                         navigator replaceAll newStack.first()
-                        navigator.push(newStack.drop(1))
-
-                        // need to set the navigator in a pop state to dispose of everything properly
-                        navigator.push(this@MigrationListScreen)
-                        navigator.pop()
+                        if (newStack.size > 1) {
+                            navigator.push(newStack.drop(1))
+                        }
                     } else {
                         navigator.pop()
                     }

@@ -35,6 +35,7 @@ object LocaleHelper {
         }
         // SY <--
         return when (lang) {
+            SourcesScreenModel.LOCAL_KEY -> context.stringResource(MR.strings.local_source)
             SourcesScreenModel.LAST_USED_KEY -> context.stringResource(MR.strings.last_used_source)
             SourcesScreenModel.PINNED_KEY -> context.stringResource(MR.strings.pinned_sources)
             "other" -> context.stringResource(MR.strings.other_source)

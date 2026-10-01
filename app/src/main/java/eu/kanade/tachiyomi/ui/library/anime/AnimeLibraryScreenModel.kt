@@ -240,18 +240,34 @@ class AnimeLibraryScreenModel(
         }
     }
 
-    fun selectAll(pageIndex: Int) {
+    fun selectAll(pageIndex: Int, subcategoryId: Long? = null) {
         val category = state.value.categories.getOrNull(pageIndex) ?: return
-        val items = state.value.library[category] ?: return
-        mutableState.update { it.copy(selection = items.toPersistentList()) }
+        val targetCategories = if (subcategoryId != null) {
+            listOfNotNull(state.value.categories.find { it.id == subcategoryId })
+        } else {
+            listOf(category) + state.value.categories.filter { it.parentId == category.id }
+        }
+        val items = targetCategories.flatMap { state.value.library[it].orEmpty() }.distinctBy { it.id }
+        mutableState.update { current ->
+            val currentIds = current.selection.map { it.id }.toSet()
+            val newItems = items.filterNot { it.id in currentIds }
+            current.copy(selection = (current.selection + newItems).toPersistentList())
+        }
     }
 
-    fun invertSelection(pageIndex: Int) {
+    fun invertSelection(pageIndex: Int, subcategoryId: Long? = null) {
         val category = state.value.categories.getOrNull(pageIndex) ?: return
-        val items = state.value.library[category] ?: return
-        mutableState.update { state ->
-            val newSelection = items.filterNot { item -> state.selection.any { it.id == item.id } }
-            state.copy(selection = newSelection.toPersistentList())
+        val targetCategories = if (subcategoryId != null) {
+            listOfNotNull(state.value.categories.find { it.id == subcategoryId })
+        } else {
+            listOf(category) + state.value.categories.filter { it.parentId == category.id }
+        }
+        val items = targetCategories.flatMap { state.value.library[it].orEmpty() }.distinctBy { it.id }
+        mutableState.update { current ->
+            val scopeIds = items.map { it.id }.toSet()
+            val remainingOld = current.selection.filterNot { it.id in scopeIds }
+            val toggledIn = items.filterNot { item -> current.selection.any { it.id == item.id } }
+            current.copy(selection = (remainingOld + toggledIn).toPersistentList())
         }
     }
 

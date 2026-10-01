@@ -72,6 +72,7 @@ import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.removeDuplicates
 import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.sorted
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
+import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.getBitmapOrNull
 import eu.kanade.tachiyomi.util.system.toast
@@ -735,6 +736,62 @@ class MangaScreenModel(
                     )
                 }
             }
+    }
+    // KMK <--
+
+    // KMK -->
+    fun switchExternalMetadataSource(targetSource: String? = null) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchIO {
+            updateSuccessState { it.copy(isFetchingExternalMetadata = true, isFetchingTrackerDetails = true) }
+            val currentSource = successState?.externalMetadata?.sourceName?.lowercase() ?: ""
+            val nextSource = targetSource ?: when {
+                currentSource.contains("mangaupdates") -> "AniList"
+                currentSource.contains("anilist") -> "MangaBaka"
+                else -> "MangaUpdates"
+            }
+            val fetched = fetchExternalMetadata.fetchFromSource(manga, nextSource)
+
+            var updatedTrackDetails = successState?.trackerDetails
+            try {
+                if (nextSource.equals("anilist", ignoreCase = true)) {
+                    val anilist = trackerManager.aniList
+                    val alResults = anilist.search(manga.title)
+                    val match = alResults.firstOrNull { it.title.equals(manga.title, ignoreCase = true) } ?: alResults.firstOrNull()
+                    if (match != null) {
+                        updatedTrackDetails = anilist.searchById(match.remote_id.toString())
+                    }
+                } else if (nextSource.equals("mangaupdates", ignoreCase = true)) {
+                    val mu = trackerManager.mangaUpdates
+                    val muResults = mu.search(manga.title)
+                    val match = muResults.firstOrNull { it.title.equals(manga.title, ignoreCase = true) } ?: muResults.firstOrNull()
+                    if (match != null) {
+                        updatedTrackDetails = mu.searchById(match.remote_id.toString())
+                    }
+                }
+                updatedTrackDetails?.tags?.let { tags ->
+                    if (tags.isNotEmpty()) {
+                        eu.kanade.tachiyomi.ui.browse.search.model.TagDictionary.registerTags(context, tags)
+                    }
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.DEBUG, e) { "Failed updating trackerDetails for $nextSource" }
+            }
+
+            updateSuccessState {
+                it.copy(
+                    externalMetadata = fetched ?: it.externalMetadata,
+                    trackerDetails = updatedTrackDetails ?: it.trackerDetails,
+                    isFetchingExternalMetadata = false,
+                    isFetchingTrackerDetails = false,
+                )
+            }
+            if (fetched != null) {
+                withUIContext {
+                    context.toast("Loaded details from ${fetched.sourceName}")
+                }
+            }
+        }
     }
     // KMK <--
 
@@ -1659,11 +1716,18 @@ class MangaScreenModel(
     }
 
     /**
-     * Returns the next unread chapter or null if everything is read.
+     * Returns the next unread chapter or falls back to latest/first chapter if all are read.
      */
     fun getNextUnreadChapter(): Chapter? {
         val successState = successState ?: return null
-        return successState.chapters.getNextUnread(successState.manga)
+        val candidateChapters = if (successState.selectedScanlator.isNullOrBlank()) {
+            successState.chapters.removeDuplicates()
+        } else {
+            successState.chapters.filter { it.chapter.scanlator.equals(successState.selectedScanlator, ignoreCase = true) }
+        }
+        return candidateChapters.getNextUnread(successState.manga)
+            ?: candidateChapters.lastOrNull()?.chapter
+            ?: candidateChapters.firstOrNull()?.chapter
     }
 
     private fun getUnreadChapters(): List<Chapter> {
@@ -2631,6 +2695,15 @@ class MangaScreenModel(
         }
     }
 
+    fun setSelectedScanlator(scanlator: String?) {
+        mutableState.update { state ->
+            when (state) {
+                State.Loading -> state
+                is State.Success -> state.copy(selectedScanlator = scanlator)
+            }
+        }
+    }
+
     // SY -->
     fun showEditMangaInfoDialog() {
         mutableState.update { state ->
@@ -2705,6 +2778,7 @@ class MangaScreenModel(
             val duplicateCount: Int = 0,
             val hasPromptedToAddBefore: Boolean = false,
             val hideMissingChapters: Boolean = false,
+            val selectedScanlator: String? = null,
 
             // SY -->
             val meta: RaisedSearchMetadata?,
@@ -2754,7 +2828,12 @@ class MangaScreenModel(
             // KMK <--
 
             val processedChapters by lazy {
-                chapters.applyFilters(manga).toList()
+                val candidateChapters = if (selectedScanlator.isNullOrBlank()) {
+                    chapters.removeDuplicates()
+                } else {
+                    chapters.filter { it.chapter.scanlator.equals(selectedScanlator, ignoreCase = true) }
+                }
+                candidateChapters.applyFilters(manga).toList()
                     // KMK -->
                     // safe-guard some edge-cases where chapters are duplicated some how on a merged entry
                     .distinctBy { it.id }

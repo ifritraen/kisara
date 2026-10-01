@@ -58,6 +58,7 @@ import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.SOURCE_SEARCH_BOX_HEIGHT
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.ui.browse.migration.search.MigrateSearchScreen
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.update
@@ -113,15 +114,20 @@ class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
 
         fun continueMigration(openSheet: Boolean, extraSearchQuery: String?) {
             // KMK -->
-            // val mangaId = mangaIds.singleOrNull()
-            // if (mangaId == null && openSheet) {
+            val mangaId = mangaIds.singleOrNull()
+            val isSmartSearchSingle = screenModel.sourcePreferences.migrationSmartSearchSingleEntry().get()
+            if (mangaId != null && !isSmartSearchSingle) {
+                navigator.replace(MigrateSearchScreen(mangaId))
+                return
+            }
+
             if (openSheet) {
                 // KMK <--
                 migrationSheetOpen = true
                 return
             }
             val screen = // KMK --> if (mangaId == null) {
-                MigrationListScreen(mangaIds, extraSearchQuery, screenModel.sourcePreferences.migrationSmartSearchSingleEntry().get())
+                MigrationListScreen(mangaIds, extraSearchQuery, isSmartSearchSingle)
             // KMK -->
             // } else {
             //     MigrateSearchScreen(mangaId)

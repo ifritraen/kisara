@@ -2,9 +2,13 @@ package eu.kanade.tachiyomi.data.ai
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtSession
 import android.graphics.Bitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -22,10 +26,19 @@ class MangaColorizeEngine(
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment(),
 ) : AutoCloseable {
 
+    private val inferenceLock = Any()
+    @Volatile private var activeRunOptions: OrtSession.RunOptions? = null
+
     private var activeSession: OrtSession? = null
     private var activeModelPath: String? = null
     private var isNnapiActive: Boolean = false
     private var currentSpeedTier: Int = 3
+
+    fun cancelCurrentInference() {
+        try {
+            activeRunOptions?.setTerminate(true)
+        } catch (_: Exception) {}
+    }
 
     @Synchronized
     fun getSession(modelFile: File, useNnapi: Boolean, speedTier: Int = 3): OrtSession {
@@ -33,7 +46,10 @@ class MangaColorizeEngine(
             return activeSession!!
         }
 
-        activeSession?.close()
+        synchronized(inferenceLock) {
+            activeSession?.close()
+            activeSession = null
+        }
         currentSpeedTier = speedTier
         val perf = ColorizeImageUtils.PerformanceConfig.fromLevel(speedTier)
         var session: OrtSession? = null
@@ -154,30 +170,65 @@ class MangaColorizeEngine(
         )
 
         val inputName = session.inputNames.firstOrNull { it.contains("input", ignoreCase = true) || it.contains("data", ignoreCase = true) } ?: session.inputNames.first()
-        val inputTensor = OnnxTensor.createTensor(
-            env,
-            inputBuffer,
-            longArrayOf(1L, 5L, targetH.toLong(), targetW.toLong()),
-        )
+        val runOpts = OrtSession.RunOptions()
+        activeRunOptions = runOpts
+        var inputTensor: OnnxTensor? = null
+        var results: OrtSession.Result? = null
+        var outputTensor: OnnxTensor? = null
+        val rawFloats: FloatArray
+        val inferDurationMs: Long
 
-        val providerDesc = if (isNnapiActive) "NNAPI Hardware Acceleration" else "ARM CPU (${perf.cpuThreads} threads)"
-        onProgress?.invoke("Running neural network forward pass ($providerDesc)...", 0.45f)
-        AppLogger.step("Running forward inference pass on $providerDesc...")
+        try {
+            inputTensor = OnnxTensor.createTensor(
+                env,
+                inputBuffer,
+                longArrayOf(1L, 5L, targetH.toLong(), targetW.toLong()),
+            )
 
-        val inferStart = System.currentTimeMillis()
-        val results = session.run(Collections.singletonMap(inputName, inputTensor))
-        val outputTensor = results.get(0) as OnnxTensor
-        val outBuffer = outputTensor.floatBuffer
-        outBuffer.rewind()
-        val inferDurationMs = System.currentTimeMillis() - inferStart
+            val providerDesc = if (isNnapiActive) "NNAPI Hardware Acceleration" else "ARM CPU (${perf.cpuThreads} threads)"
+            onProgress?.invoke("Running neural network forward pass ($providerDesc)...", 0.45f)
+            AppLogger.step("Running forward inference pass on $providerDesc...")
+
+            val inferStart = System.currentTimeMillis()
+            results = synchronized(inferenceLock) {
+                coroutineContext.ensureActive()
+                session.run(Collections.singletonMap(inputName, inputTensor), runOpts)
+            }
+            inferDurationMs = System.currentTimeMillis() - inferStart
+
+            outputTensor = results.get(0) as OnnxTensor
+            val outBuffer = outputTensor.floatBuffer
+            outBuffer.rewind()
+
+            val plane = targetW * targetH
+            rawFloats = FloatArray(outBuffer.remaining())
+            outBuffer.get(rawFloats)
+        } catch (e: OrtException) {
+            if (!coroutineContext.isActive || activeRunOptions == null || e.message?.contains("terminate", ignoreCase = true) == true) {
+                throw CancellationException("Colorization inference cancelled", e)
+            }
+            throw e
+        } finally {
+            try {
+                inputTensor?.close()
+            } catch (_: Exception) {}
+            try {
+                outputTensor?.close()
+            } catch (_: Exception) {}
+            try {
+                results?.close()
+            } catch (_: Exception) {}
+            try {
+                runOpts.close()
+            } catch (_: Exception) {}
+            if (activeRunOptions === runOpts) {
+                activeRunOptions = null
+            }
+        }
+
+        coroutineContext.ensureActive()
 
         val plane = targetW * targetH
-        val rawFloats = FloatArray(outBuffer.remaining())
-        outBuffer.get(rawFloats)
-
-        inputTensor.close()
-        outputTensor.close()
-        results.close()
 
         val ch0 = rawFloats.take(plane).average().toFloat()
         val ch1 = rawFloats.slice(plane until 2 * plane).average().toFloat()
@@ -217,14 +268,16 @@ class MangaColorizeEngine(
         finalBitmap
     }
 
-    @Synchronized
     fun unloadSession() {
-        try {
-            activeSession?.close()
-            activeSession = null
-            activeModelPath = null
-            isNnapiActive = false
-        } catch (_: Exception) {}
+        cancelCurrentInference()
+        synchronized(inferenceLock) {
+            try {
+                activeSession?.close()
+                activeSession = null
+                activeModelPath = null
+                isNnapiActive = false
+            } catch (_: Exception) {}
+        }
     }
 
     override fun close() {

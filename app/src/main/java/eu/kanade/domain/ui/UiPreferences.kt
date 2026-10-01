@@ -157,6 +157,7 @@ class UiPreferences(
     fun bottomBarHeight() = preferenceStore.getInt("kisara_bottom_bar_height", 44)
     fun subBarHeight() = preferenceStore.getInt("kisara_sub_bar_height", 30)
     fun kisaraShowSubcategoriesInMainBar() = preferenceStore.getBoolean("kisara_show_subcategories_in_main_bar", false)
+    fun showSubcategoriesAtTop() = preferenceStore.getBoolean("kisara_show_subcategories_at_top", false)
     fun bottomBarWidth() = preferenceStore.getInt("kisara_bottom_bar_width_dp", 360)
     fun bottomBarGap() = preferenceStore.getInt("kisara_bottom_bar_gap_dp", 2)
     fun bottomBarIconSize() = preferenceStore.getInt("kisara_bottom_bar_icon_size", 23)

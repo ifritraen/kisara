@@ -393,13 +393,18 @@ class NovelLibraryScreenModel(
         }
     }
 
-    fun selectAll(index: Int) {
+    fun selectAll(index: Int, subcategoryId: Long? = null) {
         mutableState.update { current ->
-            val targetCategoryId = current.categories.getOrNull(index)?.id
-            val scopeItems = if (targetCategoryId == null) {
-                current.items
+            val scopeItems = if (subcategoryId != null) {
+                current.getLibraryItemsByCategoryId(subcategoryId).orEmpty()
             } else {
-                current.getLibraryItemsByCategoryId(targetCategoryId).orEmpty()
+                val parentCat = current.categories.getOrNull(index)
+                if (parentCat == null) {
+                    current.items
+                } else {
+                    val subcatIds = current.categories.filter { it.parentId == parentCat.id }.map { it.id }
+                    (listOf(parentCat.id) + subcatIds).flatMap { current.getLibraryItemsByCategoryId(it).orEmpty() }.distinctBy { it.id }
+                }
             }
             val selectedIds = current.selectedIds
             val mutable = current.selection.toMutableList()
@@ -408,13 +413,18 @@ class NovelLibraryScreenModel(
         }
     }
 
-    fun invertSelection(index: Int) {
+    fun invertSelection(index: Int, subcategoryId: Long? = null) {
         mutableState.update { current ->
-            val targetCategoryId = current.categories.getOrNull(index)?.id
-            val scopeItems = if (targetCategoryId == null) {
-                current.items
+            val scopeItems = if (subcategoryId != null) {
+                current.getLibraryItemsByCategoryId(subcategoryId).orEmpty()
             } else {
-                current.getLibraryItemsByCategoryId(targetCategoryId).orEmpty()
+                val parentCat = current.categories.getOrNull(index)
+                if (parentCat == null) {
+                    current.items
+                } else {
+                    val subcatIds = current.categories.filter { it.parentId == parentCat.id }.map { it.id }
+                    (listOf(parentCat.id) + subcatIds).flatMap { current.getLibraryItemsByCategoryId(it).orEmpty() }.distinctBy { it.id }
+                }
             }
             val selectedIds = current.selectedIds
             val toRemoveIds = scopeItems.mapNotNullTo(HashSet()) { item -> item.id.takeIf { it in selectedIds } }

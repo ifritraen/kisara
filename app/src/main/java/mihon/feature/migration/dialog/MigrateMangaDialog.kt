@@ -17,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.util.fastForEach
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -25,18 +26,23 @@ import eu.kanade.domain.manga.model.hasCustomCover
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import mihon.domain.migration.models.MigrationFlag
 import mihon.domain.migration.usecases.MigrateMangaUseCase
 import mihon.feature.common.utils.getLabel
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.LabeledCheckbox
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.LoadingScreen
+import tachiyomi.domain.chapter.model.NoChaptersException
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -46,9 +52,10 @@ internal fun Screen.MigrateMangaDialog(
     target: Manga,
     onClickTitle: () -> Unit,
     onDismissRequest: () -> Unit,
-    onComplete: () -> Unit = onDismissRequest,
+    onComplete: (migratedMangaId: Long) -> Unit = { onDismissRequest() },
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val screenModel = rememberScreenModel { MigrateDialogScreenModel() }
     LaunchedEffect(current, target) {
@@ -104,8 +111,21 @@ internal fun Screen.MigrateMangaDialog(
                 TextButton(
                     onClick = {
                         scope.launchIO {
-                            screenModel.migrateManga(replace = false)
-                            withUIContext { onComplete() }
+                            val result = screenModel.migrateManga(replace = false)
+                            withUIContext {
+                                result.fold(
+                                    onSuccess = { migrated ->
+                                        onComplete(migrated.id)
+                                    },
+                                    onFailure = { error ->
+                                        if (error is NoChaptersException) {
+                                            context.toast(MR.strings.migrationListScreen_matchWithoutChapterToast)
+                                        } else {
+                                            context.toast(MR.strings.internal_error)
+                                        }
+                                    },
+                                )
+                            }
                         }
                     },
                 ) {
@@ -114,8 +134,21 @@ internal fun Screen.MigrateMangaDialog(
                 TextButton(
                     onClick = {
                         scope.launchIO {
-                            screenModel.migrateManga(replace = true)
-                            withUIContext { onComplete() }
+                            val result = screenModel.migrateManga(replace = true)
+                            withUIContext {
+                                result.fold(
+                                    onSuccess = { migrated ->
+                                        onComplete(migrated.id)
+                                    },
+                                    onFailure = { error ->
+                                        if (error is NoChaptersException) {
+                                            context.toast(MR.strings.migrationListScreen_matchWithoutChapterToast)
+                                        } else {
+                                            context.toast(MR.strings.internal_error)
+                                        }
+                                    },
+                                )
+                            }
                         }
                     },
                 ) {
@@ -172,20 +205,26 @@ private class MigrateDialogScreenModel(
         }
     }
 
-    suspend fun migrateManga(replace: Boolean) {
+    suspend fun migrateManga(replace: Boolean): Result<Manga> {
         val state = state.value
-        val current = state.current ?: return
-        val target = state.target ?: return
+        val current = state.current ?: return Result.failure(IllegalStateException("No current manga"))
+        val target = state.target ?: return Result.failure(IllegalStateException("No target manga"))
         // KMK -->
         // sourcePreference.migrationFlags().set(state.selectedFlags)
         // KMK <--
         mutableState.update { it.copy(isMigrating = true) }
-        try {
-            migrateManga(current, target, replace, /* KMK --> */ state.selectedFlags /* KMK <-- */)
+        return try {
+            val migrated = migrateManga(current, target, replace, /* KMK --> */ state.selectedFlags /* KMK <-- */)
             mutableState.update { it.copy(isMigrating = false, isMigrated = true) }
+            Result.success(migrated)
             // KMK -->
-        } catch (_: Throwable) {
+        } catch (e: CancellationException) {
             mutableState.update { it.copy(isMigrating = false, isMigrated = false) }
+            throw e
+        } catch (e: Throwable) {
+            logcat(LogPriority.ERROR, throwable = e)
+            mutableState.update { it.copy(isMigrating = false, isMigrated = false) }
+            Result.failure(e)
             // KMK <--
         }
     }

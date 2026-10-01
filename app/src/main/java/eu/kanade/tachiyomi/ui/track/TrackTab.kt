@@ -82,6 +82,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -269,7 +270,11 @@ object TrackTab : Tab {
             launch {
                 selectSubTabEvent.receiveAsFlow().collectLatest { index ->
                     if (index in 0 until subTabs.size) {
-                        pagerState.animateScrollToPage(index)
+                        if (kotlin.math.abs(index - pagerState.currentPage) <= 1) {
+                            pagerState.animateScrollToPage(index)
+                        } else {
+                            pagerState.scrollToPage(index)
+                        }
                     }
                 }
             }
@@ -352,7 +357,13 @@ object TrackTab : Tab {
                     Tab(
                         selected = isSelected,
                         onClick = {
-                            scope.launch { pagerState.animateScrollToPage(index) }
+                            scope.launch {
+                                if (kotlin.math.abs(index - pagerState.currentPage) <= 1) {
+                                    pagerState.animateScrollToPage(index)
+                                } else {
+                                    pagerState.scrollToPage(index)
+                                }
+                            }
                         },
                         text = {
                             Row(
@@ -392,6 +403,7 @@ object TrackTab : Tab {
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
+                    beyondViewportPageCount = 1,
                 ) { page ->
                     when (activeTrackerService) {
                         UiPreferences.TrackTabService.MAL -> {

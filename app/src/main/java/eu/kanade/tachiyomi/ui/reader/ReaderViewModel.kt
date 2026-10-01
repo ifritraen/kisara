@@ -269,11 +269,10 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Chapter list for the active manga. It's retrieved lazily and should be accessed for the first
-     * time in a background thread to avoid blocking the UI.
-     */
-    private val chapterList by lazy {
+    private var allFilteredChaptersForReader: List<Chapter> = emptyList()
+    private var internalChapterList: List<ReaderChapter>? = null
+
+    private fun initReaderChapters(initialChapterId: Long): List<ReaderChapter> {
         val manga = manga!!
         // SY -->
         val (chapters, mangaMap) = runBlocking {
@@ -296,8 +295,8 @@ class ReaderViewModel @JvmOverloads constructor(
         }
         // SY <--
 
-        val selectedChapter = chapters.find { it.id == chapterId }
-            ?: error("Requested chapter of id $chapterId not found in chapter list")
+        val selectedChapter = chapters.find { it.id == initialChapterId }
+            ?: error("Requested chapter of id $initialChapterId not found in chapter list")
 
         val chaptersForReader = when {
             (readerPreferences.skipRead().get() || readerPreferences.skipFiltered().get()) -> {
@@ -324,7 +323,7 @@ class ReaderViewModel @JvmOverloads constructor(
                     }
                 }
 
-                if (filteredChapters.any { it.id == chapterId }) {
+                if (filteredChapters.any { it.id == initialChapterId }) {
                     filteredChapters
                 } else {
                     filteredChapters + listOf(selectedChapter)
@@ -333,8 +332,19 @@ class ReaderViewModel @JvmOverloads constructor(
             else -> chapters
         }
 
-        chaptersForReader
-            .sortedWith(getChapterSort(manga, sortDescending = false))
+        val sortedRaw = chaptersForReader.sortedWith(getChapterSort(manga, sortDescending = false))
+        allFilteredChaptersForReader = sortedRaw
+
+        return buildChapterListFromRaw(sortedRaw, selectedChapter, manga, mangaMap)
+    }
+
+    private fun buildChapterListFromRaw(
+        rawChapters: List<Chapter>,
+        selectedChapter: Chapter,
+        manga: Manga,
+        mangaMap: Map<Long, Manga>?,
+    ): List<ReaderChapter> {
+        return rawChapters
             .run {
                 if (readerPreferences.skipDupe().get()) {
                     removeDuplicates(selectedChapter)
@@ -352,6 +362,30 @@ class ReaderViewModel @JvmOverloads constructor(
             .map { it.toDbChapter() }
             .map(::ReaderChapter)
     }
+
+    private fun rebuildChapterList(newChapter: Chapter) {
+        val manga = manga ?: return
+        val mangaMap = state.value.mergedManga
+        val raw = if (allFilteredChaptersForReader.isNotEmpty()) {
+            allFilteredChaptersForReader
+        } else {
+            listOf(newChapter)
+        }
+        val targetRaw = if (raw.any { it.id == newChapter.id }) raw else raw + listOf(newChapter)
+        internalChapterList = buildChapterListFromRaw(targetRaw, newChapter, manga, mangaMap)
+    }
+
+    /**
+     * Chapter list for the active manga. It's retrieved lazily and should be accessed for the first
+     * time in a background thread to avoid blocking the UI.
+     */
+    private val chapterList: List<ReaderChapter>
+        get() {
+            if (internalChapterList == null) {
+                internalChapterList = initReaderChapters(chapterId)
+            }
+            return internalChapterList!!
+        }
 
     val incognitoMode: Boolean by lazy { getIncognitoState.await(manga?.source) }
     private val downloadAheadAmount = downloadPreferences.autoDownloadWhileReading().get()
@@ -569,13 +603,19 @@ class ReaderViewModel @JvmOverloads constructor(
 
         val currentChapter = getCurrentChapter()
 
-        return chapterList.map {
+        val chaptersToUse = if (allFilteredChaptersForReader.isNotEmpty()) {
+            allFilteredChaptersForReader
+        } else {
+            chapterList.map { it.chapter.toDomainChapter()!! }
+        }
+
+        return chaptersToUse.map {
             ReaderChapterItem(
-                chapter = it.chapter.toDomainChapter()!!,
+                chapter = it,
                 // KMK -->
-                manga = mangaList[it.chapter.manga_id] ?: manga,
+                manga = mangaList[it.mangaId] ?: manga,
                 // KMK <--
-                isCurrent = it.chapter.id == currentChapter?.chapter?.id,
+                isCurrent = it.id == currentChapter?.chapter?.id,
                 dateFormat = UiPreferences.dateFormat(uiPreferences.dateFormat().get()),
             )
         }
@@ -642,17 +682,18 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
-    fun loadNewChapterFromDialog(chapter: Chapter, pageNumber: Int? = null) {
-        viewModelScope.launchIO {
-            val newChapter = chapterList.firstOrNull { it.chapter.id == chapter.id } ?: return@launchIO
-            if (pageNumber != null) {
-                newChapter.requestedPage = (pageNumber - 1).coerceAtLeast(0)
-            }
-            loadAdjacent(newChapter)
+    // KMK -->
+    suspend fun loadNewChapterFromDialog(chapter: Chapter, pageNumber: Int? = null): Boolean {
+        var newChapter = chapterList.firstOrNull { it.chapter.id == chapter.id }
+        if (newChapter == null) {
+            rebuildChapterList(chapter)
+            newChapter = chapterList.firstOrNull { it.chapter.id == chapter.id }
         }
+        if (newChapter == null) return false
+        val targetPage = pageNumber?.let { (it - 1).coerceAtLeast(0) }
+        return loadAdjacent(newChapter, page = targetPage)
     }
 
-    // KMK -->
     fun deletePageBookmark(bookmarkId: Long) {
         viewModelScope.launchIO {
             deletePageBookmarkInteractor.await(bookmarkId)
@@ -663,21 +704,26 @@ class ReaderViewModel @JvmOverloads constructor(
     /**
      * Called when the user is going to load the prev/next chapter through the toolbar buttons.
      */
-    private suspend fun loadAdjacent(chapter: ReaderChapter) {
-        val loader = loader ?: return
+    private suspend fun loadAdjacent(chapter: ReaderChapter, page: Int? = null): Boolean {
+        val loader = loader ?: return false
 
         logcat { "Loading adjacent ${chapter.chapter.url}" }
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
-        try {
+        return try {
             withIOContext {
-                loadChapter(loader, chapter)
+                loadChapter(loader, chapter, page)
             }
+            true
         } catch (e: Throwable) {
             if (e is CancellationException) {
                 throw e
             }
             logcat(LogPriority.ERROR, e)
+            // KMK -->
+            eventChannel.send(Event.ChapterLoadFailed(e))
+            // KMK <--
+            false
         } finally {
             mutableState.update { it.copy(isLoadingAdjacentChapter = false) }
         }
@@ -1009,17 +1055,17 @@ class ReaderViewModel @JvmOverloads constructor(
     /**
      * Called from the activity to load and set the next chapter as active.
      */
-    suspend fun loadNextChapter() {
-        val nextChapter = state.value.viewerChapters?.nextChapter ?: return
-        loadAdjacent(nextChapter)
+    suspend fun loadNextChapter(): Boolean {
+        val nextChapter = state.value.viewerChapters?.nextChapter ?: return false
+        return loadAdjacent(nextChapter)
     }
 
     /**
      * Called from the activity to load and set the previous chapter as active.
      */
-    suspend fun loadPreviousChapter() {
-        val prevChapter = state.value.viewerChapters?.prevChapter ?: return
-        loadAdjacent(prevChapter)
+    suspend fun loadPreviousChapter(): Boolean {
+        val prevChapter = state.value.viewerChapters?.prevChapter ?: return false
+        return loadAdjacent(prevChapter)
     }
 
     /**
@@ -1089,17 +1135,18 @@ class ReaderViewModel @JvmOverloads constructor(
     // SY <--
 
     // KMK -->
-    fun togglePageBookmark(pageNumber: Int? = null) {
+    fun togglePageBookmark(pageNumber: Int? = null, targetChapterId: Long? = null) {
         val manga = state.value.manga ?: return
-        val chapter = getCurrentChapter()?.chapter ?: return
-        val page = pageNumber ?: (state.value.currentPage + 1).takeIf { it > 0 } ?: return
+        val chapterId = targetChapterId ?: getCurrentChapter()?.chapter?.id ?: return
+        val page = pageNumber ?: state.value.currentPage.takeIf { it > 0 } ?: return
 
         viewModelScope.launchIO {
-            togglePageBookmarkInteractor.await(
+            val isBookmarked = togglePageBookmarkInteractor.await(
                 mangaId = manga.id,
-                chapterId = chapter.id!!,
+                chapterId = chapterId,
                 pageNumber = page,
             )
+            eventChannel.send(Event.PageBookmarkToggled(isBookmarked, page))
         }
     }
     // KMK <--
@@ -1673,6 +1720,10 @@ class ReaderViewModel @JvmOverloads constructor(
             // SY <--
         ) : Event
         data class CopyImage(val uri: Uri) : Event
+        // KMK -->
+        data class ChapterLoadFailed(val error: Throwable) : Event
+        data class PageBookmarkToggled(val isBookmarked: Boolean, val pageNumber: Int) : Event
+        // KMK <--
     }
 }
 

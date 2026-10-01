@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -182,7 +183,11 @@ data object HomeTab : Tab {
         LaunchedEffect(Unit) {
             launch {
                 subTabTargetChannel.receiveAsFlow().collectLatest {
-                    state.animateScrollToPage(it)
+                    if (kotlin.math.abs(it - state.currentPage) <= 1 && state.currentPageOffsetFraction == 0f) {
+                        state.animateScrollToPage(it)
+                    } else {
+                        state.scrollToPage(it)
+                    }
                 }
             }
             launch {
@@ -205,8 +210,10 @@ data object HomeTab : Tab {
             }
         }
 
-        LaunchedEffect(state.currentPage) {
-            currentPageIndex = state.currentPage
+        LaunchedEffect(state) {
+            snapshotFlow { state.settledPage }.collect {
+                currentPageIndex = it
+            }
         }
 
         val showingFeedOrderScreen = remember { mutableStateOf(false) }

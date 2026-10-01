@@ -1,10 +1,15 @@
 package eu.kanade.presentation.reader.settings
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.alpha
 import androidx.core.graphics.blue
 import androidx.core.graphics.green
@@ -14,14 +19,34 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
-import tachiyomi.presentation.core.components.SwitchItem
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 
 @Composable
 internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
+    // KMK -->
+    // 0. Screen Brightness Override (Custom Brightness)
+    val customBrightness by screenModel.preferences.customBrightness().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_custom_brightness),
+        pref = screenModel.preferences.customBrightness(),
+    )
+    if (customBrightness) {
+        val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
+        SliderItem(
+            value = customBrightnessValue,
+            valueRange = -75..100,
+            steps = 0,
+            label = stringResource(MR.strings.pref_custom_brightness),
+            onChange = { screenModel.preferences.customBrightnessValue().set(it) },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+    }
+    // KMK <--
+
     // 1. Image Color Filter Brightness Slider
     val brightness by screenModel.preferences.colorFilterBrightness().collectAsState()
     SliderItem(
@@ -95,66 +120,96 @@ internal fun ColorFilterPage(screenModel: ReaderSettingsScreenModel) {
     )
 
     // 4. Custom Color Filter Channels (RGBA)
-    val colorFilterValue by screenModel.preferences.colorFilterValue().collectAsState()
-    SliderItem(
-        value = colorFilterValue.red,
-        valueRange = 0..255,
-        steps = 0,
-        label = stringResource(MR.strings.color_filter_r_value),
-        onChange = { newRValue ->
-            screenModel.preferences.colorFilterValue().getAndSet {
-                getColorValue(it, newRValue, RED_MASK, 16)
-            }
-        },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    // KMK -->
+    val colorFilter by screenModel.preferences.colorFilter().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_custom_color_filter),
+        pref = screenModel.preferences.colorFilter(),
     )
-    SliderItem(
-        value = colorFilterValue.green,
-        valueRange = 0..255,
-        steps = 0,
-        label = stringResource(MR.strings.color_filter_g_value),
-        onChange = { newGValue ->
-            screenModel.preferences.colorFilterValue().getAndSet {
-                getColorValue(it, newGValue, GREEN_MASK, 8)
-            }
-        },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-    SliderItem(
-        value = colorFilterValue.blue,
-        valueRange = 0..255,
-        steps = 0,
-        label = stringResource(MR.strings.color_filter_b_value),
-        onChange = { newBValue ->
-            screenModel.preferences.colorFilterValue().getAndSet {
-                getColorValue(it, newBValue, BLUE_MASK, 0)
-            }
-        },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-    SliderItem(
-        value = colorFilterValue.alpha,
-        valueRange = 0..255,
-        steps = 0,
-        label = stringResource(MR.strings.color_filter_a_value),
-        onChange = { newAValue ->
-            screenModel.preferences.colorFilterValue().getAndSet {
-                getColorValue(it, newAValue, ALPHA_MASK, 24)
-            }
-        },
-        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
+    if (colorFilter) {
+        val colorFilterValue by screenModel.preferences.colorFilterValue().collectAsState()
+        SliderItem(
+            value = colorFilterValue.red,
+            valueRange = 0..255,
+            steps = 0,
+            label = stringResource(MR.strings.color_filter_r_value),
+            onChange = { newRValue ->
+                screenModel.preferences.colorFilterValue().getAndSet {
+                    getColorValue(it, newRValue, RED_MASK, 16)
+                }
+            },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+        SliderItem(
+            value = colorFilterValue.green,
+            valueRange = 0..255,
+            steps = 0,
+            label = stringResource(MR.strings.color_filter_g_value),
+            onChange = { newGValue ->
+                screenModel.preferences.colorFilterValue().getAndSet {
+                    getColorValue(it, newGValue, GREEN_MASK, 8)
+                }
+            },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+        SliderItem(
+            value = colorFilterValue.blue,
+            valueRange = 0..255,
+            steps = 0,
+            label = stringResource(MR.strings.color_filter_b_value),
+            onChange = { newBValue ->
+                screenModel.preferences.colorFilterValue().getAndSet {
+                    getColorValue(it, newBValue, BLUE_MASK, 0)
+                }
+            },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+        SliderItem(
+            value = colorFilterValue.alpha,
+            valueRange = 0..255,
+            steps = 0,
+            label = stringResource(MR.strings.color_filter_a_value),
+            onChange = { newAValue ->
+                screenModel.preferences.colorFilterValue().getAndSet {
+                    getColorValue(it, newAValue, ALPHA_MASK, 24)
+                }
+            },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
 
-    val colorFilterMode by screenModel.preferences.colorFilterMode().collectAsState()
-    SettingsChipRow(MR.strings.pref_color_filter_mode) {
-        ColorFilterMode.mapIndexed { index, it ->
-            FilterChip(
-                selected = colorFilterMode == index,
-                onClick = { screenModel.preferences.colorFilterMode().set(index) },
-                label = { Text(stringResource(it.first)) },
-            )
+        val colorFilterMode by screenModel.preferences.colorFilterMode().collectAsState()
+        SettingsChipRow(MR.strings.pref_color_filter_mode) {
+            ColorFilterMode.mapIndexed { index, it ->
+                FilterChip(
+                    selected = colorFilterMode == index,
+                    onClick = { screenModel.preferences.colorFilterMode().set(index) },
+                    label = { Text(stringResource(it.first)) },
+                )
+            }
         }
     }
+
+    TextButton(
+        onClick = {
+            screenModel.preferences.customBrightness().set(false)
+            screenModel.preferences.customBrightnessValue().set(0)
+            screenModel.preferences.colorFilterBrightness().set(0f)
+            screenModel.preferences.colorFilterContrast().set(0f)
+            screenModel.preferences.colorFilterSaturation().set(1.0f)
+            screenModel.preferences.colorFilterGamma().set(1.0f)
+            screenModel.preferences.colorFilterBlackLevel().set(0f)
+            screenModel.preferences.colorFilterWhiteLevel().set(1.0f)
+            screenModel.preferences.colorFilterWarmth().set(0f)
+            screenModel.preferences.colorFilter().set(false)
+            screenModel.preferences.colorFilterValue().set(0)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(stringResource(KMR.strings.pref_color_filter_reset))
+    }
+    // KMK <--
 }
 
 private fun getColorValue(currentColor: Int, color: Int, mask: Long, bitShift: Int): Int {

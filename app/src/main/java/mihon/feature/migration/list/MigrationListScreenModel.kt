@@ -80,6 +80,9 @@ class MigrationListScreenModel(
     private val navigateBackChannel = Channel<Unit>()
     val navigateBackEvent = navigateBackChannel.receiveAsFlow()
 
+    var lastMigratedTargetId: Long? = null
+        private set
+
     private var migrateJob: Job? = null
 
     init {
@@ -270,14 +273,18 @@ class MigrationListScreenModel(
             items.any { it.searchResult.value is SearchResult.Success }
 
     /** Set a manga picked from manual search to be used as migration target */
-    fun useMangaForMigration(current: Long, target: Long, onMissingChapters: () -> Unit) {
+    fun useMangaForMigration(current: Long, target: Manga, onMissingChapters: () -> Unit) {
         val migratingManga = items.find { it.manga.id == current } ?: return
         migratingManga.searchResult.value = SearchResult.Searching
         screenModelScope.launchIO {
             val result = migratingManga.migrationScope.async {
-                val manga = getManga.await(target) ?: return@async null
+                val manga = if (target.id > 0) {
+                    getManga.await(target.id) ?: target
+                } else {
+                    networkToLocalManga(target)
+                }
+                val source = sourceManager.getOrStub(manga.source)
                 try {
-                    val source = sourceManager.get(manga.source)!!
                     // SY -->
                     val chapters = if (source is EHentai) {
                         source.getChapterList(manga.toSManga(), throttleManager::throttle)
@@ -286,7 +293,13 @@ class MigrationListScreenModel(
                         source.getChapterList(manga.toSManga())
                     }
                     syncChaptersWithSource.await(chapters, manga, source)
-                } catch (_: Exception) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    logcat(LogPriority.WARN, throwable = e)
+                }
+                val localChapters = getChaptersByMangaId.await(manga.id)
+                if (localChapters.isEmpty()) {
                     return@async null
                 }
                 manga
@@ -309,6 +322,19 @@ class MigrationListScreenModel(
             }
             migratingManga.searchResult.value = result.toSuccessSearchResult()
             updateMigrationProgress()
+        }
+    }
+
+    fun useMangaForMigration(current: Long, target: Long, onMissingChapters: () -> Unit) {
+        screenModelScope.launchIO {
+            val targetManga = getManga.await(target)
+            if (targetManga != null) {
+                useMangaForMigration(current, targetManga, onMissingChapters)
+            } else {
+                val migratingManga = items.find { it.manga.id == current } ?: return@launchIO
+                migratingManga.searchResult.value = SearchResult.NotFound
+                withUIContext { onMissingChapters() }
+            }
         }
     }
 
@@ -336,6 +362,7 @@ class MigrationListScreenModel(
                             }
                         }
                         if (target != null) {
+                            lastMigratedTargetId = target.id
                             migrateManga(current = manga.manga, target = target, replace = replace)
                         }
                     } catch (e: Exception) {
@@ -368,9 +395,16 @@ class MigrationListScreenModel(
         screenModelScope.launchIO {
             val manga = items.find { it.manga.id == mangaId } ?: return@launchIO
             val target = (manga.searchResult.value as? SearchResult.Success)?.manga ?: return@launchIO
-            migrateManga(current = manga.manga, target = target, replace = replace)
-
-            removeManga(mangaId)
+            lastMigratedTargetId = target.id
+            try {
+                migrateManga(current = manga.manga, target = target, replace = replace)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logcat(LogPriority.ERROR, throwable = e)
+            } finally {
+                removeManga(mangaId)
+            }
         }
     }
 

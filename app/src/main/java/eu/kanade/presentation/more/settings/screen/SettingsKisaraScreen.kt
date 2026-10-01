@@ -1043,6 +1043,11 @@ object SettingsKisaraScreen : SearchableSettings {
                         title = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs),
                         subtitle = stringResource(KMR.strings.pref_kisara_show_item_count_in_tabs_summary),
                     ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showSubcategoriesAtTop(),
+                        title = stringResource(KMR.strings.pref_kisara_show_subcategories_at_top),
+                        subtitle = stringResource(KMR.strings.pref_kisara_show_subcategories_at_top_summary),
+                    ),
                     Preference.PreferenceItem.ListPreference(
                         preference = categoryBarSelectedFontColorTypePref,
                         entries = mapOf(
@@ -1269,6 +1274,24 @@ object SettingsKisaraScreen : SearchableSettings {
                             true
                         },
                     ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>().suggestionsInterval(),
+                        entries = persistentMapOf(
+                            6 to stringResource(MR.strings.update_6hour),
+                            12 to stringResource(MR.strings.update_12hour),
+                            24 to stringResource(MR.strings.update_24hour),
+                            48 to stringResource(MR.strings.update_48hour),
+                            72 to stringResource(MR.strings.update_72hour),
+                            168 to stringResource(MR.strings.update_weekly),
+                        ),
+                        title = stringResource(KMR.strings.pref_suggestions_fetch_interval),
+                        subtitle = "%s",
+                        onValueChanged = { interval ->
+                            eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.scheduleBackground(context, isEnabled = true, intervalHours = interval)
+                            true
+                        },
+                        enabled = Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>().isSuggestionsEnabled().get(),
+                    ),
                     Preference.PreferenceItem.TextPreference(
                         title = "Suggestions Settings",
                         subtitle = "Configure, drag-and-drop reorder, or block tags and extensions",
@@ -1293,8 +1316,8 @@ object SettingsKisaraScreen : SearchableSettings {
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = uiPreferences.kisaraHideNsfwSuggestions(),
-                        title = "Hide NSFW in Suggestions",
-                        subtitle = "Exclude NSFW recommendations from Suggestions and Home Feed",
+                        title = stringResource(KMR.strings.pref_block_18plus_spotlight),
+                        subtitle = stringResource(KMR.strings.pref_block_18plus_spotlight_summary),
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = uiPreferences.kisaraBlurNsfwCovers(),

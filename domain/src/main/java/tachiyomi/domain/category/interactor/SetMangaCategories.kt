@@ -23,4 +23,23 @@ class SetMangaCategories(
             logcat(LogPriority.ERROR, e)
         }
     }
+
+    // KMK -->
+    suspend fun await(updates: List<Pair<Long, List<Long>>>) {
+        try {
+            val defaultCategoryId = libraryPreferences.defaultCategory().get().toLong()
+            val finalUpdates = updates.map { (mangaId, categoryIds) ->
+                val finalCategoryIds = if (categoryIds.any { it != defaultCategoryId && it != 0L }) {
+                    categoryIds.filter { it != defaultCategoryId && it != 0L }
+                } else {
+                    categoryIds
+                }
+                mangaId to finalCategoryIds
+            }
+            mangaRepository.setMangaCategories(finalUpdates)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e)
+        }
+    }
+    // KMK <--
 }

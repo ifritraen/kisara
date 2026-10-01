@@ -17,6 +17,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -46,22 +47,29 @@ fun LibraryPager(
     onLongClickManga: (Category, LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     userScrollEnabled: Boolean = true,
-) {
-    // KMK --> ponytail: retain scroll positions across tab switches
-    val scrollPositions = remember { mutableMapOf<Pair<Long, LibraryDisplayMode>, Pair<Int, Int>>() }
+    // KMK -->
+    activeSubcategoryId: Long? = null,
+    scrollPositions: MutableMap<Triple<Long, Long?, LibraryDisplayMode>, Pair<Int, Int>> = remember { mutableMapOf() },
+    categoryNamesByMangaId: Map<Long, List<String>> = emptyMap(),
+    onOpenManga: (Long) -> Unit = {},
     // KMK <--
-
+) {
     HorizontalPager(
         modifier = Modifier.fillMaxSize(),
         state = state,
         userScrollEnabled = userScrollEnabled,
         verticalAlignment = Alignment.Top,
+        beyondViewportPageCount = 1,
     ) { page ->
-        if (page !in ((state.currentPage - 1)..(state.currentPage + 1))) {
-            // To make sure only one offscreen page is being composed
+        val category = getCategoryForPage(page)
+        if (category.isLocalCategory) {
+            LibraryLocalContent(
+                contentPadding = contentPadding,
+                onClickManga = onOpenManga,
+                categoryNamesByMangaId = categoryNamesByMangaId,
+            )
             return@HorizontalPager
         }
-        val category = getCategoryForPage(page)
         val items = getItemsForCategory(category)
 
         if (items.isEmpty()) {
@@ -89,16 +97,18 @@ fun LibraryPager(
 
         // KMK --> ponytail: restore and save scroll offset per category and display mode
         val categoryId = category.id
-        val positionKey = categoryId to displayMode
-        val restoredPosition = remember(positionKey) {
-            scrollPositions[positionKey] ?: (0 to 0)
-        }
+        val positionKey = Triple(categoryId, activeSubcategoryId, displayMode)
+        val restoredPosition = scrollPositions[positionKey] ?: (0 to 0)
         // KMK <--
 
         when (displayMode) {
             LibraryDisplayMode.List -> {
                 // KMK -->
-                val listState = remember(positionKey) {
+                val listState = rememberSaveable(
+                    inputs = arrayOf(positionKey),
+                    saver = LazyListState.Saver,
+                    key = "lib_list_${categoryId}_${activeSubcategoryId}_$displayMode",
+                ) {
                     LazyListState(restoredPosition.first, restoredPosition.second)
                 }
                 DisposableEffect(positionKey, listState) {
@@ -123,7 +133,11 @@ fun LibraryPager(
             }
             LibraryDisplayMode.CompactGrid, LibraryDisplayMode.CoverOnlyGrid -> {
                 // KMK -->
-                val gridState = remember(positionKey) {
+                val gridState = rememberSaveable(
+                    inputs = arrayOf(positionKey),
+                    saver = LazyGridState.Saver,
+                    key = "lib_compact_grid_${categoryId}_${activeSubcategoryId}_$displayMode",
+                ) {
                     LazyGridState(restoredPosition.first, restoredPosition.second)
                 }
                 DisposableEffect(positionKey, gridState) {
@@ -150,7 +164,11 @@ fun LibraryPager(
             }
             LibraryDisplayMode.ComfortableGrid -> {
                 // KMK -->
-                val gridState = remember(positionKey) {
+                val gridState = rememberSaveable(
+                    inputs = arrayOf(positionKey),
+                    saver = LazyGridState.Saver,
+                    key = "lib_comf_grid_${categoryId}_${activeSubcategoryId}_$displayMode",
+                ) {
                     LazyGridState(restoredPosition.first, restoredPosition.second)
                 }
                 DisposableEffect(positionKey, gridState) {
@@ -176,7 +194,11 @@ fun LibraryPager(
             }
             // KMK -->
             LibraryDisplayMode.ComfortableGridPanorama -> {
-                val gridState = remember(positionKey) {
+                val gridState = rememberSaveable(
+                    inputs = arrayOf(positionKey),
+                    saver = LazyGridState.Saver,
+                    key = "lib_pano_grid_${categoryId}_${activeSubcategoryId}_$displayMode",
+                ) {
                     LazyGridState(restoredPosition.first, restoredPosition.second)
                 }
                 DisposableEffect(positionKey, gridState) {

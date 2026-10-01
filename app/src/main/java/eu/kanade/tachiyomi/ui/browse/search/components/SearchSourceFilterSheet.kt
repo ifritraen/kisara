@@ -8,11 +8,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -72,12 +76,31 @@ fun SearchSourceFilterSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.Transparent,
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
+        tonalElevation = 0.dp,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+        GlassSurface(
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.compose.material3.BottomSheetDefaults.DragHandle()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -161,5 +184,7 @@ fun SearchSourceFilterSheet(
             }
         }
     }
+}
+}
 }
 // KMK <--

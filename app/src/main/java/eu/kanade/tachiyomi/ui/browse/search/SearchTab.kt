@@ -206,6 +206,7 @@ private fun SearchTabContent(
             GlassSurface(
                 shape = RoundedCornerShape(16.dp),
                 style = GlassDefaults.regularStyle(),
+                isStandardSurface = true,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = bottomBarGap + 8.dp)

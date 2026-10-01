@@ -1,17 +1,21 @@
 package eu.kanade.presentation.library.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.KisaraBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.window.DialogProperties
 import exh.favorites.FavoritesSyncStatus
 import kotlinx.coroutines.delay
 import tachiyomi.core.common.i18n.stringResource
@@ -172,36 +176,32 @@ fun SyncFavoritesProgressDialog(
     }
     val dialog = properties
     if (dialog != null) {
-        AlertDialog(
+        KisaraBottomSheet(
             onDismissRequest = {},
-            confirmButton = {
-                if (dialog.positiveButton != null && dialog.positiveButtonText != null) {
-                    TextButton(onClick = dialog.positiveButton) {
-                        Text(text = dialog.positiveButtonText)
-                    }
-                }
-            },
-            dismissButton = {
-                if (dialog.negativeButton != null && dialog.negativeButtonText != null) {
-                    TextButton(onClick = dialog.negativeButton) {
-                        Text(text = dialog.negativeButtonText)
-                    }
-                }
-            },
-            title = {
-                Text(text = dialog.title)
-            },
-            text = {
-                Column(
-                    Modifier.verticalScroll(rememberScrollState()),
+            title = dialog.title,
+            footer = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
                 ) {
-                    Text(text = dialog.text)
+                    if (dialog.negativeButton != null && dialog.negativeButtonText != null) {
+                        TextButton(onClick = dialog.negativeButton) {
+                            Text(text = dialog.negativeButtonText)
+                        }
+                    }
+                    if (dialog.positiveButton != null && dialog.positiveButtonText != null) {
+                        TextButton(onClick = dialog.positiveButton) {
+                            Text(text = dialog.positiveButtonText)
+                        }
+                    }
                 }
             },
-            properties = DialogProperties(
-                dismissOnClickOutside = false,
-                dismissOnBackPress = false,
-            ),
-        )
+        ) {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                Text(text = dialog.text)
+            }
+        }
     }
 }

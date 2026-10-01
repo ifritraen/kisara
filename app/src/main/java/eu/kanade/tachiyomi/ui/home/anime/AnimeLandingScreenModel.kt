@@ -48,6 +48,9 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.updates.anime.interactor.GetAnimeUpdates
 import tachiyomi.domain.updates.anime.model.AnimeUpdatesWithRelations
+import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.data.ai.NsfwTagClassifier
+import kotlinx.coroutines.flow.combine
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -77,28 +80,43 @@ class AnimeLandingScreenModel(
     private val getTrackerRecommendations: GetTrackerRecommendations = Injekt.get(),
     private val getTrackerContinueReading: eu.kanade.domain.manga.interactor.GetTrackerContinueReading = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
+    private val sourcePreferences: SourcePreferences = Injekt.get(),
 ) : StateScreenModel<AnimeLandingScreenModel.State>(State()) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val cacheFile by lazy { File(app.cacheDir, "anime_feed_cache.json") }
 
     init {
+        val nsfwFilterTrigger = combine(
+            uiPreferences.kisaraHideNsfwSuggestions().changes(),
+            sourcePreferences.nsfwOverrideSfwExtensions().changes(),
+            sourcePreferences.nsfwOverrideNsfwExtensions().changes(),
+        ) { hideNsfw, _, _ -> hideNsfw }
+
         // 1. Subscribe to Anime Library for Unread / Forgotten Favorites
         screenModelScope.launch {
-            getLibraryAnime.subscribe()
-                .distinctUntilChanged()
-                .flowOn(Dispatchers.IO)
-                .catch { logcat(LogPriority.ERROR, it) }
-                .collectLatest { libraryAnimeList ->
-                    if (libraryAnimeList.isEmpty()) {
-                        mutableState.update { it.copy(libraryRandom = persistentListOf()) }
-                        return@collectLatest
-                    }
+            combine(
+                getLibraryAnime.subscribe().distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { libraryAnimeList, hideNsfw ->
+                if (libraryAnimeList.isEmpty()) {
+                    persistentListOf()
+                } else {
                     val unreadAnime = libraryAnimeList.filter { it.unseenCount > 0 }
                     val candidates = unreadAnime.ifEmpty { libraryAnimeList }
-                    val random = candidates.map { it.anime }.shuffled().take(20)
+                    val eligible = if (hideNsfw) {
+                        candidates.filterNot { NsfwTagClassifier.is18PlusItem(it.anime.source, it.anime.genre, it.anime.title) }
+                    } else {
+                        candidates
+                    }
+                    eligible.map { it.anime }.shuffled().take(20).toImmutableList()
+                }
+            }
+                .flowOn(Dispatchers.IO)
+                .catch { logcat(LogPriority.ERROR, it) }
+                .collectLatest { random ->
                     mutableState.update {
-                        it.copy(libraryRandom = random.toImmutableList())
+                        it.copy(libraryRandom = random)
                     }
                 }
         }
@@ -108,13 +126,25 @@ class AnimeLandingScreenModel(
 
         // 3. Subscribe to Continue Watching (Anime History)
         screenModelScope.launch {
-            getAnimeHistory.subscribe("")
-                .distinctUntilChanged()
+            combine(
+                getAnimeHistory.subscribe("").distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { historyList, hideNsfw ->
+                val filtered = if (hideNsfw) {
+                    historyList.filterNot {
+                        NsfwTagClassifier.is18PlusSource(it.coverData.sourceId) ||
+                            NsfwTagClassifier.is18PlusItem(it.coverData.sourceId, null, it.title)
+                    }
+                } else {
+                    historyList
+                }
+                filtered.take(20).toImmutableList()
+            }
                 .flowOn(Dispatchers.IO)
-                .collectLatest { historyList ->
-                    val recent = historyList.take(20)
+                .catch { logcat(LogPriority.ERROR, it) }
+                .collectLatest { recent ->
                     mutableState.update {
-                        it.copy(history = recent.toImmutableList())
+                        it.copy(history = recent)
                     }
                 }
         }
@@ -122,18 +152,38 @@ class AnimeLandingScreenModel(
         // 4. Subscribe to Fresh Releases (Anime Updates)
         screenModelScope.launch {
             val after = Instant.now().minus(30, ChronoUnit.DAYS)
-            getAnimeUpdates.subscribe(after)
-                .catch { logcat(LogPriority.ERROR, it) }
+            combine(
+                getAnimeUpdates.subscribe(after).distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { updatesList, hideNsfw ->
+                val filtered = if (hideNsfw) {
+                    updatesList.filterNot {
+                        NsfwTagClassifier.is18PlusSource(it.sourceId) ||
+                            NsfwTagClassifier.is18PlusItem(it.sourceId, null, it.animeTitle)
+                    }
+                } else {
+                    updatesList
+                }
+                filtered.take(20).toImmutableList()
+            }
                 .flowOn(Dispatchers.IO)
-                .collectLatest { updatesList ->
-                    val recent = updatesList.take(20)
+                .catch { logcat(LogPriority.ERROR, it) }
+                .collectLatest { recent ->
                     mutableState.update {
-                        it.copy(updates = recent.toImmutableList())
+                        it.copy(updates = recent)
                     }
                 }
         }
 
-        // 5. Load Tracker Recommendations & Feed Cache
+        // 5. Re-run spotlight and feed cache when NSFW toggles change
+        screenModelScope.launch {
+            nsfwFilterTrigger.collectLatest {
+                loadSpotlightSuggestions()
+                loadFeedCache()
+            }
+        }
+
+        // 6. Load Tracker Recommendations & Feed Cache
         loadTrackerRecommendations(force = false)
         loadTrackerContinue(force = false)
         loadFeedCache()
@@ -209,7 +259,13 @@ class AnimeLandingScreenModel(
                     })
                 }
 
-                val finalSpotlight = suggestions.distinctBy { it.id }.shuffled().take(15)
+                val hideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
+                val eligibleSuggestions = if (hideNsfw) {
+                    suggestions.filterNot { NsfwTagClassifier.is18PlusItem(it.source, it.genre, it.title) }
+                } else {
+                    suggestions
+                }
+                val finalSpotlight = eligibleSuggestions.distinctBy { it.id }.shuffled().take(15)
                 if (finalSpotlight.isNotEmpty()) {
                     mutableState.update {
                         it.copy(
@@ -307,7 +363,13 @@ class AnimeLandingScreenModel(
                 try {
                     val text = cacheFile.readText()
                     val list = json.decodeFromString<List<CachedFeedAnime>>(text)
-                    mutableState.update { it.copy(feed = list.toImmutableList()) }
+                    val hideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
+                    val filtered = if (hideNsfw) {
+                        list.filterNot { NsfwTagClassifier.is18PlusItem(it.sourceId, null, it.title) }
+                    } else {
+                        list
+                    }
+                    mutableState.update { it.copy(feed = filtered.toImmutableList()) }
                 } catch (e: Exception) {
                     logcat(LogPriority.WARN, e) { "Failed to parse anime feed cache" }
                 }
@@ -418,7 +480,13 @@ class AnimeLandingScreenModel(
                     try {
                         cacheFile.writeText(json.encodeToString(mixedList))
                     } catch (_: Exception) {}
-                    mutableState.update { it.copy(feed = mixedList.toImmutableList()) }
+                    val hideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
+                    val filtered = if (hideNsfw) {
+                        mixedList.filterNot { NsfwTagClassifier.is18PlusItem(it.sourceId, null, it.title) }
+                    } else {
+                        mixedList
+                    }
+                    mutableState.update { it.copy(feed = filtered.toImmutableList()) }
                 }
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR, e) { "Failed to fetch anime feed" }

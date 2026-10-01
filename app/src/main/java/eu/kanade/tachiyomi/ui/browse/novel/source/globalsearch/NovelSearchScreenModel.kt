@@ -238,9 +238,11 @@ abstract class NovelSearchScreenModel(
                             source.getSearchNovels(1, transformedQuery.sanitize(), source.getFilterList())
                         }
 
-                        val titles = page.novels.map {
+                        val optionalTags = eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.extractOptionalTags(query)
+                        val rawTitles = page.novels.map {
                             networkToLocalNovel.await(it.toDomainNovel(source.id))
                         }
+                        val titles = eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.rankNovelsByOptionalTagMatches(rawTitles, optionalTags)
 
                         if (isActive) {
                             updateItem(source, NovelSearchItemResult.Success(titles))

@@ -98,6 +98,19 @@ class MangaRepositoryImpl(
         }
     }
 
+    // KMK -->
+    override suspend fun setMangaCategories(updates: List<Pair<Long, List<Long>>>) {
+        handler.await(inTransaction = true) {
+            updates.forEach { (mangaId, categoryIds) ->
+                mangas_categoriesQueries.deleteMangaCategoryByMangaId(mangaId)
+                categoryIds.forEach { categoryId ->
+                    mangas_categoriesQueries.insert(mangaId, categoryId)
+                }
+            }
+        }
+    }
+    // KMK <--
+
     override suspend fun update(update: MangaUpdate): Boolean {
         return try {
             partialUpdate(update)

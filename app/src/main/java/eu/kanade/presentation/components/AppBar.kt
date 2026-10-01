@@ -1,8 +1,13 @@
 package eu.kanade.presentation.components
 
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -184,6 +189,9 @@ fun AppBar(
                 containerColor = backgroundColor ?: MaterialTheme.colorScheme.surfaceColorAtElevation(
                     elevation = if (isActionMode) 3.dp else 0.dp,
                 ),
+                scrolledContainerColor = backgroundColor ?: MaterialTheme.colorScheme.surfaceColorAtElevation(
+                    elevation = if (isActionMode) 3.dp else 0.dp,
+                ),
             ),
             windowInsets = windowInsets,
             scrollBehavior = scrollBehavior,
@@ -218,6 +226,8 @@ fun AppBarTitle(
         }
     }
 }
+
+val LocalOnOpenSearch = compositionLocalOf<(() -> Unit)?> { null }
 
 @Composable
 fun AppBarActions(
@@ -274,6 +284,7 @@ fun AppBarActions(
 
     val overflowActions = actions.filterIsInstance<AppBar.OverflowAction>()
     if (overflowActions.isNotEmpty()) {
+        val onOpenSearch = LocalOnOpenSearch.current
         TooltipBox(
             positionProvider = rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
             tooltip = {
@@ -284,8 +295,21 @@ fun AppBarActions(
             state = rememberTooltipState(),
             focusable = false,
         ) {
-            IconButton(
-                onClick = { showMenu = !showMenu },
+            Box(
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        onClick = { showMenu = !showMenu },
+                        onDoubleClick = if (onOpenSearch != null) {
+                            {
+                                showMenu = false
+                                onOpenSearch()
+                            }
+                        } else null,
+                    ),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     Icons.Outlined.MoreVert,
@@ -327,13 +351,20 @@ fun SearchToolbar(
     placeholderText: String? = null,
     onSearch: (String) -> Unit = {},
     onClickCloseSearch: () -> Unit = { onChangeSearchQuery(null) },
+    onSearchClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val focusRequester = remember { FocusRequester() }
+    val openSearchLambda: (() -> Unit)? = if (searchEnabled) {
+        onSearchClick ?: { onChangeSearchQuery("") }
+    } else {
+        null
+    }
 
+    CompositionLocalProvider(LocalOnOpenSearch provides openSearchLambda) {
     AppBar(
         modifier = modifier,
         titleContent = {
@@ -434,7 +465,7 @@ fun SearchToolbar(
         navigateUp = if (searchQuery == null) navigateUp else onClickCloseSearch,
         actions = {
             key("search") {
-                val onClick = { onChangeSearchQuery("") }
+                val onClick = onSearchClick ?: { onChangeSearchQuery("") }
 
                 if (!searchEnabled) {
                     // Don't show search action
@@ -489,6 +520,7 @@ fun SearchToolbar(
         isActionMode = false,
         scrollBehavior = scrollBehavior,
     )
+    }
 }
 
 @Composable

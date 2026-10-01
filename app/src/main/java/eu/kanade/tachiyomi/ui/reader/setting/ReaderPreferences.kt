@@ -131,7 +131,7 @@ class ReaderPreferences(
 
     // region Color filter
 
-    fun customBrightness() = preferenceStore.getBoolean("pref_custom_brightness_key", false)
+    fun customBrightness() = preferenceStore.getBoolean("pref_custom_brightness_v2", false)
 
     fun customBrightnessValue() = preferenceStore.getInt("custom_brightness_value", 0)
 
@@ -206,6 +206,10 @@ class ReaderPreferences(
     fun cacheSize() = preferenceStore.getString("eh_cache_size", "75")
 
     fun autoscrollInterval() = preferenceStore.getFloat("eh_util_autoscroll_interval", 3f)
+
+    // KMK -->
+    fun autoscrollSwipeSensitivity() = preferenceStore.getInt("pref_autoscroll_swipe_sensitivity", 100)
+    // KMK <--
 
     fun smoothAutoScroll() = preferenceStore.getBoolean("smooth_auto_scroll", true)
 

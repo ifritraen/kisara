@@ -3,6 +3,7 @@ package eu.kanade.presentation.manga.components
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,8 +19,12 @@ import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +48,7 @@ import eu.kanade.tachiyomi.data.track.model.TrackSearch
 @Composable
 fun TrackerDetailsCard(
     trackDetails: TrackSearch,
+    onSwitchSource: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -66,6 +73,7 @@ fun TrackerDetailsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
+                    modifier = Modifier.weight(1f, fill = false),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -76,40 +84,90 @@ fun TrackerDetailsCard(
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
-                        text = "Tracker Details",
+                        text = trackDetails.title.ifBlank { "Tracker Details" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
 
-                if (trackDetails.score > 0) {
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "Score",
-                                tint = Color(0xFFFFC107),
-                                modifier = Modifier.size(14.dp),
-                            )
-                            val scoreText = if (trackDetails.score > 10) {
-                                "${trackDetails.score.toInt()}%"
-                            } else {
-                                "${trackDetails.score}/10"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (onSwitchSource != null) {
+                        var showSourceMenu by rememberSaveable { mutableStateOf(false) }
+                        Box {
+                            IconButton(
+                                onClick = { showSourceMenu = true },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.SwapHoriz,
+                                    contentDescription = "Switch Tracker Source",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
                             }
-                            Text(
-                                text = scoreText,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            DropdownMenu(
+                                expanded = showSourceMenu,
+                                onDismissRequest = { showSourceMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("MangaUpdates") },
+                                    onClick = {
+                                        showSourceMenu = false
+                                        onSwitchSource("MangaUpdates")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AniList") },
+                                    onClick = {
+                                        showSourceMenu = false
+                                        onSwitchSource("AniList")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("MangaBaka") },
+                                    onClick = {
+                                        showSourceMenu = false
+                                        onSwitchSource("MangaBaka")
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    if (trackDetails.score > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Score",
+                                    tint = Color(0xFFFFC107),
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                val scoreText = if (trackDetails.score > 10) {
+                                    "${trackDetails.score.toInt()}%"
+                                } else {
+                                    "${trackDetails.score}/10"
+                                }
+                                Text(
+                                    text = scoreText,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                         }
                     }
                 }
@@ -146,6 +204,44 @@ fun TrackerDetailsCard(
                         icon = Icons.Outlined.Book,
                         text = "${trackDetails.total_chapters} Chapters",
                     )
+                }
+            }
+
+            // Tags Row
+            if (trackDetails.tags.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    val visibleTags = if (expanded) trackDetails.tags else trackDetails.tags.take(8)
+                    visibleTags.forEach { tag ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        ) {
+                            Text(
+                                text = tag,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                    if (!expanded && trackDetails.tags.size > 8) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable { expanded = true },
+                        ) {
+                            Text(
+                                text = "+${trackDetails.tags.size - 8}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                 }
             }
 

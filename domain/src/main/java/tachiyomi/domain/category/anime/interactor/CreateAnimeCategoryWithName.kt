@@ -31,8 +31,8 @@ class CreateAnimeCategoryWithName(
         )
 
         try {
-            categoryRepository.insertAnimeCategory(newCategory)
-            Result.Success(newCategory)
+            val id = categoryRepository.insertAnimeCategory(newCategory)
+            Result.Success(newCategory.copy(id = id))
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             Result.InternalError(e)

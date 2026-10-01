@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
@@ -114,7 +115,11 @@ fun FloatingAiProgressOverlay(
                     p.percent / 100f,
                     {
                         val active = superResolutionManager.getQueuedSuperResolutionOrNull(p.chapterId)
-                        if (active != null) superResolutionManager.cancelQueuedSuperResolution(active)
+                        if (active != null) {
+                            superResolutionManager.cancelQueuedSuperResolution(active)
+                        } else {
+                            superResolutionManager.cancelActiveSuperResolution()
+                        }
                     },
                     Icons.Default.AutoAwesome,
                 ),
@@ -135,44 +140,23 @@ fun FloatingAiProgressOverlay(
             modifier = Modifier.fillMaxSize(),
         ) {
             if (!isMinimized) {
-                Card(
+                GlassSurface(
                     modifier = modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 16.dp, vertical = 16.dp)
-                    .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            dragOffsetX += dragAmount.x
-                            dragOffsetY += dragAmount.y
+                        .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                dragOffsetX += dragAmount.x
+                                dragOffsetY += dragAmount.y
+                            }
                         }
-                    }
-                    .widthIn(max = 440.dp)
-                    .fillMaxWidth()
-                    .then(
-                        if (hazeState != null) {
-                            Modifier.hazeEffect(
-                                state = hazeState,
-                                style = HazeStyle(
-                                    backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                                    tint = HazeDefaults.tint(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
-                                    blurRadius = 15.dp,
-                                ),
-                            )
-                        } else {
-                            Modifier.background(
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                                shape = MaterialTheme.shapes.medium,
-                            )
-                        },
-                    ),
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                border = BorderStroke(
-                    width = 0.5.dp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
-                ),
-            ) {
+                        .widthIn(max = 440.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    style = GlassDefaults.prominentStyle(),
+                ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     // 1. TOP: Hardware Resource Monitor + Minimize Button
                     Row(
@@ -295,7 +279,7 @@ fun FloatingAiProgressOverlay(
             }
         } else {
             // Minimized Floating Pill
-            Surface(
+            GlassSurface(
                 modifier = modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = 16.dp)
@@ -309,9 +293,7 @@ fun FloatingAiProgressOverlay(
                     }
                     .clickable { isMinimized = false },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                shadowElevation = 6.dp,
+                style = GlassDefaults.prominentStyle(),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),

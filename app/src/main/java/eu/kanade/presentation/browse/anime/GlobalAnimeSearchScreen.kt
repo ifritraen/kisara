@@ -170,6 +170,7 @@ fun GlobalAnimeSearchScreen(
             GlassSurface(
                 shape = RoundedCornerShape(effectiveCornerRadius),
                 style = GlassDefaults.prominentStyle(),
+                isStandardSurface = true,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .windowInsetsPadding(WindowInsets.navigationBars)

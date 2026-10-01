@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -244,7 +246,7 @@ private fun AdaptiveSheetContent(
         ) {
             GlassSurface(
                 modifier = Modifier
-                    .widthIn(max = 460.dp)
+                    .fillMaxWidth()
                     .clickable(
                         interactionSource = null,
                         indication = null,
@@ -278,9 +280,8 @@ private fun AdaptiveSheetContent(
                         orientation = Orientation.Vertical,
                         enabled = enableSwipeDismiss,
                     )
-                    .navigationBarsPadding()
                     .statusBarsPadding(),
-                shape = MaterialTheme.shapes.extraLarge,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
                 style = GlassDefaults.prominentStyle(),
                 dialogSurface = true,
             ) {
@@ -288,7 +289,13 @@ private fun AdaptiveSheetContent(
                     enabled = anchoredDraggableState.targetValue == 0,
                     onBack = internalOnDismissRequest,
                 )
-                content()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding(),
+                ) {
+                    content()
+                }
             }
 
             LaunchedEffect(anchoredDraggableState) {

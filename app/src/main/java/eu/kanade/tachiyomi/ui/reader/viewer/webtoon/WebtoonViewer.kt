@@ -311,12 +311,20 @@ class WebtoonViewer(
         val forceTransition = config.alwaysShowChapterTransition || currentPage is ChapterTransition
         adapter.setChapters(chapters, forceTransition)
 
-        if (recycler.isGone) {
-            logcat { "Recycler first layout" }
+        // KMK -->
+        val currentItemChapter = (currentPage as? ReaderPage)?.chapter
+            ?: (currentPage as? ChapterTransition)?.from
+        val chapterChanged = currentItemChapter != null && currentItemChapter != chapters.currChapter
+
+        if (recycler.isGone || chapterChanged) {
             val pages = chapters.currChapter.pages ?: return
             moveToPage(pages[min(chapters.currChapter.requestedPage, pages.lastIndex)])
-            recycler.isVisible = true
+            if (recycler.isGone) {
+                logcat { "Recycler first layout" }
+                recycler.isVisible = true
+            }
         }
+        // KMK <--
     }
 
     /**

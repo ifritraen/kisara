@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -25,9 +26,23 @@ class PaddleOcrRecognizer(
     private val env: OrtEnvironment,
 ) : AutoCloseable {
 
-    private val modelDir = File(context.filesDir, "paddleocr")
-    val modelFile get() = File(modelDir, "ppocrv5_rec.onnx")
-    val dictFile get() = File(modelDir, "ppocrv5_dict.txt")
+    private val modelDir get() = AiModelManager.getModelSubdir(context, "paddleocr")
+    val modelFile: File
+        get() {
+            val external = File(modelDir, "ppocrv5_rec.onnx")
+            if (external.exists()) return external
+            val internal = File(context.filesDir, "paddleocr/ppocrv5_rec.onnx")
+            if (internal.exists()) return internal
+            return external
+        }
+    val dictFile: File
+        get() {
+            val external = File(modelDir, "ppocrv5_dict.txt")
+            if (external.exists()) return external
+            val internal = File(context.filesDir, "paddleocr/ppocrv5_dict.txt")
+            if (internal.exists()) return internal
+            return external
+        }
 
     private var session: OrtSession? = null
     private var dictionary: List<String>? = null

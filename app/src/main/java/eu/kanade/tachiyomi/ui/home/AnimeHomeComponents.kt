@@ -38,11 +38,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import eu.kanade.tachiyomi.ui.browse.extension.ExtensionNsfwScreen
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -122,11 +124,19 @@ fun AnimeSpotlightCarousel(
 
     val pagerState = rememberPagerState { animes.size }
 
+    LaunchedEffect(animes.size) {
+        if (animes.isNotEmpty() && pagerState.currentPage >= animes.size) {
+            pagerState.scrollToPage((animes.size - 1).coerceAtLeast(0))
+        }
+    }
+
     LaunchedEffect(animes, autoplay, autoplayInterval) {
         while (autoplay && animes.size > 1) {
             delay(autoplayInterval * 1000L)
-            val nextPage = (pagerState.currentPage + 1) % animes.size
-            pagerState.animateScrollToPage(nextPage)
+            if (!pagerState.isScrollInProgress && animes.isNotEmpty()) {
+                val nextPage = (pagerState.currentPage + 1) % animes.size
+                pagerState.animateScrollToPage(nextPage)
+            }
         }
     }
 
@@ -150,14 +160,50 @@ fun AnimeSpotlightCarousel(
                 ),
             ),
     ) {
-        if (tagName != null) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = "Recommended: #$tagName",
+                text = if (tagName != null) {
+                    val cleanTag = tagName.removePrefix("#").trim().replaceFirstChar { it.uppercase() }
+                    "Recommended: #$cleanTag"
+                } else {
+                    "Spotlight"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             )
+
+            val hideNsfwPref = remember { uiPreferences.kisaraHideNsfwSuggestions() }
+            val isNsfwBlocked by hideNsfwPref.collectAsState()
+            val navigator = LocalNavigator.currentOrThrow
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                SpotlightNsfwChip(
+                    isBlocked = isNsfwBlocked,
+                    onClick = { hideNsfwPref.set(!isNsfwBlocked) },
+                )
+
+                IconButton(
+                    onClick = { navigator.push(ExtensionNsfwScreen(1)) },
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Tune,
+                        contentDescription = stringResource(KMR.strings.extension_nsfw_configure_tooltip),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
 
         HorizontalPager(

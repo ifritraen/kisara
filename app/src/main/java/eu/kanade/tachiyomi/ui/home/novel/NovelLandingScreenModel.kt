@@ -46,6 +46,9 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.updates.novel.interactor.GetNovelUpdates
 import tachiyomi.domain.updates.novel.model.NovelUpdatesWithRelations
+import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.data.ai.NsfwTagClassifier
+import kotlinx.coroutines.flow.combine
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -75,28 +78,43 @@ class NovelLandingScreenModel(
     private val getTrackerRecommendations: GetTrackerRecommendations = Injekt.get(),
     private val getTrackerContinueReading: eu.kanade.domain.manga.interactor.GetTrackerContinueReading = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
+    private val sourcePreferences: SourcePreferences = Injekt.get(),
 ) : StateScreenModel<NovelLandingScreenModel.State>(State()) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val cacheFile by lazy { File(app.cacheDir, "novel_feed_cache.json") }
 
     init {
+        val nsfwFilterTrigger = combine(
+            uiPreferences.kisaraHideNsfwSuggestions().changes(),
+            sourcePreferences.nsfwOverrideSfwExtensions().changes(),
+            sourcePreferences.nsfwOverrideNsfwExtensions().changes(),
+        ) { hideNsfw, _, _ -> hideNsfw }
+
         // 1. Subscribe to Novel Library for Unread / Forgotten Favorites
         screenModelScope.launch {
-            getLibraryNovel.subscribe()
-                .distinctUntilChanged()
-                .flowOn(Dispatchers.IO)
-                .catch { logcat(LogPriority.ERROR, it) }
-                .collectLatest { libraryNovelList ->
-                    if (libraryNovelList.isEmpty()) {
-                        mutableState.update { it.copy(libraryRandom = persistentListOf()) }
-                        return@collectLatest
-                    }
+            combine(
+                getLibraryNovel.subscribe().distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { libraryNovelList, hideNsfw ->
+                if (libraryNovelList.isEmpty()) {
+                    persistentListOf()
+                } else {
                     val unreadNovels = libraryNovelList.filter { it.unreadCount > 0 }
                     val candidates = unreadNovels.ifEmpty { libraryNovelList }
-                    val random = candidates.map { it.novel }.shuffled().take(20)
+                    val eligible = if (hideNsfw) {
+                        candidates.filterNot { NsfwTagClassifier.is18PlusItem(it.novel.source, it.novel.genre, it.novel.title) }
+                    } else {
+                        candidates
+                    }
+                    eligible.map { it.novel }.shuffled().take(20).toImmutableList()
+                }
+            }
+                .flowOn(Dispatchers.IO)
+                .catch { logcat(LogPriority.ERROR, it) }
+                .collectLatest { random ->
                     mutableState.update {
-                        it.copy(libraryRandom = random.toImmutableList())
+                        it.copy(libraryRandom = random)
                     }
                 }
         }
@@ -106,13 +124,24 @@ class NovelLandingScreenModel(
 
         // 3. Subscribe to Continue Reading (Novel History)
         screenModelScope.launch {
-            novelHistoryRepository.getNovelHistory("")
-                .distinctUntilChanged()
+            combine(
+                novelHistoryRepository.getNovelHistory("").distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { historyList, hideNsfw ->
+                val filtered = if (hideNsfw) {
+                    historyList.filterNot {
+                        NsfwTagClassifier.is18PlusSource(it.coverData.sourceId) ||
+                            NsfwTagClassifier.is18PlusItem(it.coverData.sourceId, null, it.title)
+                    }
+                } else {
+                    historyList
+                }
+                filtered.take(20).toImmutableList()
+            }
                 .flowOn(Dispatchers.IO)
-                .collectLatest { historyList ->
-                    val recent = historyList.take(20)
+                .collectLatest { recent ->
                     mutableState.update {
-                        it.copy(history = recent.toImmutableList())
+                        it.copy(history = recent)
                     }
                 }
         }
@@ -120,18 +149,38 @@ class NovelLandingScreenModel(
         // 4. Subscribe to Fresh Releases (Novel Updates)
         screenModelScope.launch {
             val after = Instant.now().minus(30, ChronoUnit.DAYS)
-            getNovelUpdates.subscribe(after)
-                .catch { logcat(LogPriority.ERROR, it) }
+            combine(
+                getNovelUpdates.subscribe(after).distinctUntilChanged(),
+                nsfwFilterTrigger,
+            ) { updatesList, hideNsfw ->
+                val filtered = if (hideNsfw) {
+                    updatesList.filterNot {
+                        NsfwTagClassifier.is18PlusSource(it.sourceId) ||
+                            NsfwTagClassifier.is18PlusItem(it.sourceId, null, it.novelTitle)
+                    }
+                } else {
+                    updatesList
+                }
+                filtered.take(20).toImmutableList()
+            }
                 .flowOn(Dispatchers.IO)
-                .collectLatest { updatesList ->
-                    val recent = updatesList.take(20)
+                .catch { logcat(LogPriority.ERROR, it) }
+                .collectLatest { recent ->
                     mutableState.update {
-                        it.copy(updates = recent.toImmutableList())
+                        it.copy(updates = recent)
                     }
                 }
         }
 
-        // 5. Load Tracker Recommendations & Feed Cache
+        // 5. Re-run spotlight and feed cache when NSFW toggles change
+        screenModelScope.launch {
+            nsfwFilterTrigger.collectLatest {
+                loadSpotlightSuggestions()
+                loadFeedCache()
+            }
+        }
+
+        // 6. Load Tracker Recommendations & Feed Cache
         loadTrackerRecommendations(force = false)
         loadTrackerContinue(force = false)
         loadFeedCache()
@@ -206,7 +255,13 @@ class NovelLandingScreenModel(
                     })
                 }
 
-                val finalSpotlight = suggestions.distinctBy { it.id }.shuffled().take(15)
+                val hideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
+                val eligibleSuggestions = if (hideNsfw) {
+                    suggestions.filterNot { NsfwTagClassifier.is18PlusItem(it.source, it.genre, it.title) }
+                } else {
+                    suggestions
+                }
+                val finalSpotlight = eligibleSuggestions.distinctBy { it.id }.shuffled().take(15)
                 if (finalSpotlight.isNotEmpty()) {
                     mutableState.update {
                         it.copy(
@@ -302,7 +357,13 @@ class NovelLandingScreenModel(
                 try {
                     val text = cacheFile.readText()
                     val list = json.decodeFromString<List<CachedFeedNovel>>(text)
-                    mutableState.update { it.copy(feed = list.toImmutableList()) }
+                    val hideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
+                    val filtered = if (hideNsfw) {
+                        list.filterNot { NsfwTagClassifier.is18PlusItem(it.sourceId, null, it.title) }
+                    } else {
+                        list
+                    }
+                    mutableState.update { it.copy(feed = filtered.toImmutableList()) }
                 } catch (e: Exception) {
                     logcat(LogPriority.WARN, e) { "Failed to parse novel feed cache" }
                 }
@@ -412,7 +473,13 @@ class NovelLandingScreenModel(
                     try {
                         cacheFile.writeText(json.encodeToString(mixedList))
                     } catch (_: Exception) {}
-                    mutableState.update { it.copy(feed = mixedList.toImmutableList()) }
+                    val hideNsfw = uiPreferences.kisaraHideNsfwSuggestions().get()
+                    val filtered = if (hideNsfw) {
+                        mixedList.filterNot { NsfwTagClassifier.is18PlusItem(it.sourceId, null, it.title) }
+                    } else {
+                        mixedList
+                    }
+                    mutableState.update { it.copy(feed = filtered.toImmutableList()) }
                 }
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR, e) { "Failed to fetch novel feed" }

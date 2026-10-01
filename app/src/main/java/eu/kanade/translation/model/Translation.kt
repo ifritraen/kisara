@@ -1,6 +1,6 @@
 package eu.kanade.translation.model
 
-import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +14,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 data class Translation(
-    val source: HttpSource,
+    val source: Source,
     val manga: Manga,
     val chapter: Chapter,
     val fromLang: TextRecognizerLanguage = TextRecognizerLanguage.CHINESE,
@@ -48,7 +48,7 @@ data class Translation(
         ): Translation? {
             val chapter = getChapter.await(chapterId) ?: return null
             val manga = getManga.await(chapter.mangaId) ?: return null
-            val source = sourceManager.get(manga.source) as? HttpSource ?: return null
+            val source = sourceManager.get(manga.source) ?: return null
 
             return Translation(source, manga, chapter)
         }

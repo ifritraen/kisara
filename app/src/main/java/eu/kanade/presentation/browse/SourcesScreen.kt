@@ -19,7 +19,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.AlertDialog
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -35,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -42,6 +56,9 @@ import androidx.compose.ui.unit.times
 import eu.kanade.domain.source.model.installedExtension
 import eu.kanade.presentation.browse.components.BaseSourceItem
 import eu.kanade.presentation.components.AnimatedFloatingSearchBox
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
+import eu.kanade.presentation.components.KisaraBottomSheet
 import eu.kanade.presentation.components.SOURCE_SEARCH_BOX_HEIGHT
 import eu.kanade.presentation.util.animateItemFastScroll
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreenModel
@@ -83,12 +100,21 @@ fun SourcesScreen(
     onChangeSearchQuery: (String?) -> Unit,
     onSelectTag: (String?) -> Unit = {},
     onClickManageTags: (Source) -> Unit = {},
+    onToggleSelectSource: (Long) -> Unit = {},
+    onSelectAllSources: () -> Unit = {},
+    onClearSourceSelection: () -> Unit = {},
+    onClickBulkTags: () -> Unit = {},
+    onClickBulkPin: () -> Unit = {},
+    onClickBulkUninstall: () -> Unit = {},
     // KMK <--
 ) {
     // KMK -->
     val lazyListState = rememberLazyListState()
 
-    BackHandler(enabled = !state.searchQuery.isNullOrBlank()) {
+    BackHandler(enabled = state.isBulkMode) {
+        onClearSourceSelection()
+    }
+    BackHandler(enabled = !state.isBulkMode && !state.searchQuery.isNullOrBlank()) {
         onChangeSearchQuery("")
     }
     // KMK <--
@@ -142,7 +168,7 @@ fun SourcesScreen(
 
                 FastScrollLazyColumn(
                     state = lazyListState,
-                    contentPadding = PaddingValues(top = searchBoxHeight) + PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                    contentPadding = PaddingValues(top = searchBoxHeight) + PaddingValues(bottom = contentPadding.calculateBottomPadding() + if (state.isBulkMode) 80.dp else 0.dp),
                     // KMK <--
                 ) {
                     if (items.isEmpty()) {
@@ -175,11 +201,22 @@ fun SourcesScreen(
                                 }
                                 is SourceUiModel.Item -> {
                                     val isPinned = Pin.Pinned in model.source.pin
+                                    val isSelected = model.source.id in state.selectedSources
                                     item(
                                         key = "source-${model.source.key()}",
                                         contentType = "item",
                                     ) {
-                                        if (isPinned) {
+                                        val clickAction: (Source, Listing) -> Unit = if (state.isBulkMode) {
+                                            { src, _ -> onToggleSelectSource(src.id) }
+                                        } else {
+                                            onClickItem
+                                        }
+                                        val longClickAction: (Source) -> Unit = if (state.isBulkMode) {
+                                            { src -> onToggleSelectSource(src.id) }
+                                        } else {
+                                            onLongClickItem
+                                        }
+                                        if (isPinned && !state.isBulkMode) {
                                             ReorderableItem(reorderableState, key = "source-${model.source.key()}") {
                                                 SourceItem(
                                                     modifier = Modifier.animateItemFastScroll(),
@@ -193,10 +230,13 @@ fun SourcesScreen(
                                                         )
                                                     },
                                                     source = model.source,
-                                                    showLatest = state.showLatest,
-                                                    showPin = state.showPin,
-                                                    onClickItem = onClickItem,
-                                                    onLongClickItem = onLongClickItem,
+                                                    showLatest = state.showLatest && !state.isBulkMode,
+                                                    showPin = state.showPin && !state.isBulkMode,
+                                                    isBulkMode = state.isBulkMode,
+                                                    isSelected = isSelected,
+                                                    onToggleSelect = { onToggleSelectSource(model.source.id) },
+                                                    onClickItem = clickAction,
+                                                    onLongClickItem = longClickAction,
                                                     onClickPin = onClickPin,
                                                 )
                                             }
@@ -204,10 +244,13 @@ fun SourcesScreen(
                                             SourceItem(
                                                 modifier = Modifier.animateItemFastScroll(),
                                                 source = model.source,
-                                                showLatest = state.showLatest,
-                                                showPin = state.showPin,
-                                                onClickItem = onClickItem,
-                                                onLongClickItem = onLongClickItem,
+                                                showLatest = state.showLatest && !state.isBulkMode,
+                                                showPin = state.showPin && !state.isBulkMode,
+                                                isBulkMode = state.isBulkMode,
+                                                isSelected = isSelected,
+                                                onToggleSelect = { onToggleSelectSource(model.source.id) },
+                                                onClickItem = clickAction,
+                                                onLongClickItem = longClickAction,
                                                 onClickPin = onClickPin,
                                             )
                                         }
@@ -222,7 +265,10 @@ fun SourcesScreen(
                 Column(
                     modifier = Modifier
                         .background(MaterialTheme.colorScheme.background)
-                        .align(Alignment.TopCenter),
+                        .align(Alignment.TopCenter)
+                        .onGloballyPositioned { layoutCoordinates ->
+                            searchBoxHeight = with(density) { layoutCoordinates.size.height.toDp() }
+                        },
                 ) {
                     AnimatedFloatingSearchBox(
                         listState = lazyListState,
@@ -233,15 +279,73 @@ fun SourcesScreen(
                             horizontal = MaterialTheme.padding.medium,
                             vertical = MaterialTheme.padding.small,
                         ),
-                        onGloballyPositioned = { layoutCoordinates ->
-                            searchBoxHeight = with(density) { layoutCoordinates.size.height.toDp() + 2 * MaterialTheme.padding.small + 48.dp }
-                        },
                     )
-                    TagFilterChipBar(
-                        tags = state.allTags.toList(),
-                        selectedTag = state.selectedTag,
-                        onSelectTag = onSelectTag,
-                    )
+                    if (state.allTags.isNotEmpty() || state.selectedTag != null) {
+                        TagFilterChipBar(
+                            tags = state.allTags.toList(),
+                            selectedTag = state.selectedTag,
+                            onSelectTag = onSelectTag,
+                        )
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = state.isBulkMode,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
+                    GlassSurface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        style = GlassDefaults.prominentStyle(),
+                        isStandardSurface = true,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                IconButton(onClick = onClearSourceSelection) {
+                                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel")
+                                }
+                                Text(
+                                    text = "${state.selectedSources.size} selected",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                IconButton(onClick = onSelectAllSources) {
+                                    Icon(imageVector = Icons.Default.SelectAll, contentDescription = "Select All")
+                                }
+                                IconButton(onClick = onClickBulkTags) {
+                                    Icon(imageVector = Icons.Default.Label, contentDescription = "Tags")
+                                }
+                                IconButton(onClick = onClickBulkPin) {
+                                    Icon(imageVector = Icons.Default.PushPin, contentDescription = "Pin / Unpin")
+                                }
+                                IconButton(onClick = onClickBulkUninstall) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Uninstall",
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 // KMK <--
             }
@@ -284,32 +388,47 @@ private fun SourceItem(
     onClickPin: (Source) -> Unit,
     modifier: Modifier = Modifier,
     dragHandle: @Composable (RowScope.() -> Unit)? = null,
+    isBulkMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
 ) {
+    val backgroundModifier = if (isSelected) {
+        modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f))
+    } else {
+        modifier
+    }
     BaseSourceItem(
-        modifier = modifier,
+        modifier = backgroundModifier,
         source = source,
         onClickItem = { onClickItem(source, Listing.Popular) },
         onLongClickItem = { onLongClickItem(source) },
         dragHandle = dragHandle,
         action = {
-            if (source.supportsLatest /* SY --> */ && showLatest /* SY <-- */) {
-                TextButton(onClick = { onClickItem(source, Listing.Latest) }) {
-                    Text(
-                        text = stringResource(MR.strings.latest),
-                        style = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.primary,
-                        ),
+            if (isBulkMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelect() },
+                )
+            } else {
+                if (source.supportsLatest /* SY --> */ && showLatest /* SY <-- */) {
+                    TextButton(onClick = { onClickItem(source, Listing.Latest) }) {
+                        Text(
+                            text = stringResource(MR.strings.latest),
+                            style = LocalTextStyle.current.copy(
+                                color = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
+                }
+                // SY -->
+                if (showPin) {
+                    SourcePinButton(
+                        isPinned = Pin.Pinned in source.pin,
+                        onClick = { onClickPin(source) },
                     )
                 }
+                // SY <--
             }
-            // SY -->
-            if (showPin) {
-                SourcePinButton(
-                    isPinned = Pin.Pinned in source.pin,
-                    onClick = { onClickPin(source) },
-                )
-            }
-            // SY <--
         },
     )
 }
@@ -361,144 +480,156 @@ fun SourceOptionsDialog(
     onClickAddToHome: (() -> Unit)? = null,
     // KMK <--
 ) {
-    AlertDialog(
-        title = {
-            Text(text = source.visualName)
-        },
-        text = {
-            Column {
-                if (onClickManageTags != null) {
-                    Text(
-                        text = "Tags",
-                        modifier = Modifier
-                            .clickable(onClick = onClickManageTags)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                if (onClickSelectMultiple != null) {
-                    Text(
-                        text = "Select Multiple",
-                        modifier = Modifier
-                            .clickable(onClick = onClickSelectMultiple)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                val isPinned = Pin.Pinned in source.pin
-                val textId = if (isPinned) MR.strings.action_unpin else MR.strings.action_pin
-                Text(
-                    text = stringResource(textId),
-                    modifier = Modifier
-                        .clickable(onClick = onClickPin)
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                )
-                if (isPinned) {
-                    if (onClickMoveUp != null) {
-                        Text(
-                            text = "Move Up",
-                            modifier = Modifier
-                                .clickable(onClick = onClickMoveUp)
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                        )
-                    }
-                    if (onClickMoveDown != null) {
-                        Text(
-                            text = "Move Down",
-                            modifier = Modifier
-                                .clickable(onClick = onClickMoveDown)
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                        )
-                    }
-                }
-                if (!source.isLocal()) {
-                    Text(
-                        text = stringResource(MR.strings.action_disable),
-                        modifier = Modifier
-                            .clickable(onClick = onClickDisable)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                // SY -->
-                if (onClickSetCategories != null) {
-                    Text(
-                        text = stringResource(MR.strings.categories),
-                        modifier = Modifier
-                            .clickable(onClick = onClickSetCategories)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                if (onClickToggleDataSaver != null) {
-                    Text(
-                        text = if (source.isExcludedFromDataSaver) {
-                            stringResource(SYMR.strings.data_saver_stop_exclude)
-                        } else {
-                            stringResource(SYMR.strings.data_saver_exclude)
-                        },
-                        modifier = Modifier
-                            .clickable(onClick = onClickToggleDataSaver)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                // SY <--
-                // KMK -->
-                if (onClickSettings != null &&
-                    source.id !in listOf(LocalSource.ID, EH_SOURCE_ID, EXH_SOURCE_ID)
-                ) {
-                    Text(
-                        text = stringResource(MR.strings.label_extension_info),
-                        modifier = Modifier
-                            .clickable(onClick = onClickSettings)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-
-                if (onClickUninstall != null) {
-                    Text(
-                        text = stringResource(MR.strings.ext_uninstall),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .clickable(onClick = onClickUninstall)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                // KMK -->
-                if (onClickInstallMiniApp != null) {
-                    Text(
-                        text = if (isMiniInstalled) {
-                            stringResource(KMR.strings.mini_mode_uninstall_action)
-                        } else {
-                            stringResource(KMR.strings.mini_mode_install_action)
-                        },
-                        modifier = Modifier
-                            .clickable(onClick = onClickInstallMiniApp)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                if (onClickAddToHome != null) {
-                    Text(
-                        text = stringResource(KMR.strings.mini_mode_add_to_home),
-                        modifier = Modifier
-                            .clickable(onClick = onClickAddToHome)
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-                }
-                // KMK <--
-            }
-        },
+    KisaraBottomSheet(
         onDismissRequest = onDismiss,
-        confirmButton = {},
-    )
+        title = source.visualName,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+        ) {
+            if (onClickManageTags != null) {
+                Text(
+                    text = "Tags",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickManageTags)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            if (onClickSelectMultiple != null) {
+                Text(
+                    text = "Select Multiple",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickSelectMultiple)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            val isPinned = Pin.Pinned in source.pin
+            val textId = if (isPinned) MR.strings.action_unpin else MR.strings.action_pin
+            Text(
+                text = stringResource(textId),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .clickable(onClick = onClickPin)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            )
+            if (isPinned) {
+                if (onClickMoveUp != null) {
+                    Text(
+                        text = "Move Up",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .clickable(onClick = onClickMoveUp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                }
+                if (onClickMoveDown != null) {
+                    Text(
+                        text = "Move Down",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .clickable(onClick = onClickMoveDown)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                }
+            }
+            if (!source.isLocal()) {
+                Text(
+                    text = stringResource(MR.strings.action_disable),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickDisable)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            // SY -->
+            if (onClickSetCategories != null) {
+                Text(
+                    text = stringResource(MR.strings.categories),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickSetCategories)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            if (onClickToggleDataSaver != null) {
+                Text(
+                    text = if (source.isExcludedFromDataSaver) {
+                        stringResource(SYMR.strings.data_saver_stop_exclude)
+                    } else {
+                        stringResource(SYMR.strings.data_saver_exclude)
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickToggleDataSaver)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            // SY <--
+            // KMK -->
+            if (onClickSettings != null &&
+                source.id !in listOf(LocalSource.ID, EH_SOURCE_ID, EXH_SOURCE_ID)
+            ) {
+                Text(
+                    text = stringResource(MR.strings.label_extension_info),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickSettings)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+
+            if (onClickUninstall != null) {
+                Text(
+                    text = stringResource(MR.strings.ext_uninstall),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .clickable(onClick = onClickUninstall)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            // KMK -->
+            if (onClickInstallMiniApp != null) {
+                Text(
+                    text = if (isMiniInstalled) {
+                        stringResource(KMR.strings.mini_mode_uninstall_action)
+                    } else {
+                        stringResource(KMR.strings.mini_mode_install_action)
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickInstallMiniApp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            if (onClickAddToHome != null) {
+                Text(
+                    text = stringResource(KMR.strings.mini_mode_add_to_home),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .clickable(onClick = onClickAddToHome)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+            // KMK <--
+        }
+    }
 }
 
 sealed interface SourceUiModel {
@@ -517,33 +648,43 @@ fun SourceCategoriesDialog(
     val newCategories = remember(source) {
         mutableStateListOf<String>().also { it += source.categories }
     }
-    AlertDialog(
-        title = {
-            Text(text = source.visualName)
-        },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                categories.forEach { category ->
-                    LabeledCheckbox(
-                        label = category,
-                        checked = category in newCategories,
-                        onCheckedChange = {
-                            if (it) {
-                                newCategories += category
-                            } else {
-                                newCategories -= category
-                            }
-                        },
-                    )
+    KisaraBottomSheet(
+        onDismissRequest = onDismissRequest,
+        title = source.visualName,
+        subtitle = stringResource(MR.strings.categories),
+        footer = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = { onClickCategories(newCategories.toList()) }) {
+                    Text(text = stringResource(MR.strings.action_ok))
                 }
             }
         },
-        onDismissRequest = onDismissRequest,
-        confirmButton = {
-            TextButton(onClick = { onClickCategories(newCategories.toList()) }) {
-                Text(text = stringResource(MR.strings.action_ok))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            categories.forEach { category ->
+                LabeledCheckbox(
+                    label = category,
+                    checked = category in newCategories,
+                    onCheckedChange = {
+                        if (it) {
+                            newCategories += category
+                        } else {
+                            newCategories -= category
+                        }
+                    },
+                )
             }
-        },
-    )
+        }
+    }
 }
 // SY <--

@@ -154,24 +154,8 @@ object MangaTitleParser {
     }
 
     fun parseDescriptionTags(description: String?): List<String> {
-        if (description.isNullOrBlank()) return emptyList()
-        val results = mutableListOf<String>()
-        val lines = description.lines()
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.contains(":")) {
-                val parts = trimmed.split(",", ";").map { it.trim() }
-                for (part in parts) {
-                    if (part.contains(":")) {
-                        val cleaned = part.replace(GENDER_SYMBOLS_REGEX, "").trim()
-                        if (cleaned.isNotEmpty()) {
-                            results.add(cleaned)
-                        }
-                    }
-                }
-            }
-        }
-        return results.distinct()
+        // Auto-detect tags from colon in description removed per user request
+        return emptyList()
     }
 
     fun isColorized(manga: Manga?, title: String): Boolean {

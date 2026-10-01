@@ -4,7 +4,15 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.net.toUri
+import com.hippo.unifile.UniFile
+import tachiyomi.domain.storage.service.StorageManager
+import tachiyomi.domain.storage.service.StoragePreferences
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 object LocalApkExtensionSupport {
 
@@ -17,15 +25,16 @@ object LocalApkExtensionSupport {
         PackageManager.GET_SIGNATURES or
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else 0)
 
-    private fun migrateDir(from: File, to: File) {
+    private fun migrateDir(context: Context, from: File, to: File) {
         try {
             if (from.exists() && from.isDirectory) {
                 to.mkdirs()
                 from.listFiles()?.forEach { file ->
                     val target = File(to, file.name)
                     if (!target.exists()) {
-                        file.copyTo(target, overwrite = true)
+                        copyApkSafely(context, file, target)
                     }
+                    file.setWritable(true)
                     file.delete()
                 }
                 from.delete()
@@ -34,20 +43,73 @@ object LocalApkExtensionSupport {
     }
 
     fun getSideloadDir(context: Context): File {
-        val internalDir = File(context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
-        val externalDir = File(context.getExternalFilesDir(null) ?: context.filesDir, SIDELOAD_DIR)
-        if (externalDir.exists() && externalDir.isDirectory && internalDir != externalDir) {
-            migrateDir(externalDir, internalDir)
+        // Try StorageManager first
+        val storageManager = runCatching { Injekt.get<StorageManager>() }.getOrNull()
+        val externalUniDir = storageManager?.getExtensionsDirectory()
+        val externalPath = externalUniDir?.filePath
+        if (!externalPath.isNullOrBlank()) {
+            val externalFile = File(externalPath)
+            if (externalFile.exists() || externalFile.mkdirs()) {
+                val internalDir = File(context.filesDir, SIDELOAD_DIR)
+                if (internalDir.exists() && internalDir.isDirectory && internalDir != externalFile) {
+                    migrateDir(context, internalDir, externalFile)
+                }
+                return externalFile
+            }
         }
-        return internalDir
+
+        // Fallback: Check StoragePreferences directly
+        val storagePrefs = runCatching { Injekt.get<StoragePreferences>() }.getOrNull()
+        val baseUriString = storagePrefs?.baseStorageDirectory()?.get()
+        if (!baseUriString.isNullOrBlank()) {
+            var basePath = runCatching {
+                UniFile.fromUri(context, baseUriString.toUri())?.filePath
+            }.getOrNull()
+
+            // If UniFile.filePath failed, decode primary storage path from URI
+            if (basePath.isNullOrBlank() && baseUriString.contains("primary", ignoreCase = true)) {
+                val decoded = android.net.Uri.decode(baseUriString)
+                val rel = decoded.substringAfter("primary:").substringBefore("/document/").trim('/')
+                if (rel.isNotBlank()) {
+                    basePath = File(android.os.Environment.getExternalStorageDirectory(), rel).absolutePath
+                }
+            }
+
+            if (!basePath.isNullOrBlank()) {
+                val candidateDir = File(basePath, StorageManager.EXTENSIONS_PATH).takeIf { it.exists() }
+                    ?: File(basePath, StorageManager.LEGACY_EXTENSIONS_PATH).takeIf { it.exists() }
+                    ?: File(basePath, StorageManager.EXTENSIONS_PATH)
+                if (candidateDir.exists() || candidateDir.mkdirs()) {
+                    val internalDir = File(context.filesDir, SIDELOAD_DIR)
+                    if (internalDir.exists() && internalDir.isDirectory && internalDir != candidateDir) {
+                        migrateDir(context, internalDir, candidateDir)
+                    }
+                    return candidateDir
+                }
+            }
+        }
+
+        // Fallback 2: Check standard shared storage location
+        val standardDir = File(android.os.Environment.getExternalStorageDirectory(), "Aaaaa/Otaku/Komikku/extensions")
+        if (standardDir.exists() && standardDir.isDirectory) {
+            return standardDir
+        }
+
+        // Final fallback: App-internal storage
+        return File(context.filesDir, SIDELOAD_DIR).apply { mkdirs() }
     }
 
     private var cachedLocalApkFiles: List<File>? = null
     private var lastLocalApkCheckTime: Long = 0
 
-    fun invalidateLocalApkCache() {
+    fun invalidateLocalApkCache(context: Context? = null) {
         cachedLocalApkFiles = null
         lastLocalApkCheckTime = 0
+        context?.let {
+            try {
+                File(it.cacheDir, "ext_pkg_info_cache").deleteRecursively()
+            } catch (_: Exception) {}
+        }
     }
 
     fun getLocalApkFiles(context: Context): List<File> {
@@ -56,12 +118,48 @@ object LocalApkExtensionSupport {
             return cachedLocalApkFiles!!
         }
         val root = getSideloadDir(context)
-        val files = root.listFiles()
-            ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+        val rootFiles = root.listFiles()
+            ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.length() > 0L }
             .orEmpty()
-        cachedLocalApkFiles = files
-        lastLocalApkCheckTime = now
+        val internalDir = File(context.filesDir, SIDELOAD_DIR)
+        val internalFiles = if (internalDir != root && internalDir.exists()) {
+            internalDir.listFiles()
+                ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.length() > 0L }
+                .orEmpty()
+        } else {
+            emptyList()
+        }
+        val files = (rootFiles + internalFiles).distinctBy { it.name }
+        if (files.isNotEmpty()) {
+            cachedLocalApkFiles = files
+            lastLocalApkCheckTime = now
+        }
         return files
+    }
+
+    fun findApkForPackage(context: Context, packageName: String): File? {
+        val cleanPkg = packageName.substringBeforeLast('-').substringBeforeLast('_')
+
+        val candidates = getLocalApkFiles(context).filter { file ->
+            val name = file.nameWithoutExtension
+            val base = name.substringBeforeLast('-').substringBeforeLast('_')
+            name == packageName || base == packageName || name == cleanPkg || base == cleanPkg
+        }
+        if (candidates.size == 1) return candidates.first()
+        if (candidates.size > 1) {
+            return candidates.maxWithOrNull(
+                compareBy<File> { file ->
+                    runCatching {
+                        ExtensionLoader.getPackageArchiveInfoWithCache(context, file, PACKAGE_FLAGS)
+                            ?.let { androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(it) }
+                    }.getOrNull() ?: -1L
+                }.thenBy { it.lastModified() }
+            )
+        }
+
+        val root = getSideloadDir(context)
+        return File(root, "$packageName.apk").takeIf { it.isFile }
+            ?: File(root, "$cleanPkg.apk").takeIf { it.isFile }
     }
 
     fun getLocalPackageInfoOrNull(
@@ -69,9 +167,7 @@ object LocalApkExtensionSupport {
         pkgManager: PackageManager,
         packageName: String,
     ): PackageInfo? {
-        val root = getSideloadDir(context)
-        val apkFile = File(root, "$packageName.apk")
-        if (!apkFile.isFile) return null
+        val apkFile = findApkForPackage(context, packageName) ?: return null
         return ExtensionLoader.getPackageArchiveInfoWithCache(context, apkFile, PACKAGE_FLAGS)
     }
 
@@ -80,21 +176,27 @@ object LocalApkExtensionSupport {
         pkgName: String,
         sourcePath: String,
     ): String {
-        val sourceFile = File(sourcePath)
-        if (!sourceFile.exists()) {
-            return sourcePath
+        var sourceFile = File(sourcePath)
+        if (!sourceFile.exists() || !sourceFile.isFile) {
+            sourceFile = findApkForPackage(context, pkgName) ?: return sourcePath
         }
 
         val internalCache = File(context.filesDir, LOAD_CACHE_DIR).apply { mkdirs() }
         val externalCache = File(context.getExternalFilesDir(null) ?: context.filesDir, LOAD_CACHE_DIR)
         if (externalCache.exists() && externalCache.isDirectory && internalCache != externalCache) {
-            migrateDir(externalCache, internalCache)
+            migrateDir(context, externalCache, internalCache)
         }
         val cacheRoot = internalCache
+
+        // If sourceFile is already inside cacheRoot and read-only, reuse it directly
+        if (sourceFile.parentFile?.absolutePath == cacheRoot.absolutePath && !sourceFile.canWrite()) {
+            return sourceFile.absolutePath
+        }
+
         val uniqueName = "${pkgName}_${sourceFile.lastModified()}_${sourceFile.length()}.apk"
         val targetFile = File(cacheRoot, uniqueName)
 
-        if (targetFile.exists()) {
+        if (targetFile.exists() && targetFile.length() == sourceFile.length()) {
             targetFile.setReadOnly()
             return targetFile.absolutePath
         }
@@ -109,21 +211,35 @@ object LocalApkExtensionSupport {
 
         val tempFile = File(cacheRoot, "$uniqueName.tmp")
         if (tempFile.exists()) {
+            tempFile.setWritable(true)
             tempFile.delete()
         }
 
-        sourceFile.copyTo(tempFile, overwrite = true)
+        sourceFile.inputStream().use { input ->
+            java.io.FileOutputStream(tempFile, false).use { out ->
+                input.copyTo(out)
+                out.flush()
+            }
+        }
         tempFile.setLastModified(sourceFile.lastModified())
         tempFile.setReadOnly()
 
         if (targetFile.exists()) {
+            targetFile.setWritable(true)
             targetFile.delete()
         }
 
         if (!tempFile.renameTo(targetFile)) {
-            tempFile.copyTo(targetFile, overwrite = true)
+            targetFile.setWritable(true)
+            sourceFile.inputStream().use { input ->
+                java.io.FileOutputStream(targetFile, false).use { out ->
+                    input.copyTo(out)
+                    out.flush()
+                }
+            }
             targetFile.setLastModified(sourceFile.lastModified())
             targetFile.setReadOnly()
+            tempFile.setWritable(true)
             tempFile.delete()
         }
 
@@ -310,6 +426,53 @@ object LocalApkExtensionSupport {
         }
     }
 
+    fun copyApkSafely(context: Context, sourceFile: File, targetFile: File) {
+        val storageManager = runCatching { Injekt.get<StorageManager>() }.getOrNull()
+        val extUniDir = storageManager?.getExtensionsDirectory()
+
+        // 1. Try deleting existing target via UniFile if inside external directory
+        try {
+            val uniTarget = extUniDir?.findFile(targetFile.name)
+            uniTarget?.delete()
+        } catch (_: Exception) {}
+
+        // 2. Direct stream overwrite (truncates existing file in place, avoids unlink failure)
+        var writeSucceeded = false
+        try {
+            targetFile.setWritable(true)
+            if (targetFile.exists()) {
+                targetFile.delete()
+            }
+            java.io.FileOutputStream(targetFile, false).use { out ->
+                sourceFile.inputStream().use { input ->
+                    input.copyTo(out)
+                }
+                out.flush()
+            }
+            writeSucceeded = true
+        } catch (_: Exception) {
+            writeSucceeded = false
+        }
+
+        // 3. Fallback to UniFile if direct file stream failed (e.g. Scoped Storage SAF tree)
+        if (!writeSucceeded && extUniDir != null) {
+            val destUni = extUniDir.findFile(targetFile.name) ?: extUniDir.createFile(targetFile.name)
+            if (destUni != null) {
+                destUni.openOutputStream()?.use { out ->
+                    sourceFile.inputStream().use { input ->
+                        input.copyTo(out)
+                    }
+                    out.flush()
+                } ?: throw java.io.IOException("Failed to open UniFile output stream for ${targetFile.name}")
+                writeSucceeded = true
+            }
+        }
+
+        if (!writeSucceeded && !targetFile.exists()) {
+            throw java.io.IOException("Failed to copy APK to ${targetFile.absolutePath}")
+        }
+    }
+
     fun storeSideloadedApk(
         context: Context,
         packageName: String,
@@ -319,8 +482,7 @@ object LocalApkExtensionSupport {
         invalidateLocalApkCache()
         val root = getSideloadDir(context)
         val targetFile = File(root, "$packageName.apk")
-        sourceFile.copyTo(targetFile, overwrite = true)
-        targetFile.setReadOnly()
+        copyApkSafely(context, sourceFile, targetFile)
         extractAndCacheApkIcon(context, targetFile, packageName)
         return targetFile
     }
@@ -333,16 +495,42 @@ object LocalApkExtensionSupport {
         ExtensionLoader.invalidateCacheForPackage(context, packageName)
         val root = getSideloadDir(context)
         val cacheRoot = File(context.filesDir, LOAD_CACHE_DIR)
+        var deleted = false
+
+        // 1. Delete from external UniFile directory (supports SAF document deletion across UIDs)
+        try {
+            val storageManager = runCatching { Injekt.get<StorageManager>() }.getOrNull()
+            val extUniDir = storageManager?.getExtensionsDirectory()
+            val cleanPkg = packageName.substringBeforeLast('-')
+            extUniDir?.listFiles()?.forEach { uniFile ->
+                val filename = uniFile.name ?: return@forEach
+                if (filename.endsWith(".apk", ignoreCase = true)) {
+                    val base = filename.substringBeforeLast('.')
+                    val matches = base == packageName || base == cleanPkg ||
+                        base.startsWith("$packageName-") || base.startsWith("${packageName}_") ||
+                        base.startsWith("$cleanPkg-") || base.startsWith("${cleanPkg}_")
+                    if (matches) {
+                        if (uniFile.delete()) {
+                            deleted = true
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
 
         fun deleteFromDir(dir: File): Boolean {
-            var deleted = false
+            var dirDeleted = false
             val files = dir.listFiles()?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) } ?: return false
+            val cleanPkg = packageName.substringBeforeLast('-')
             for (file in files) {
                 val name = file.nameWithoutExtension
-                val matchesName = name == packageName || name.startsWith("$packageName-") || name.startsWith("${packageName}_")
+                val matchesName = name == packageName || name == cleanPkg ||
+                    name.startsWith("$packageName-") || name.startsWith("${packageName}_") ||
+                    name.startsWith("$cleanPkg-") || name.startsWith("${cleanPkg}_")
                 val matchesPackage = matchesName || try {
                     val info = ExtensionLoader.getPackageArchiveInfoWithCache(context, file, PackageManager.GET_META_DATA)
-                    info?.packageName == packageName
+                    val infoPkg = info?.packageName
+                    infoPkg == packageName || (infoPkg != null && infoPkg == cleanPkg)
                 } catch (_: Exception) {
                     false
                 }
@@ -352,17 +540,19 @@ object LocalApkExtensionSupport {
                     val del = file.delete()
                     if (!del && file.exists()) {
                         try {
-                            file.writeBytes(ByteArray(0))
+                            java.io.FileOutputStream(file, false).close() // truncate to 0 bytes
                         } catch (_: Exception) {}
                     }
-                    deleted = true
+                    dirDeleted = true
                 }
             }
-            return deleted
+            return dirDeleted
         }
 
         val d1 = deleteFromDir(root)
-        val d2 = deleteFromDir(cacheRoot)
-        return d1 || d2
+        val internalDir = File(context.filesDir, SIDELOAD_DIR)
+        val d2 = if (internalDir != root && internalDir.exists()) deleteFromDir(internalDir) else false
+        val d3 = deleteFromDir(cacheRoot)
+        return deleted || d1 || d2 || d3
     }
 }

@@ -227,7 +227,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         scope.launchIO {
             Injekt.get<DatabaseHandler>() // Warm up SQLite database connection
             MangaCoverMetadata.load()
-            eu.kanade.tachiyomi.data.ai.ResourceMonitor.start()
         }
         // KMK <--
 
@@ -392,17 +391,26 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     override fun getPackageName(): String {
         try {
             // Override the value passed as X-Requested-With in WebView requests
-            val stackTrace = Looper.getMainLooper().thread.stackTrace
-            // KMK -->
-            val chromiumClasses = setOf("org.chromium.base.buildinfo", "org.chromium.base.apkinfo")
-            val chromiumMethods = setOf("getall", "getpackagename", "<init>")
-            // KMK <--
-            val isChromiumCall = stackTrace.any { trace ->
-                trace.className.lowercase() in chromiumClasses &&
-                    trace.methodName.lowercase() in chromiumMethods
+            val stackTrace = Thread.currentThread().stackTrace
+            // KMK --> ponytail: inspect only immediate top frames without pausing main looper or heavy string allocations
+            val maxDepth = minOf(stackTrace.size, 8)
+            for (i in 0 until maxDepth) {
+                val trace = stackTrace[i]
+                val className = trace.className
+                if (className.startsWith("org.chromium.base.BuildInfo", ignoreCase = true) ||
+                    className.startsWith("org.chromium.base.ApkInfo", ignoreCase = true)
+                ) {
+                    val methodName = trace.methodName
+                    if (methodName.equals("getAll", ignoreCase = true) ||
+                        methodName.equals("getPackageName", ignoreCase = true) ||
+                        methodName.equals("<init>", ignoreCase = true)
+                    ) {
+                        return WebViewUtil.spoofedPackageName(applicationContext)
+                    }
+                    break
+                }
             }
-
-            if (isChromiumCall) return WebViewUtil.spoofedPackageName(applicationContext)
+            // KMK <--
         } catch (_: Exception) {
         }
 

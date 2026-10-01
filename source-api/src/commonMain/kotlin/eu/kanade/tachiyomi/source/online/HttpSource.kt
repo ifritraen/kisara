@@ -321,9 +321,26 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param manga the manga to be updated.
      */
+    // KMK -->
+    private val isGettingMangaUrl = java.lang.ThreadLocal<Boolean>()
+
     open fun mangaDetailsRequest(manga: SManga): Request {
-        return GET(baseUrl + manga.url, headers)
+        val defaultUrl = if (manga.url.startsWith("http://") || manga.url.startsWith("https://")) manga.url else baseUrl + manga.url
+        val url = if (isGettingMangaUrl.get() == true) {
+            defaultUrl
+        } else {
+            try {
+                isGettingMangaUrl.set(true)
+                getMangaUrl(manga)
+            } catch (_: Throwable) {
+                defaultUrl
+            } finally {
+                isGettingMangaUrl.remove()
+            }
+        }
+        return GET(url, headers)
     }
+    // KMK <--
 
     /**
      * Parses the response from the site and returns the details of a manga.
@@ -418,9 +435,11 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param manga the manga to look for chapters.
      */
+    // KMK -->
     protected open fun chapterListRequest(manga: SManga): Request {
-        return GET(baseUrl + manga.url, headers)
+        return mangaDetailsRequest(manga)
     }
+    // KMK <--
 
     /**
      * Parses the response from the site and returns a list of chapters.

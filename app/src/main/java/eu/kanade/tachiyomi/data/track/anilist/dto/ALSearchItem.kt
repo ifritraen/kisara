@@ -19,6 +19,7 @@ data class ALSearchItem(
     val staff: ALStaff? = null,
     val studios: ALStudios? = null,
     val genres: List<String>? = null,
+    val tags: List<ALTag>? = null,
 ) {
     fun toALManga(): ALManga = ALManga(
         remoteId = id,
@@ -31,6 +32,7 @@ data class ALSearchItem(
         totalChapters = chapters ?: 0,
         averageScore = averageScore ?: -1,
         staff = staff ?: ALStaff(emptyList()),
+        tags = (genres.orEmpty() + tags?.mapNotNull { it.name }.orEmpty()).distinct(),
     )
 
     fun toALAnime(): ALAnime = ALAnime(
@@ -84,3 +86,8 @@ data class ALStaffName(
         return userPreferred ?: full ?: native
     }
 }
+
+@Serializable
+data class ALTag(
+    val name: String,
+)

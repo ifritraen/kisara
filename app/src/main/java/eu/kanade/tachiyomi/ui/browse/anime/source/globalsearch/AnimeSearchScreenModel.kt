@@ -217,10 +217,12 @@ abstract class AnimeSearchScreenModel(
                         }
                         val domainAnimes = searchResult.animes.map { it.toDomainAnime(source.id) }
                         val rawAnimes = networkToLocalAnime.await(domainAnimes)
-                        val result = if (rawAnimes.isEmpty()) {
+                        val optionalTags = eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.extractOptionalTags(query)
+                        val rankedAnimes = eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.rankAnimesByOptionalTagMatches(rawAnimes, optionalTags)
+                        val result = if (rankedAnimes.isEmpty()) {
                             AnimeSearchItemResult.Empty
                         } else {
-                            AnimeSearchItemResult.Success(rawAnimes)
+                            AnimeSearchItemResult.Success(rankedAnimes)
                         }
                         if (isActive) {
                             withContext(coroutineDispatcher) {

@@ -198,18 +198,21 @@ internal object ExtensionLoader {
             .filter { isPackageAnExtension(it) }
             .map { ExtensionInfo(packageInfo = it, isShared = false) }
 
-        val privateExtPkgs = legacyPrivateExtPkgs + sideloadedExtPkgs
-
-        val extPkgs = (sharedExtPkgs + privateExtPkgs)
-            // Remove duplicates. Shared takes priority than private by default
-            .distinctBy { it.packageInfo.packageName }
-            // Compare version number
-            .mapNotNull { sharedPkg ->
-                val privatePkg = privateExtPkgs
-                    .singleOrNull { it.packageInfo.packageName == sharedPkg.packageInfo.packageName }
-                selectExtensionPackage(sharedPkg, privatePkg)
+        val deduplicatedPrivateExtPkgs = (legacyPrivateExtPkgs + sideloadedExtPkgs)
+            .groupBy { it.packageInfo.packageName }
+            .values
+            .mapNotNull { group ->
+                group.maxByOrNull { PackageInfoCompat.getLongVersionCode(it.packageInfo) }
             }
-            .toList()
+
+        val privateExtPkgsByPkgName = deduplicatedPrivateExtPkgs.associateBy { it.packageInfo.packageName }
+        val allPkgNames = (sharedExtPkgs.map { it.packageInfo.packageName } + deduplicatedPrivateExtPkgs.map { it.packageInfo.packageName }).distinct()
+
+        val extPkgs = allPkgNames.mapNotNull { pkgName ->
+            val shared = sharedExtPkgs.firstOrNull { it.packageInfo.packageName == pkgName }
+            val private = privateExtPkgsByPkgName[pkgName]
+            selectExtensionPackage(shared, private)
+        }.toList()
 
         if (extPkgs.isEmpty()) return emptyList()
 
@@ -296,11 +299,11 @@ internal object ExtensionLoader {
                     )
                 }
         } else {
-            var sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$pkgName.apk")
-            if (!sideloadedFile.isFile) {
-                sideloadedFile = File(LocalApkExtensionSupport.getSideloadDir(context), "$cleanPkgName.apk")
-            }
-            if (sideloadedFile.isFile) {
+            val sideloadedFile = LocalApkExtensionSupport.findApkForPackage(context, pkgName)
+                ?: LocalApkExtensionSupport.findApkForPackage(context, cleanPkgName)
+                ?: File(context.filesDir, "sideloaded_extensions/$pkgName.apk").takeIf { it.isFile }
+                ?: File(context.filesDir, "sideloaded_extensions/$cleanPkgName.apk").takeIf { it.isFile }
+            if (sideloadedFile != null && sideloadedFile.isFile) {
                 getPackageArchiveInfoWithCache(context, sideloadedFile, PACKAGE_FLAGS)
                     ?.takeIf { isPackageAnExtension(it) }
                     ?.let {
@@ -385,7 +388,7 @@ internal object ExtensionLoader {
             return LoadResult.Error
         }
 
-        val isSideloaded = LocalApkExtensionSupport.getLocalApkFiles(context).any { it.nameWithoutExtension == pkgName }
+        val isSideloaded = !extensionInfo.isShared || LocalApkExtensionSupport.findApkForPackage(context, pkgName) != null
         // KMK -->
         // temporarilySideloadedPkgs may hold suffixed pkg names (e.g. "eu.pkg_1234567") from repo metadata
         // while pkgName here is the clean name from the APK manifest. Strip numeric suffixes before matching.
@@ -572,12 +575,8 @@ internal object ExtensionLoader {
      * have sourceDir which breaks assets loading (used for getting icon here).
      */
     private fun ApplicationInfo.fixBasePaths(apkPath: String) {
-        if (sourceDir == null) {
-            sourceDir = apkPath
-        }
-        if (publicSourceDir == null) {
-            publicSourceDir = apkPath
-        }
+        sourceDir = apkPath
+        publicSourceDir = apkPath
     }
 
     private fun PackageManager.getPackageArchiveInfoCompat(archiveFilePath: String, flags: Int): PackageInfo? {

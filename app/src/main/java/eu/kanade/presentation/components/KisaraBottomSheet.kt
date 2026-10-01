@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
  * Standard Kisara Frosted Glass Modal Bottom Sheet.
  *
  * Provides a unified bottom-up slide-in surface with 24dp top rounding,
- * drag handle, translucent container tint, and optional header/footer action slots.
+ * drag handle, GlassSurface prominent style, and optional header/footer action slots.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,9 +48,6 @@ fun KisaraBottomSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val isDark = colorScheme.background.luminance() < 0.5f
-
-    val containerColor = colorScheme.surface.copy(alpha = if (isDark) 0.92f else 0.96f)
     val scrimColor = colorScheme.scrim.copy(alpha = 0.32f)
 
     ModalBottomSheet(
@@ -58,62 +55,76 @@ fun KisaraBottomSheet(
         modifier = modifier,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = containerColor,
+        containerColor = Color.Transparent,
         scrimColor = scrimColor,
-        contentWindowInsets = { WindowInsets.navigationBars },
-        dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            )
-        },
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        GlassSurface(
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            if (title != null || headerActions != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BottomSheetDefaults.DragHandle(
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
-                        if (title != null) {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = colorScheme.onSurface,
-                            )
-                        }
-                        if (subtitle != null) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (headerActions != null) {
+                    if (title != null || headerActions != null) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            headerActions()
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                                if (title != null) {
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colorScheme.onSurface,
+                                    )
+                                }
+                                if (subtitle != null) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            if (headerActions != null) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    headerActions()
+                                }
+                            }
                         }
                     }
+
+                    content()
+
+                    if (footer != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        footer()
+                    }
                 }
-            }
-
-            content()
-
-            if (footer != null) {
-                Spacer(modifier = Modifier.height(4.dp))
-                footer()
             }
         }
     }

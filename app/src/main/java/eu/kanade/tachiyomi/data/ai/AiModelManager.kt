@@ -2,7 +2,11 @@ package eu.kanade.tachiyomi.data.ai
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
+import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.network.NetworkHelper
+import tachiyomi.domain.storage.service.StorageManager
+import tachiyomi.domain.storage.service.StoragePreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +55,50 @@ class AiModelManager(
         fun isDownloading(type: ModelType): Boolean {
             return downloadJobs[type]?.isActive == true
         }
+
+        fun getModelsBaseDir(context: Context): File {
+            val storageManager = runCatching { Injekt.get<StorageManager>() }.getOrNull()
+            val externalUniDir = storageManager?.getModelsDirectory()
+            val externalPath = externalUniDir?.filePath
+            if (!externalPath.isNullOrBlank()) {
+                val externalFile = File(externalPath)
+                if (externalFile.exists() || externalFile.mkdirs()) {
+                    return externalFile
+                }
+            }
+
+            val storagePrefs = runCatching { Injekt.get<StoragePreferences>() }.getOrNull()
+            val baseUriString = storagePrefs?.baseStorageDirectory()?.get()
+            if (!baseUriString.isNullOrBlank()) {
+                val baseUni = UniFile.fromUri(context, baseUriString.toUri())
+                val basePath = baseUni?.filePath
+                if (!basePath.isNullOrBlank()) {
+                    val externalFile = File(basePath, StorageManager.MODELS_PATH)
+                    if (externalFile.exists() || externalFile.mkdirs()) {
+                        return externalFile
+                    }
+                }
+            }
+
+            return File(context.filesDir, "models").apply { mkdirs() }
+        }
+
+        fun getModelSubdir(context: Context, subdir: String): File {
+            val base = getModelsBaseDir(context)
+            val dir = File(base, subdir).apply { mkdirs() }
+            val internalDir = File(context.filesDir, subdir)
+            if (internalDir.exists() && internalDir.isDirectory && internalDir != dir) {
+                internalDir.listFiles()?.forEach { file ->
+                    val target = File(dir, file.name)
+                    if (!target.exists()) {
+                        try {
+                            file.copyTo(target, overwrite = false)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            return dir
+        }
     }
 
     fun startDownload(type: ModelType, onComplete: ((Boolean) -> Unit)? = null) {
@@ -89,7 +137,7 @@ class AiModelManager(
         downloadStates[type]?.value = DownloadState(isDownloading = false, progress = 0f, status = "")
     }
 
-    private val modelsDir = File(context.filesDir, "models/ai").apply { mkdirs() }
+    private val modelsDir get() = getModelSubdir(context, "ai")
 
     enum class ModelType(
         val id: String,
@@ -137,26 +185,71 @@ class AiModelManager(
                 "https://huggingface.co/mayocream/comic-text-detector-onnx/raw/main/comic-text-detector.onnx",
             ),
         ),
+        // KMK -->
+        MINILM_L6_TAGGER(
+            id = "minilm_l6_tagger",
+            displayName = "MiniLM-L6 Tag Extractor (INT8)",
+            fileName = "minilm_l6_int8.onnx",
+            minSize = 15 * 1024 * 1024L,
+            mirrors = listOf(
+                "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx",
+            ),
+        ),
+        // KMK <--
     }
 
     fun getModelFile(type: ModelType): File {
-        val internalFile = File(modelsDir, type.fileName)
-        if (internalFile.exists() && internalFile.length() >= type.minSize) {
-            return internalFile
+        // 1. Shared external directory (preferred for multi-variant sharing)
+        val externalDir = modelsDir
+        val externalFile = File(externalDir, type.fileName)
+        if (externalFile.exists() && externalFile.length() >= type.minSize) {
+            return externalFile
         }
 
+        // 2. Private internal directory fallback & auto-migration
+        val internalDir = File(context.filesDir, "models/ai")
+        val internalFile = File(internalDir, type.fileName)
+        if (internalFile.exists() && internalFile.length() >= type.minSize) {
+            // Auto-migrate to external directory if writable
+            if (externalDir.exists() && !externalFile.exists()) {
+                try {
+                    internalFile.copyTo(externalFile, overwrite = false)
+                } catch (_: Exception) {}
+            }
+            return if (externalFile.exists() && externalFile.length() >= type.minSize) externalFile else internalFile
+        }
+
+        // 3. Fallback: package external files dir
         try {
             val extAppDir = context.getExternalFilesDir("models/ai")
             if (extAppDir != null) {
                 val candidateApp = File(extAppDir, type.fileName)
                 if (candidateApp.exists() && candidateApp.length() >= type.minSize) {
-                    return candidateApp
+                    if (externalDir.exists() && !externalFile.exists()) {
+                        try {
+                            candidateApp.copyTo(externalFile, overwrite = false)
+                        } catch (_: Exception) {}
+                    }
+                    return if (externalFile.exists() && externalFile.length() >= type.minSize) externalFile else candidateApp
                 }
             }
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
 
-        return internalFile
+        // 4. Fallback: primary external storage root (/storage/emulated/0/<filename>)
+        try {
+            val rootFile = File(android.os.Environment.getExternalStorageDirectory(), type.fileName)
+            if (rootFile.exists() && rootFile.length() >= type.minSize) {
+                if (externalDir.exists() && !externalFile.exists()) {
+                    try {
+                        rootFile.copyTo(externalFile, overwrite = false)
+                    } catch (_: Exception) {}
+                }
+                return if (externalFile.exists() && externalFile.length() >= type.minSize) externalFile else rootFile
+            }
+        } catch (_: Exception) {}
+
+        // Default target is the shared external file
+        return externalFile
     }
 
     fun isModelDownloaded(type: ModelType): Boolean {
@@ -166,14 +259,26 @@ class AiModelManager(
 
     fun deleteModel(type: ModelType): Boolean {
         var deletedAny = false
-        val internalFile = File(modelsDir, type.fileName)
+        val externalFile = File(modelsDir, type.fileName)
+        if (externalFile.exists()) {
+            externalFile.setWritable(true)
+            deletedAny = externalFile.delete() || deletedAny
+        }
+        val storageManager = runCatching { Injekt.get<tachiyomi.domain.storage.service.StorageManager>() }.getOrNull()
+        val uniModel = storageManager?.getModelsDirectory()?.findFile(type.fileName)
+        if (uniModel != null && uniModel.exists()) {
+            deletedAny = uniModel.delete() || deletedAny
+        }
+        val internalFile = File(context.filesDir, "models/ai/${type.fileName}")
         if (internalFile.exists()) {
+            internalFile.setWritable(true)
             deletedAny = internalFile.delete() || deletedAny
         }
         val extAppDir = context.getExternalFilesDir("models/ai")
         if (extAppDir != null) {
             val candidateApp = File(extAppDir, type.fileName)
             if (candidateApp.exists()) {
+                candidateApp.setWritable(true)
                 deletedAny = candidateApp.delete() || deletedAny
             }
         }

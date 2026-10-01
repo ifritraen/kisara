@@ -34,6 +34,10 @@ interface MangaRepository {
 
     suspend fun setMangaCategories(mangaId: Long, categoryIds: List<Long>)
 
+    // KMK -->
+    suspend fun setMangaCategories(updates: List<Pair<Long, List<Long>>>)
+    // KMK <--
+
     suspend fun update(update: MangaUpdate): Boolean
 
     suspend fun updateAll(mangaUpdates: List<MangaUpdate>): Boolean

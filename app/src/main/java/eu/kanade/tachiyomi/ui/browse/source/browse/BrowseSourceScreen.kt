@@ -260,37 +260,15 @@ data class BrowseSourceScreen(
                         onMangaLongClick = { manga ->
                             // KMK -->
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            if (bulkFavoriteState.selectionMode) {
-                                navigator.push(MangaScreen(manga.id, true))
-                            } else {
-                                // KMK <--
-                                scope.launchIO {
-                                    val duplicates = screenModel.getDuplicateLibraryManga(manga)
-                                    when {
-                                        manga.favorite -> {
-                                            val categories = screenModel.getCategories()
-                                            val preselectedIds = screenModel.getCategories.await(manga.id).map { it.id }
-                                            screenModel.setDialog(
-                                                BrowseSourceScreenModel.Dialog.ChangeMangaCategory(
-                                                    manga,
-                                                    categories.mapAsCheckboxState { it.id in preselectedIds }.toImmutableList(),
-                                                ),
-                                            )
-                                        }
-                                        duplicates.isNotEmpty() -> screenModel.setDialog(
-                                            BrowseSourceScreenModel.Dialog.AddDuplicateManga(manga, duplicates),
-                                        )
-                                        else -> screenModel.addFavorite(manga)
-                                    }
-                                }
-                            }
+                            bulkFavoriteScreenModel.toggleSelection(manga)
+                            // KMK <--
                         },
                         // KMK -->
                         selection = bulkFavoriteState.selection,
                         // KMK <--
                     )
 
-                    // Floating Dock Overlay at bottom
+                    // Dock Overlay at bottom
                     if (bulkFavoriteState.selectionMode) {
                         BrowseSourceBulkActionDock(
                             selectedCount = bulkFavoriteState.selection.size,
@@ -350,6 +328,7 @@ data class BrowseSourceScreen(
                             },
                             onSourceSwitchClick = { showSourcePickerSheet = true },
                             onActionsMenuClick = { showActionsSheet = true },
+                            onActionsMenuDoubleClick = { showSearchSheet = true },
                             sourceIcon = {
                                 SourceIcon(
                                     source = tachiyomi.domain.source.model.Source(

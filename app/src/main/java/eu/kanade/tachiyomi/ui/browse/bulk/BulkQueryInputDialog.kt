@@ -16,10 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.graphics.Color
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -107,18 +111,33 @@ fun BulkQueryInputDialog(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        dragHandle = null,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp,
+        containerColor = Color.Transparent,
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
+        tonalElevation = 0.dp,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .verticalScroll(rememberScrollState()),
+        GlassSurface(
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BottomSheetDefaults.DragHandle()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
             // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -469,6 +488,8 @@ fun BulkQueryInputDialog(
             }
         }
     }
+}
+}
 }
 
 fun parseQueries(input: String): List<String> {

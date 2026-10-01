@@ -2,10 +2,14 @@ package eu.kanade.tachiyomi.data.ai
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtSession
 import android.graphics.Bitmap
 import android.graphics.Color
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -27,9 +31,30 @@ class SuperResolutionEngine(
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment(),
 ) : AutoCloseable {
 
+    private val inferenceLock = Any()
+    @Volatile private var activeRunOptions: OrtSession.RunOptions? = null
+
     private var activeSession: OrtSession? = null
     private var activeModelPath: String? = null
     private var isNnapiActive: Boolean = false
+
+    fun cancelCurrentInference() {
+        try {
+            activeRunOptions?.setTerminate(true)
+        } catch (_: Exception) {}
+    }
+
+    fun unloadSession() {
+        cancelCurrentInference()
+        synchronized(inferenceLock) {
+            try {
+                activeSession?.close()
+                activeSession = null
+                activeModelPath = null
+                isNnapiActive = false
+            } catch (_: Exception) {}
+        }
+    }
 
     @Synchronized
     private fun getSession(modelFile: File, useNnapi: Boolean): OrtSession {
@@ -37,7 +62,10 @@ class SuperResolutionEngine(
             return activeSession!!
         }
 
-        activeSession?.close()
+        synchronized(inferenceLock) {
+            activeSession?.close()
+            activeSession = null
+        }
         var session: OrtSession? = null
         var isNnapi = false
 
@@ -170,6 +198,7 @@ class SuperResolutionEngine(
             val coreH = min(core, h - y)
             var x = 0
             while (x < w) {
+                coroutineContext.ensureActive()
                 val coreW = min(core, w - x)
 
                 currentTile++
@@ -217,33 +246,67 @@ class SuperResolutionEngine(
                 tensorBuffer.rewind()
 
                 // 4. Run ONNX Inference on Tile
-                val tensor = OnnxTensor.createTensor(
-                    env,
-                    tensorBuffer,
-                    longArrayOf(1L, channels.toLong(), tileIn.toLong(), tileIn.toLong()),
-                )
-                val results = session.run(Collections.singletonMap(inputName, tensor))
-                val outTensor = results.get(0) as OnnxTensor
-                val outBuffer = outTensor.floatBuffer
+                val runOpts = OrtSession.RunOptions()
+                activeRunOptions = runOpts
+                var tensor: OnnxTensor? = null
+                var results: OrtSession.Result? = null
+                var outTensor: OnnxTensor? = null
+                val outTileDim: Int
+                val outPlane: Int
+                val outFloats: FloatArray
 
-                val outShape = outTensor.info.shape
-                val outTileDim = outShape[2].toInt()
-                val detectedScale = max(1, outTileDim / tileIn)
+                try {
+                    tensor = OnnxTensor.createTensor(
+                        env,
+                        tensorBuffer,
+                        longArrayOf(1L, channels.toLong(), tileIn.toLong(), tileIn.toLong()),
+                    )
+                    results = synchronized(inferenceLock) {
+                        coroutineContext.ensureActive()
+                        session.run(Collections.singletonMap(inputName, tensor), runOpts)
+                    }
+                    outTensor = results.get(0) as OnnxTensor
+                    val outBuffer = outTensor.floatBuffer
 
-                if (!initializedScale) {
-                    modelScale = detectedScale
-                    rawOutW = w * modelScale
-                    rawOutH = h * modelScale
-                    outPixels = IntArray(rawOutW * rawOutH)
-                    initializedScale = true
+                    val outShape = outTensor.info.shape
+                    outTileDim = outShape[2].toInt()
+                    val detectedScale = max(1, outTileDim / tileIn)
+
+                    if (!initializedScale) {
+                        modelScale = detectedScale
+                        rawOutW = w * modelScale
+                        rawOutH = h * modelScale
+                        outPixels = IntArray(rawOutW * rawOutH)
+                        initializedScale = true
+                    }
+
+                    outPlane = outTileDim * outTileDim
+                    outFloats = FloatArray(outBuffer.remaining())
+                    outBuffer.get(outFloats)
+                } catch (e: OrtException) {
+                    if (!coroutineContext.isActive || activeRunOptions == null || e.message?.contains("terminate", ignoreCase = true) == true) {
+                        throw CancellationException("Super-Resolution inference cancelled", e)
+                    }
+                    throw e
+                } finally {
+                    try {
+                        tensor?.close()
+                    } catch (_: Exception) {}
+                    try {
+                        outTensor?.close()
+                    } catch (_: Exception) {}
+                    try {
+                        results?.close()
+                    } catch (_: Exception) {}
+                    try {
+                        runOpts.close()
+                    } catch (_: Exception) {}
+                    if (activeRunOptions === runOpts) {
+                        activeRunOptions = null
+                    }
                 }
 
-                val outPlane = outTileDim * outTileDim
-                val outFloats = FloatArray(outBuffer.remaining())
-                outBuffer.get(outFloats)
-
-                tensor.close()
-                results.close()
+                coroutineContext.ensureActive()
 
                 // 5. Crop the effective core region and copy to destination
                 val cropX = pad * modelScale
@@ -304,7 +367,6 @@ class SuperResolutionEngine(
     }
 
     override fun close() {
-        activeSession?.close()
-        activeSession = null
+        unloadSession()
     }
 }

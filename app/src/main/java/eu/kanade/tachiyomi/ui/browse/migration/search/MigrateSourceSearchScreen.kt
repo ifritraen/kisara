@@ -40,10 +40,16 @@ import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import mihon.feature.migration.config.MigrationConfigScreen
 import mihon.feature.migration.dialog.MigrateMangaDialog
 import mihon.feature.migration.list.MigrationListScreen
 import mihon.presentation.core.util.collectAsLazyPagingItems
 import tachiyomi.core.common.Constants
+import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.domain.manga.interactor.NetworkToLocalManga
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
@@ -146,16 +152,22 @@ data class MigrateSourceSearchScreen(
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         ) { paddingValues ->
-            val openMigrateDialog: (Manga) -> Unit = {
-                val migrateListScreen = navigator.items
-                    .filterIsInstance<MigrationListScreen>()
-                    .lastOrNull()
+            val networkToLocalManga = remember { Injekt.get<NetworkToLocalManga>() }
+            val openMigrateDialog: (Manga) -> Unit = { targetManga ->
+                scope.launchIO {
+                    val localTarget = if (targetManga.id > 0) targetManga else networkToLocalManga(targetManga)
+                    withUIContext {
+                        val migrateListScreen = navigator.items
+                            .filterIsInstance<MigrationListScreen>()
+                            .lastOrNull()
 
-                if (migrateListScreen == null) {
-                    screenModel.setDialog(BrowseSourceScreenModel.Dialog.Migrate(target = it, current = currentManga))
-                } else {
-                    migrateListScreen.addMatchOverride(current = currentManga.id, target = it.id)
-                    navigator.popUntil { screen -> screen is MigrationListScreen }
+                        if (migrateListScreen == null) {
+                            screenModel.setDialog(BrowseSourceScreenModel.Dialog.Migrate(target = localTarget, current = currentManga))
+                        } else {
+                            migrateListScreen.addMatchOverride(current = currentManga.id, target = localTarget)
+                            navigator.popUntil { screen -> screen is MigrationListScreen }
+                        }
+                    }
                 }
             }
             BrowseSourceContent(
@@ -229,13 +241,19 @@ data class MigrateSourceSearchScreen(
                     current = currentManga,
                     target = dialog.target,
                     // Initiated from the context of [currentManga] so we show [dialog.target].
-                    onClickTitle = { navigator.push(MangaScreen(dialog.target.id)) },
+                    onClickTitle = { navigator.push(MangaScreen(dialog.target.id, true)) },
                     onDismissRequest = onDismissRequest,
-                    onComplete = {
-                        scope.launch {
-                            navigator.popUntilRoot()
-                            HomeScreen.openTab(HomeScreen.Tab.Browse())
-                            navigator.push(MangaScreen(dialog.target.id))
+                    onComplete = { migratedMangaId ->
+                        val newStack = navigator.items.filter {
+                            it !is MangaScreen &&
+                                it !is MigrateSearchScreen &&
+                                it !is MigrateSourceSearchScreen &&
+                                it !is MigrationConfigScreen &&
+                                it !is MigrationListScreen
+                        } + MangaScreen(migratedMangaId)
+                        navigator replaceAll newStack.first()
+                        if (newStack.size > 1) {
+                            navigator.push(newStack.drop(1))
                         }
                     },
                 )

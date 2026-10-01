@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -89,11 +90,20 @@ fun LibraryContent(
     activeSubcategoryId: Long? = null,
     onSubcategorySelected: (Long?) -> Unit = {},
     showSubcategories: Boolean = true,
+    scrollPositions: MutableMap<Triple<Long, Long?, LibraryDisplayMode>, Pair<Int, Int>> = remember { mutableMapOf() },
     // KMK <--
 ) {
     // Derive parent categories and child mapping
     val parentCategories = remember(categories) {
-        categories.filter { it.parentId == null }.sortedBy { it.order }
+        categories.filter { it.parentId == null }.sortedWith { c1, c2 ->
+            when {
+                c1.isSystemCategory && !c2.isSystemCategory -> -1
+                c2.isSystemCategory && !c1.isSystemCategory -> 1
+                c1.isLocalCategory && !c2.isLocalCategory -> -1
+                c2.isLocalCategory && !c1.isLocalCategory -> 1
+                else -> c1.order.compareTo(c2.order)
+            }
+        }
     }
     val childrenByParent = remember(categories) {
         categories.filter { it.parentId != null }
@@ -113,21 +123,20 @@ fun LibraryContent(
     val isSearching = !searchQuery.isNullOrBlank()
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
-    val categoryNamesByMangaId = remember(categories, getItemsForCategory, isSearching) {
-        if (!isSearching) {
-            emptyMap<Long, List<String>>()
-        } else {
-            val map = mutableMapOf<Long, MutableList<String>>()
-            categories.forEach { cat ->
-                val parent = cat.parentId?.let { categoryMap[it] }
-                val label = if (parent != null) "${parent.name} > ${cat.name}" else cat.name
-                val items = getItemsForCategory(cat)
-                items.forEach { item ->
-                    map.getOrPut(item.libraryManga.manga.id) { mutableListOf() }.add(label)
-                }
+    val categoryNamesByMangaId = remember(categories, getItemsForCategory) {
+        val map = mutableMapOf<Long, MutableList<String>>()
+        categories.forEach { cat ->
+            if (cat.isLocalCategory) return@forEach
+            val catName = if (cat.isSystemCategory) "Default" else cat.name
+            if (catName.isBlank()) return@forEach
+            val parent = cat.parentId?.let { categoryMap[it] }
+            val label = if (parent != null) "${parent.name} > $catName" else catName
+            val items = getItemsForCategory(cat)
+            items.forEach { item ->
+                map.getOrPut(item.libraryManga.manga.id) { mutableListOf() }.add(label)
             }
-            map.mapValues { it.value.distinct() }
         }
+        map.mapValues { it.value.distinct() }
     }
 
     LaunchedEffect(searchQuery) {
@@ -162,15 +171,19 @@ fun LibraryContent(
         val scope = rememberCoroutineScope()
         var isRefreshing by remember(pagerState.currentPage) { mutableStateOf(false) }
 
-        LaunchedEffect(tabCategories, activeCategoryIndex) {
+        LaunchedEffect(activeCategoryIndex) {
             val targetPage = when {
                 tabCategories.isEmpty() -> 0
-                activeCategoryIndex != pagerState.currentPage && activeCategoryIndex in tabCategories.indices -> activeCategoryIndex
+                activeCategoryIndex in tabCategories.indices -> activeCategoryIndex
                 pagerState.currentPage >= tabCategories.size -> tabCategories.size - 1
                 else -> pagerState.currentPage
             }
-            if (targetPage != pagerState.currentPage) {
-                pagerState.animateScrollToPage(targetPage)
+            if ((targetPage != pagerState.currentPage || pagerState.currentPageOffsetFraction != 0f) && targetPage != pagerState.targetPage) {
+                if (kotlin.math.abs(targetPage - pagerState.currentPage) <= 1 && pagerState.currentPageOffsetFraction == 0f) {
+                    pagerState.animateScrollToPage(targetPage)
+                } else {
+                    pagerState.scrollToPage(targetPage)
+                }
             }
         }
 
@@ -183,18 +196,23 @@ fun LibraryContent(
                 onTabItemClick = {
                     scope.launch {
                         val targetCategory = tabCategories[it]
-                        val hasSubcategories = childrenByParent[targetCategory.id]?. isNotEmpty() == true
+                        val hasSubcategories = childrenByParent[targetCategory.id]?.isNotEmpty() == true
 
-                        // Toggle collapse state if clicking on current page with subcategories
-                        if (it == pagerState.currentPage && hasSubcategories && showParentFilters) {
+                        // Toggle collapse state if clicking on settled page with zero leftover offset and subcategories
+                        if (it == pagerState.settledPage && pagerState.currentPageOffsetFraction == 0f && hasSubcategories && showParentFilters) {
                             collapsedParentIds = if (targetCategory.id in collapsedParentIds) {
                                 collapsedParentIds - targetCategory.id
                             } else {
                                 collapsedParentIds + targetCategory.id
                             }
                         } else {
-                            // Navigate to the tab instantly to avoid composing intermediate pages
-                            pagerState.scrollToPage(it)
+                            if (it != pagerState.currentPage || pagerState.currentPageOffsetFraction != 0f) {
+                                if (kotlin.math.abs(it - pagerState.currentPage) <= 1 && pagerState.currentPageOffsetFraction == 0f) {
+                                    pagerState.animateScrollToPage(it)
+                                } else {
+                                    pagerState.scrollToPage(it)
+                                }
+                            }
                             collapsedParentIds = collapsedParentIds - targetCategory.id
                         }
                         clickedTabParentIds = clickedTabParentIds + targetCategory.id
@@ -204,20 +222,13 @@ fun LibraryContent(
         }
 
         // Show subcategory filter chips if parent filters are enabled
-        if (showParentFilters && !isSearching && parentCategories.isNotEmpty()) {
-            val activeParent = parentCategories.getOrNull(pagerState.currentPage)
+        if (showSubcategories && showParentFilters && !isSearching && parentCategories.isNotEmpty()) {
+            val activeParent = parentCategories.getOrNull(pagerState.settledPage.coerceIn(0, parentCategories.lastIndex))
             val subcategoriesForActiveParent = activeParent?.let { childrenByParent[it.id] }.orEmpty()
             val isCollapsed = activeParent?.id?.let { it in collapsedParentIds } ?: false
             val isExcludingSubcategories = activeParent?.id?.let { it in excludeSubcategoriesParentIds } ?: false
 
             val subLazyRowState = rememberLazyListState()
-
-            // Reset activeSubcategoryId if no subcategories for current parent
-            LaunchedEffect(subcategoriesForActiveParent) {
-                if (subcategoriesForActiveParent.isEmpty()) {
-                    onSubcategorySelected(null)
-                }
-            }
 
             // KMK --> ponytail: auto-center selected subcategory in top chip carousel
             LaunchedEffect(activeSubcategoryId, subcategoriesForActiveParent.size) {
@@ -548,17 +559,31 @@ fun LibraryContent(
                         onLongClickManga = onToggleRangeSelection,
                         onClickContinueReading = onContinueReadingClicked,
                         userScrollEnabled = true,
+                        activeSubcategoryId = activeSubcategoryId,
+                        scrollPositions = scrollPositions,
+                        categoryNamesByMangaId = categoryNamesByMangaId,
+                        onOpenManga = onClickManga,
                     )
                 }
             }
         }
 
-        LaunchedEffect(pagerState.currentPage) {
-            // Reset subcategory selection when parent page changes
-            if (showParentFilters) {
-                onSubcategorySelected(null)
+        LaunchedEffect(pagerState) {
+            var previousPage: Int? = null
+            snapshotFlow { pagerState.settledPage }.collect { settledPage ->
+                // Reset subcategory selection only when parent page actually changes and settles
+                if (previousPage != null && previousPage != settledPage) {
+                    if (showParentFilters) {
+                        val newParent = parentCategories.getOrNull(settledPage)
+                        val sub = activeSubcategoryId?.let { id -> categories.firstOrNull { it.id == id } }
+                        if (sub == null || sub.parentId != newParent?.id) {
+                            onSubcategorySelected(null)
+                        }
+                    }
+                }
+                previousPage = settledPage
+                onChangeCurrentPage(settledPage)
             }
-            onChangeCurrentPage(pagerState.currentPage)
         }
     }
 }

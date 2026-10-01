@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FlipToBack
-import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -25,7 +24,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
-import eu.kanade.presentation.components.SearchBottomSheet
 import eu.kanade.presentation.components.SearchToolbar
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.MR
@@ -55,6 +53,7 @@ fun LibraryToolbar(
     onSearchQueryChange: (String?) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior?,
     onInvalidateDownloadCache: (Context) -> Unit,
+    onOpenSearchSheet: () -> Unit = {},
 ) = when {
     selectedCount > 0 -> LibrarySelectionToolbar(
         selectedCount = selectedCount,
@@ -78,6 +77,7 @@ fun LibraryToolbar(
         // SY <--
         scrollBehavior = scrollBehavior,
         onInvalidateDownloadCache = onInvalidateDownloadCache,
+        onOpenSearchSheet = onOpenSearchSheet,
     )
 }
 
@@ -98,21 +98,10 @@ private fun LibraryRegularToolbar(
     // SY <--
     scrollBehavior: TopAppBarScrollBehavior?,
     onInvalidateDownloadCache: (Context) -> Unit,
+    onOpenSearchSheet: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val pillAlpha = if (isSystemInDarkTheme()) 0.12f else 0.08f
-    var showSearchSheet by remember { mutableStateOf(false) }
-
-    if (showSearchSheet) {
-        SearchBottomSheet(
-            searchQuery = searchQuery,
-            onChangeSearchQuery = onSearchQueryChange,
-            onSearch = { showSearchSheet = false },
-            onDismissRequest = { showSearchSheet = false },
-            title = "Library Search",
-            placeholderText = stringResource(MR.strings.action_search_hint),
-        )
-    }
 
     SearchToolbar(
         titleContent = {
@@ -134,16 +123,11 @@ private fun LibraryRegularToolbar(
         },
         searchQuery = searchQuery,
         onChangeSearchQuery = onSearchQueryChange,
+        onSearchClick = onOpenSearchSheet,
         actions = {
             val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
             AppBarActions(
                 persistentListOf(
-                    AppBar.Action(
-                        title = "Search Sheet",
-                        icon = Icons.Outlined.Layers,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        onClick = { showSearchSheet = true },
-                    ),
                     AppBar.Action(
                         title = stringResource(MR.strings.action_filter),
                         icon = Icons.Outlined.FilterList,

@@ -5,13 +5,14 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.novel.model.StubNovelSource
 
 interface NovelExtensionManager {
     val installedSourcesFlow: Flow<List<NovelSource>>
-    val installedPluginsFlow: Flow<List<NovelPlugin.Installed>>
+    val installedPluginsFlow: StateFlow<List<NovelPlugin.Installed>>
     val availablePluginsFlow: Flow<List<NovelPlugin.Available>>
     val untrustedPluginsFlow: Flow<List<NovelPlugin.Untrusted>>
     val updatesFlow: Flow<List<NovelPlugin.Installed>>

@@ -369,6 +369,8 @@ internal fun Extension.getIcon(density: Int = DisplayMetrics.DENSITY_DEFAULT): S
                     )
 
                     val existingApk = candidateFiles.firstOrNull { it.isFile && it.exists() }
+                        ?: eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.findApkForPackage(context, pkgName)
+                        ?: eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.findApkForPackage(context, cleanPkgName)
                         ?: eu.kanade.tachiyomi.extension.util.LocalApkExtensionSupport.getLocalApkFiles(context).firstOrNull { file ->
                             file.nameWithoutExtension == pkgName || file.nameWithoutExtension == cleanPkgName ||
                                 file.nameWithoutExtension.startsWith("${pkgName}_") || file.nameWithoutExtension.startsWith("${cleanPkgName}_")

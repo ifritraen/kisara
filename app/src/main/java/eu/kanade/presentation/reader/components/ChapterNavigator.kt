@@ -147,6 +147,7 @@ fun ChapterNavigator(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(16.dp),
                         style = GlassDefaults.subtleStyle(),
+                        isReaderSurface = true,
                     ) {
                         Row(
                             modifier = Modifier

@@ -5,9 +5,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
+import logcat.LogPriority
 import logcat.logcat
+import tachiyomi.core.common.util.lang.launchIO
+import java.io.File
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -76,7 +81,28 @@ object TagDictionary {
                         aliases = it.aliases,
                         count = it.count,
                     )
+                }.toMutableList()
+
+                // Load custom runtime tags from disk if present
+                val customFile = File(context.filesDir, "custom_canonical_tags.json")
+                if (customFile.exists()) {
+                    try {
+                        val customDtos = json.decodeFromString<List<CanonicalTagDto>>(customFile.readText())
+                        val customParsed = customDtos.map {
+                            CanonicalTag(
+                                name = it.name,
+                                namespace = TagNamespace.fromPrefix(it.namespace),
+                                aliases = it.aliases,
+                                count = it.count,
+                            )
+                        }
+                        parsed.addAll(customParsed)
+                        logcat { "TagDictionary: loaded ${customParsed.size} custom persisted tags" }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN) { "Failed loading custom_canonical_tags.json: ${e.message}" }
+                    }
                 }
+
                 synchronized(allTags) {
                     allTags.clear()
                     allTags.addAll(parsed)
@@ -90,6 +116,81 @@ object TagDictionary {
             } finally {
                 isInitializing.set(false)
             }
+        }
+    }
+
+    /**
+     * Registers tags fetched from external trackers (AniList, MangaUpdates, MangaBaka).
+     * If a tag is not present in the 50k canonical database, it is dynamically added and persisted.
+     */
+    fun registerTags(
+        context: Context,
+        tags: List<String>,
+        defaultNamespace: TagNamespace = TagNamespace.OTHER,
+    ) {
+        if (tags.isEmpty()) return
+        val appContext = context.applicationContext
+        launchIO {
+            if (!isInitialized.get()) {
+                initialize(appContext)
+            }
+
+            val newlyAdded = mutableListOf<CanonicalTagDto>()
+            synchronized(allTags) {
+                val existingNames = allTags.map { it.name.lowercase() }.toHashSet()
+                val existingAliases = allTags.flatMap { it.aliases }.map { it.lowercase() }.toHashSet()
+
+                for (rawTag in tags) {
+                    val clean = rawTag.trim().lowercase()
+                    if (clean.isBlank() || clean.length < 2) continue
+                    if (existingNames.contains(clean) || existingAliases.contains(clean)) continue
+
+                    val newTag = CanonicalTag(
+                        name = clean,
+                        namespace = defaultNamespace,
+                        aliases = emptyList(),
+                        count = 1,
+                    )
+                    allTags.add(newTag)
+                    existingNames.add(clean)
+                    newlyAdded.add(
+                        CanonicalTagDto(
+                            name = clean,
+                            namespace = defaultNamespace.prefix,
+                            aliases = emptyList(),
+                            count = 1,
+                        ),
+                    )
+                }
+            }
+
+            if (newlyAdded.isNotEmpty()) {
+                saveCustomTags(appContext, newlyAdded)
+                logcat { "TagDictionary: registered ${newlyAdded.size} new tracker tags into 50k DB" }
+            }
+        }
+    }
+
+    private fun saveCustomTags(context: Context, newDtos: List<CanonicalTagDto>) {
+        try {
+            val file = File(context.filesDir, "custom_canonical_tags.json")
+            val existing: MutableList<CanonicalTagDto> = if (file.exists()) {
+                try {
+                    json.decodeFromString<List<CanonicalTagDto>>(file.readText()).toMutableList()
+                } catch (e: Exception) {
+                    mutableListOf()
+                }
+            } else {
+                mutableListOf()
+            }
+            val existingNames = existing.map { it.name.lowercase() }.toSet()
+            val toAppend = newDtos.filterNot { existingNames.contains(it.name.lowercase()) }
+            if (toAppend.isNotEmpty()) {
+                existing.addAll(toAppend)
+                file.writeText(json.encodeToString(existing))
+            }
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN) { "Failed saving custom canonical tags: ${e.message}" }
         }
     }
 

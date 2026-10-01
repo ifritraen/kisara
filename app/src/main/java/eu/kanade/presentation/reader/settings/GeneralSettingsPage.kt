@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.util.system.hasDisplayCutout
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.SettingsChipRow
@@ -99,23 +100,6 @@ internal fun GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.keepScreenOn(),
     )
 
-    val customBrightness by screenModel.preferences.customBrightness().collectAsState()
-    val customBrightnessValue by screenModel.preferences.customBrightnessValue().collectAsState()
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_custom_brightness),
-        pref = screenModel.preferences.customBrightness(),
-    )
-    if (customBrightness) {
-        SliderItem(
-            value = customBrightnessValue,
-            valueRange = -75..100,
-            steps = 0,
-            label = stringResource(MR.strings.pref_custom_brightness),
-            onChange = { screenModel.preferences.customBrightnessValue().set(it) },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-    }
-
     CheckboxItem(
         label = stringResource(MR.strings.pref_read_with_long_tap),
         pref = screenModel.preferences.readWithLongTap(),
@@ -173,4 +157,19 @@ internal fun GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.useAutoWebtoon(),
     )
     // SY <--
+
+    // KMK -->
+    val autoscrollSensitivityPref = screenModel.preferences.autoscrollSwipeSensitivity()
+    val autoscrollSensitivity by autoscrollSensitivityPref.collectAsState()
+
+    SliderItem(
+        value = autoscrollSensitivity,
+        valueRange = 25..200,
+        label = stringResource(KMR.strings.pref_autoscroll_swipe_sensitivity),
+        valueString = "$autoscrollSensitivity%",
+        onChange = { autoscrollSensitivityPref.set(it) },
+        steps = 0,
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+    // KMK <--
 }

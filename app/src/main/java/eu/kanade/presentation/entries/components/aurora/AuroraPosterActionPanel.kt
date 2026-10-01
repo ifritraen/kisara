@@ -18,9 +18,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -98,60 +102,39 @@ internal fun AuroraPosterActionPanel(
     val islandShape = RoundedCornerShape(28.dp)
     val closeLabel = stringResource(MR.strings.action_close)
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    GlassSurface(
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        style = GlassDefaults.prominentStyle(),
+        dialogSurface = true,
+        isStandardSurface = true,
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
-                .weight(1f)
-                .height(64.dp)
-                .clip(islandShape)
-                .background(islandContainerColor)
-                .background(innerGlowBrush)
-                .let { base ->
-                    if (showBorder) {
-                        base.border(BorderStroke(1.dp, borderBrush), islandShape)
-                    } else {
-                        base
-                    }
-                }
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            content(contentColor)
-        }
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                content(MaterialTheme.colorScheme.onSurface)
+            }
 
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(closeContainerColor)
-                .let { base ->
-                    if (showBorder) {
-                        base.border(BorderStroke(1.dp, borderBrush), CircleShape)
-                    } else {
-                        base
-                    }
-                }
-                .clickable(
-                    role = Role.Button,
-                    onClickLabel = closeLabel,
-                    onClick = onDismissRequest,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Close,
-                tint = contentColor,
-                contentDescription = closeLabel,
-                modifier = Modifier.size(24.dp),
-            )
+            IconButton(
+                onClick = onDismissRequest,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    contentDescription = closeLabel,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
     }
 }

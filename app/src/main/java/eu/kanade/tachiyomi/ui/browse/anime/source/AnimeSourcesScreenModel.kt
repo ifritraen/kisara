@@ -77,15 +77,26 @@ class AnimeSourcesScreenModel(
         val allTags = preferences.customAnimeSourceTags().get()
         val sourceTagMappings = preferences.animeSourceTagMappings().get()
 
+        val animeExtensionManager = Injekt.get<eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager>()
         val tagFilter: (Source) -> Boolean = { source ->
             if (selectedTag.isNullOrBlank()) {
                 true
             } else {
-                sourceTagMappings.contains("${source.id}:$selectedTag")
+                val direct = sourceTagMappings.contains("${source.id}:$selectedTag") ||
+                    sourceTagMappings.contains("source_${source.id}:$selectedTag")
+                if (direct) {
+                    true
+                } else {
+                    val pkgName = animeExtensionManager.installedExtensionsFlow.value
+                        .find { ext -> ext.sources.any { it.id == source.id } }?.pkgName
+                    pkgName != null && (
+                        sourceTagMappings.contains("ext_$pkgName:$selectedTag") ||
+                        sourceTagMappings.contains("$pkgName:$selectedTag")
+                    )
+                }
             }
         }
 
-        val animeExtensionManager = Injekt.get<eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager>()
         val isNsfwMap = animeExtensionManager.installedExtensionsFlow.value
             .flatMap { ext -> ext.sources.map { it.id to ext.isNsfw } }
             .toMap()

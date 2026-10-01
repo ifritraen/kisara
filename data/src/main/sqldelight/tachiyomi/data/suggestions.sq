@@ -51,6 +51,7 @@ SELECT
     suggestions.created_at
 FROM suggestions
 JOIN mangas ON suggestions.manga_id = mangas._id
+WHERE mangas.url NOT IN (SELECT manga_url FROM suggestion_dismissed)
 ORDER BY suggestions.relevance DESC;
 
 countSuggestions:
@@ -72,6 +73,10 @@ WHERE manga_id = :mangaId;
 deleteSuggestion:
 DELETE FROM suggestions
 WHERE manga_id = :mangaId;
+
+deleteSuggestionByUrl:
+DELETE FROM suggestions
+WHERE manga_id IN (SELECT _id FROM mangas WHERE url = :mangaUrl);
 
 -- Tag queries
 getSuggestionTags:

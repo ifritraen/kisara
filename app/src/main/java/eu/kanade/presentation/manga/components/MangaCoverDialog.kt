@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
@@ -29,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -38,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.updatePadding
 import coil3.asDrawable
@@ -88,42 +92,38 @@ fun MangaCoverDialog(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             containerColor = Color.Transparent,
             bottomBar = {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp)
-                        .navigationBarsPadding(),
+                GlassSurface(
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    style = GlassDefaults.prominentStyle(),
+                    dialogSurface = true,
+                    isStandardSurface = true,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    ActionsPill {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         IconButton(onClick = onDismissRequest) {
                             Icon(
                                 imageVector = Icons.Outlined.Close,
                                 contentDescription = stringResource(MR.strings.action_close),
-                                // KMK -->
-                                tint = iconColor,
-                                // KMK <--
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    ActionsPill {
+                        Spacer(modifier = Modifier.weight(1f))
                         AppBarActions(
                             actions = persistentListOf(
                                 AppBar.Action(
                                     title = stringResource(MR.strings.action_share),
                                     icon = Icons.Outlined.Share,
                                     onClick = onShareClick,
-                                    // KMK -->
-                                    iconTint = iconColor,
-                                    // KMK <--
                                 ),
                                 AppBar.Action(
                                     title = stringResource(MR.strings.action_save),
                                     icon = Icons.Outlined.Save,
                                     onClick = onSaveClick,
-                                    // KMK -->
-                                    iconTint = iconColor,
-                                    // KMK <--
                                 ),
                             ),
                         )
@@ -142,18 +142,13 @@ fun MangaCoverDialog(
                                     Icon(
                                         imageVector = Icons.Outlined.Edit,
                                         contentDescription = stringResource(MR.strings.action_edit_cover),
-                                        // KMK -->
-                                        tint = iconColor,
-                                        // KMK <--
                                     )
                                 }
                                 DropdownMenu(
                                     expanded = expanded,
                                     onDismissRequest = { expanded = false },
                                     offset = DpOffset(8.dp, 0.dp),
-                                    // KMK -->
                                     modifier = Modifier.background(dropdownBgColor),
-                                    // KMK <--
                                 ) {
                                     DropdownMenuItem(
                                         text = { Text(text = stringResource(MR.strings.action_edit)) },
@@ -161,11 +156,9 @@ fun MangaCoverDialog(
                                             onEditClick(EditCoverAction.EDIT)
                                             expanded = false
                                         },
-                                        // KMK -->
                                         colors = MenuDefaults.itemColors().copy(
                                             textColor = contentColorFor(dropdownBgColor),
                                         ),
-                                        // KMK <--
                                     )
                                     DropdownMenuItem(
                                         text = { Text(text = stringResource(MR.strings.action_delete)) },
@@ -173,11 +166,9 @@ fun MangaCoverDialog(
                                             onEditClick(EditCoverAction.DELETE)
                                             expanded = false
                                         },
-                                        // KMK -->
                                         colors = MenuDefaults.itemColors().copy(
                                             textColor = contentColorFor(dropdownBgColor),
                                         ),
-                                        // KMK <--
                                     )
                                 }
                             }
@@ -230,18 +221,5 @@ fun MangaCoverDialog(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ActionsPill(content: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(MaterialTheme.shapes.extraLarge)
-            // KMK -->
-            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f)),
-        // KMK <--
-    ) {
-        content()
     }
 }

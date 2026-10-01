@@ -14,10 +14,9 @@ class AdvancedSearchFilterTest {
             query = "Demon Slayer",
             author = "Gotouge",
             artist = "Koyoharu",
-            isIncludeAndMode = true,
             tagStates = mapOf(
-                "Action" to TagSelectionState.INCLUDED,
-                "Supernatural" to TagSelectionState.INCLUDED,
+                "Action" to TagSelectionState.MUST_HAVE,
+                "Supernatural" to TagSelectionState.MUST_HAVE,
                 "Ecchi" to TagSelectionState.EXCLUDED,
             ),
             demographic = "Shounen",
@@ -39,17 +38,44 @@ class AdvancedSearchFilterTest {
     }
 
     @Test
-    fun `test compileQuery with OR mode`() {
+    fun `test compileQuery with optional OR tags`() {
         val state = AdvancedSearchState(
             query = "Solo",
-            isIncludeAndMode = false,
             tagStates = mapOf(
-                "Action" to TagSelectionState.INCLUDED,
-                "Fantasy" to TagSelectionState.INCLUDED,
+                "Action" to TagSelectionState.OPTIONAL,
+                "Fantasy" to TagSelectionState.OPTIONAL,
             ),
         )
 
         val compiled = state.compileQuery()
-        assertEquals("Solo tag:\"Action\" OR tag:\"Fantasy\"", compiled)
+        assertEquals("Solo (tag:\"Action\" OR tag:\"Fantasy\")", compiled)
+    }
+
+    @Test
+    fun `test compileQuery with combined must-have AND and optional OR tags`() {
+        val state = AdvancedSearchState(
+            query = "Leveling",
+            tagStates = mapOf(
+                "Action" to TagSelectionState.MUST_HAVE,
+                "Fantasy" to TagSelectionState.MUST_HAVE,
+                "Isekai" to TagSelectionState.OPTIONAL,
+                "Magic" to TagSelectionState.OPTIONAL,
+                "Horror" to TagSelectionState.EXCLUDED,
+            ),
+        )
+
+        val compiled = state.compileQuery()
+        assertTrue(compiled.contains("Leveling"))
+        assertTrue(compiled.contains("tag:\"Action\""))
+        assertTrue(compiled.contains("tag:\"Fantasy\""))
+        assertTrue(compiled.contains("(tag:\"Isekai\" OR tag:\"Magic\")"))
+        assertTrue(compiled.contains("-tag:\"Horror\""))
+    }
+
+    @Test
+    fun `test SearchQueryTagMatcher extracts optional tags from query`() {
+        val query = "Leveling tag:\"Action\" (tag:\"Isekai\" OR tag:\"Magic\") -tag:\"Horror\""
+        val optional = eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.extractOptionalTags(query)
+        assertEquals(listOf("Isekai", "Magic"), optional)
     }
 }

@@ -37,9 +37,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import logcat.LogPriority
+import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.model.Pin
 import tachiyomi.domain.source.model.Source
+import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.TreeMap
@@ -68,23 +70,42 @@ class SourcesScreenModel(
             sourcePreferences.customSourceTags().changes(),
             sourcePreferences.sourceTagMappings().changes(),
         ) { tags, mappings ->
-            Pair(tags, mappings)
-        }.onEach { (tags, mappings) ->
+            val fromMappings = mappings.mapNotNull {
+                val idx = it.indexOf(':')
+                if (idx != -1 && idx < it.length - 1) it.substring(idx + 1) else null
+            }
+            Pair((tags + fromMappings).filter { it.isNotBlank() }.toImmutableSet(), mappings.toImmutableSet())
+        }.onEach { (allTags, mappings) ->
             mutableState.update {
                 it.copy(
-                    allTags = tags.toImmutableSet(),
-                    sourceTagMappings = mappings.toImmutableSet(),
+                    allTags = allTags,
+                    sourceTagMappings = mappings,
                 )
             }
         }.launchIn(screenModelScope)
         // KMK <--
 
         // SY -->
+        val searchQueryFlow = state.map { it.searchQuery }
+            .distinctUntilChanged()
+            .debounce(SEARCH_DEBOUNCE_MILLIS)
+        val nsfwFlow = state.map { it.nsfwOnly }
+            .distinctUntilChanged()
+        val selectedTagFlow = state.map { it.selectedTag }
+            .distinctUntilChanged()
+        val tagMappingsFlow = sourcePreferences.sourceTagMappings().changes()
+
+        val filterParamsFlow = combine(
+            searchQueryFlow,
+            nsfwFlow,
+            selectedTagFlow,
+            tagMappingsFlow,
+        ) { query, nsfw, tag, mappings ->
+            FilterParams(query, nsfw, tag, mappings)
+        }
+
         combine(
-            // KMK -->
-            state.map { Triple(it.searchQuery, it.nsfwOnly, it.selectedTag) }
-                .distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
-            // KMK <--
+            filterParamsFlow,
             getEnabledSources.subscribe(),
             getSourceCategories.subscribe(),
             getShowLatest.subscribe(smartSearchConfig != null),
@@ -110,9 +131,16 @@ class SourcesScreenModel(
         // SY <--
     }
 
+    private data class FilterParams(
+        val searchQuery: String?,
+        val nsfwOnly: Boolean,
+        val selectedTag: String?,
+        val tagMappings: Set<String>,
+    )
+
     private fun collectLatestSources(
         // KMK -->
-        filters: Triple<String?, Boolean, String?>,
+        filters: FilterParams,
         unfilteredSources: List<Source>,
         // sources: List<Source>,
         // KMK <--
@@ -121,10 +149,10 @@ class SourcesScreenModel(
         showPin: Boolean,
     ) {
         // KMK -->
-        val searchQuery = filters.first
-        val nsfwOnly = filters.second
-        val selectedTag = filters.third
-        val tagMappings = sourcePreferences.sourceTagMappings().get()
+        val searchQuery = filters.searchQuery
+        val nsfwOnly = filters.nsfwOnly
+        val selectedTag = filters.selectedTag
+        val tagMappings = filters.tagMappings
         val queryFilter: (String?) -> ((Source) -> Boolean) = { query ->
             filter@{ source ->
                 if (query.isNullOrBlank()) return@filter true
@@ -138,14 +166,24 @@ class SourcesScreenModel(
             }
         }
         val tagFilter: (Source) -> Boolean = { source ->
-            if (selectedTag == null) {
+            if (selectedTag.isNullOrBlank()) {
                 true
             } else {
-                val prefix = "${source.id}:"
-                tagMappings.contains("$prefix$selectedTag")
+                val direct = tagMappings.contains("${source.id}:$selectedTag") ||
+                    tagMappings.contains("source_${source.id}:$selectedTag")
+                if (direct) {
+                    true
+                } else {
+                    val pkgName = source.installedExtension?.pkgName
+                    pkgName != null && (
+                        tagMappings.contains("ext_$pkgName:$selectedTag") ||
+                        tagMappings.contains("$pkgName:$selectedTag")
+                    )
+                }
             }
         }
         val sources = unfilteredSources
+            .filterNot { it.isLocal() && it.isUsedLast }
             .filter { !nsfwOnly || it.installedExtension?.isNsfw != false }
             .filter(queryFilter(searchQuery))
             .filter(tagFilter)
@@ -154,6 +192,8 @@ class SourcesScreenModel(
             val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
                 // Sources without a lang defined will be placed at the end
                 when {
+                    d1 == LOCAL_KEY && d2 != LOCAL_KEY -> -1
+                    d2 == LOCAL_KEY && d1 != LOCAL_KEY -> 1
                     d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
                     d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
                     d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
@@ -169,6 +209,7 @@ class SourcesScreenModel(
             }
             val byLang = sources.groupByTo(map) {
                 when {
+                    it.isLocal() -> LOCAL_KEY
                     // SY -->
                     it.category != null -> "$CATEGORY_KEY_PREFIX${it.category}"
                     // SY <--
@@ -390,7 +431,51 @@ class SourcesScreenModel(
         Injekt.get<eu.kanade.tachiyomi.extension.ExtensionManager>().uninstallExtension(extension)
     }
 
+    fun selectAllSources() {
+        val allIds = state.value.items.filterIsInstance<SourceUiModel.Item>().map { it.source.id }
+        mutableState.update { it.copy(selectedSources = allIds.toImmutableSet()) }
+    }
+
+    fun bulkPinSources() {
+        val selected = state.value.selectedSources
+        val sources = state.value.items.filterIsInstance<SourceUiModel.Item>()
+            .map { it.source }
+            .filter { it.id in selected }
+        screenModelScope.launchNonCancellable {
+            val anyUnpinned = sources.any { Pin.Pinned !in it.pin }
+            sources.forEach { source ->
+                if (anyUnpinned) {
+                    if (Pin.Pinned !in source.pin) toggleSourcePin.await(source)
+                } else {
+                    if (Pin.Pinned in source.pin) toggleSourcePin.await(source)
+                }
+            }
+            clearSourceSelection()
+        }
+    }
+
+    fun bulkUninstallSources() {
+        val selected = state.value.selectedSources
+        val sources = state.value.items.filterIsInstance<SourceUiModel.Item>()
+            .map { it.source }
+            .filter { it.id in selected }
+        val extensionManager = Injekt.get<eu.kanade.tachiyomi.extension.ExtensionManager>()
+        sources.mapNotNull { it.installedExtension }.distinctBy { it.pkgName }.forEach { extension ->
+            extensionManager.uninstallExtension(extension)
+        }
+        clearSourceSelection()
+    }
+
+    fun openBulkSourceTagsDialog() {
+        val selected = state.value.selectedSources
+        val sources = state.value.items.filterIsInstance<SourceUiModel.Item>()
+            .map { it.source }
+            .filter { it.id in selected }
+        dialog = Dialog.BulkSourceTags(sources)
+    }
+
     companion object {
+        const val LOCAL_KEY = "local"
         const val PINNED_KEY = "pinned"
         const val LAST_USED_KEY = "last_used"
 

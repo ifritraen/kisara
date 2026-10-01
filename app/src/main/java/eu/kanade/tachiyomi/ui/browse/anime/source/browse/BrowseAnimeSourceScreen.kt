@@ -231,6 +231,7 @@ data class BrowseAnimeSourceScreen(
                     },
                     onSourceSwitchClick = { showSourcePickerSheet = true },
                     onActionsMenuClick = { showActionsSheet = true },
+                    onActionsMenuDoubleClick = { showSearchSheet = true },
                     sourceIcon = {
                         AnimeSourceIcon(
                             source = tachiyomi.domain.source.anime.model.AnimeSource(

@@ -13,4 +13,5 @@ data class MangaExternalMetadata(
     val synopsis: String?,
     val sourceName: String,
     val fetchedAt: Long,
+    val title: String? = null,
 )

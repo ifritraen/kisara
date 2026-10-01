@@ -215,6 +215,7 @@ data class BrowseNovelSourceScreen(
                     },
                     onSourceSwitchClick = { showSourcePickerSheet = true },
                     onActionsMenuClick = { showActionsSheet = true },
+                    onActionsMenuDoubleClick = { showSearchSheet = true },
                     sourceIcon = {
                         NovelSourceIcon(
                             source = tachiyomi.domain.source.novel.model.Source(
@@ -228,8 +229,7 @@ data class BrowseNovelSourceScreen(
                         )
                     },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 16.dp),
+                        .align(Alignment.BottomCenter),
                 )
             }
         }

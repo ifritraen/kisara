@@ -94,11 +94,20 @@ fun ReaderAppBars(
     dualPageSplitEnabled: Boolean,
     doublePages: Boolean,
     onClickChapterList: () -> Unit,
+    onClickResume: (() -> Unit)? = null,
     onClickPageLayout: () -> Unit,
     onClickShiftPage: () -> Unit,
     // SY <--
+    mangaThemeColor: androidx.compose.ui.graphics.Color? = null,
 ) {
     val isRtl = viewer is R2LPagerViewer
+    val readerBarBaseColor = androidx.compose.runtime.remember(mangaThemeColor) {
+        if (mangaThemeColor != null) {
+            androidx.compose.ui.graphics.lerp(androidx.compose.ui.graphics.Color(0xFF1C1C1E), mangaThemeColor, 0.40f)
+        } else {
+            androidx.compose.ui.graphics.Color(0xFF1C1C1E)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxHeight()) {
         AnimatedVisibility(
@@ -120,6 +129,7 @@ fun ReaderAppBars(
                         shape = RoundedCornerShape(24.dp),
                         style = GlassDefaults.prominentStyle(),
                         isReaderSurface = true,
+                        customBaseColor = readerBarBaseColor,
                     ) {
                         ReaderTopBar(
                             modifier = Modifier
@@ -178,6 +188,7 @@ fun ReaderAppBars(
                     shape = RoundedCornerShape(16.dp),
                     style = GlassDefaults.prominentStyle(),
                     isReaderSurface = true,
+                    customBaseColor = readerBarBaseColor,
                 ) {
                     Row(
                         modifier = Modifier

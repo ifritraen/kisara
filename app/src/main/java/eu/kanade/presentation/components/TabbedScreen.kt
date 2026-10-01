@@ -21,10 +21,12 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -71,8 +73,8 @@ fun TabbedScreen(
     Scaffold(
         topBar = {
             if (showAppBar || searchQuery != null) {
-                val tab = tabs[state.currentPage]
-                val searchEnabled = tab.searchEnabled
+                val tab = tabs.getOrNull(state.currentPage) ?: tabs.firstOrNull()
+                val searchEnabled = tab?.searchEnabled == true
                 // KMK -->
                 if (bulkFavoriteState?.selectionMode == true && bulkFavoriteScreenModel != null) {
                     BulkSelectionToolbar(
@@ -95,7 +97,7 @@ fun TabbedScreen(
                             }
                         },
                     )
-                } else {
+                } else if (tab != null) {
                     // KMK <--
                     SearchToolbar(
                         titleContent = { AppBarTitle(stringResource(titleRes)) },
@@ -133,7 +135,15 @@ fun TabbedScreen(
                     tabs.forEachIndexed { index, tab ->
                         Tab(
                             selected = state.currentPage == index,
-                            onClick = { scope.launch { state.animateScrollToPage(index) } },
+                            onClick = {
+                                scope.launch {
+                                    if (kotlin.math.abs(index - state.currentPage) <= 1 && state.currentPageOffsetFraction == 0f) {
+                                        state.animateScrollToPage(index)
+                                    } else {
+                                        state.scrollToPage(index)
+                                    }
+                                }
+                            },
                             text = { TabText(text = stringResource(tab.titleRes), badgeCount = tab.badgeNumber) },
                             unselectedContentColor = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.height(36.dp),
@@ -160,6 +170,7 @@ fun TabbedScreen(
                 modifier = Modifier.fillMaxSize(),
                 state = state,
                 verticalAlignment = Alignment.Top,
+                beyondViewportPageCount = 1,
             ) { page ->
                 val uiPreferences = remember { Injekt.get<UiPreferences>() }
                 val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()

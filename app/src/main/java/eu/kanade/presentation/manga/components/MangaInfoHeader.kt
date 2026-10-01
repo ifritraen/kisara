@@ -27,12 +27,17 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CallMerge
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.HourglassDisabled
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Close
@@ -400,17 +405,31 @@ fun ExpandableMangaDescription(
                 .padding(horizontal = 16.dp)
                 .clickableNoIndication { onExpanded(!expanded) },
         )
-        val descriptionTags = remember(description) {
-            eu.kanade.tachiyomi.util.MangaTitleParser.parseDescriptionTags(description)
+        // KMK --> AI description tag extraction with persistent disk caching
+        val scope = rememberCoroutineScope()
+        var aiExtractedTags by remember(description) { mutableStateOf<List<String>>(emptyList()) }
+        var isExtractingAi by remember { mutableStateOf(false) }
+        androidx.compose.runtime.LaunchedEffect(description) {
+            if (!description.isNullOrBlank()) {
+                val suggestionsPreferences = Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>()
+                if (suggestionsPreferences.aiSynopsisTaggingEnabled().get()) {
+                    val raw = tagsProvider() ?: emptyList()
+                    val descHash = kotlin.math.abs(description.hashCode().toLong()).coerceAtLeast(1L)
+                    val extracted = eu.kanade.tachiyomi.data.ai.MiniLmTagExtractor.getOrExtractTags(context, descHash, description, raw)
+                    aiExtractedTags = extracted
+                }
+            }
         }
+        val combinedExtracted = aiExtractedTags
         val rawTags = tagsProvider() ?: emptyList()
-        val tags = remember(rawTags, descriptionTags) {
-            (rawTags + descriptionTags).distinct()
+        val tags = remember(rawTags, combinedExtracted) {
+            (rawTags + combinedExtracted).distinct()
         }
-        val extractedTagsSet = remember(descriptionTags, rawTags) {
-            descriptionTags.filterNot { rawTags.contains(it) }.toSet()
+        val extractedTagsSet = remember(combinedExtracted, rawTags) {
+            combinedExtracted.filterNot { rawTags.contains(it) }.toSet()
         }
-        if (tags.isNotEmpty()) {
+        // KMK <--
+        if (tags.isNotEmpty() || (!description.isNullOrBlank() && expanded)) {
             Box(
                 modifier = Modifier
                     .padding(top = 8.dp)
@@ -503,6 +522,47 @@ fun ExpandableMangaDescription(
                                     },
                                     pureDarkMode = pureDarkMode,
                                     // KMK <--
+                                )
+                            }
+                            if (!description.isNullOrBlank()) {
+                                AssistChip(
+                                    onClick = {
+                                        scope.launch {
+                                            isExtractingAi = true
+                                            val raw = tagsProvider() ?: emptyList()
+                                            val descHash = kotlin.math.abs(description.hashCode().toLong()).coerceAtLeast(1L)
+                                            val extracted = eu.kanade.tachiyomi.data.ai.MiniLmTagExtractor.getOrExtractTags(
+                                                context, descHash, description, raw, forceReExtract = true,
+                                            )
+                                            aiExtractedTags = extracted
+                                            isExtractingAi = false
+                                            val msg = if (extracted.isNotEmpty()) {
+                                                "MiniLM detected ${extracted.size} tags: ${extracted.joinToString(", ")}"
+                                            } else {
+                                                "No new tags detected from synopsis"
+                                            }
+                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (isExtractingAi) "Extracting..." else "AI Tags",
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.AutoAwesome,
+                                            contentDescription = "MiniLM Tag Extractor",
+                                            modifier = Modifier.size(14.dp),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                        labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                                 )
                             }
                         }

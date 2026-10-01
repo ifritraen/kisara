@@ -260,6 +260,7 @@ fun GlobalSearchScreen(
                 GlassSurface(
                     shape = RoundedCornerShape(effectiveCornerRadius),
                     style = GlassDefaults.prominentStyle(),
+                    isStandardSurface = true,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .windowInsetsPadding(WindowInsets.navigationBars)
@@ -360,6 +361,7 @@ fun GlobalSearchScreen(
                 GlassSurface(
                     shape = RoundedCornerShape(effectiveCornerRadius),
                     style = GlassDefaults.prominentStyle(),
+                    isStandardSurface = true,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .windowInsetsPadding(WindowInsets.navigationBars)

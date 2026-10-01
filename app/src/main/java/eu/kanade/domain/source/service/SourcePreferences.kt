@@ -55,6 +55,11 @@ class SourcePreferences(
 
     fun showNsfwSource() = preferenceStore.getBoolean("show_nsfw_source", true)
 
+    // KMK -->
+    fun nsfwOverrideSfwExtensions() = preferenceStore.getStringSet("nsfw_override_sfw_extensions", emptySet())
+    fun nsfwOverrideNsfwExtensions() = preferenceStore.getStringSet("nsfw_override_nsfw_extensions", emptySet())
+    // KMK <--
+
     fun incognitoPolicy() = preferenceStore.getEnum("incognito_policy", IncognitoPolicy.OFF)
 
     fun blockedTags() = preferenceStore.getStringSet("system_blocked_tags", emptySet())

@@ -20,6 +20,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.LAYER_TYPE_HARDWARE
+import android.view.Window
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -139,10 +140,12 @@ import exh.util.mangaType
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
@@ -236,6 +239,9 @@ class ReaderActivity : BaseActivity() {
     private var dragSpeedStartInterval = 3f
     private var speedToast: android.widget.Toast? = null
     val autoScrollTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    // KMK -->
+    internal var activeDialogWindow: Window? = null
+    // KMK <--
 
     // SY -->
     private val sourceManager = Injekt.get<SourceManager>()
@@ -310,11 +316,8 @@ class ReaderActivity : BaseActivity() {
         lifecycleScope.launchNonCancellable {
             LibraryUpdateJob.stop(this@ReaderActivity)
             SyncDataJob.stop(this@ReaderActivity)
-            val suggestionsPreferences = Injekt.get<SuggestionsPreferences>()
-            if (suggestionsPreferences.isSuggestionsEnabled().get()) {
-                SuggestionsWorker.cancelBackground(this@ReaderActivity)
-            }
         }
+        SuggestionsWorker.isReaderActive.value = true
         val downloadManager = Injekt.get<DownloadManager>()
         if (downloadManager.isRunning) {
             wasDownloaderRunning = true
@@ -424,6 +427,25 @@ class ReaderActivity : BaseActivity() {
                     is ReaderViewModel.Event.SetCoverResult -> {
                         onSetAsCoverResult(event.result)
                     }
+                    // KMK -->
+                    is ReaderViewModel.Event.ChapterLoadFailed -> {
+                        val message = event.error.message
+                        if (message.isNullOrBlank()) {
+                            toast(MR.strings.page_list_empty_error)
+                        } else {
+                            toast(message)
+                        }
+                    }
+                    is ReaderViewModel.Event.PageBookmarkToggled -> {
+                        toast(
+                            if (event.isBookmarked) {
+                                stringResource(KMR.strings.page_bookmark_added, event.pageNumber)
+                            } else {
+                                stringResource(KMR.strings.page_bookmark_removed, event.pageNumber)
+                            },
+                        )
+                    }
+                    // KMK <--
                 }
             }
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
@@ -473,48 +495,52 @@ class ReaderActivity : BaseActivity() {
                 eu.kanade.presentation.components.LocalHazeState provides hazeState,
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (!state.menuVisible && showPageNumber) {
-                        ReaderPageIndicator(
-                            // SY -->
-                            currentPage = state.currentPageText,
-                            // SY <--
-                            totalPages = state.totalPages,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .navigationBarsPadding(),
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(if (frostedGlass) Modifier.hazeSource(state = hazeState) else Modifier),
+                    ) {
+                        if (!state.menuVisible && showPageNumber) {
+                            ReaderPageIndicator(
+                                // SY -->
+                                currentPage = state.currentPageText,
+                                // SY <--
+                                totalPages = state.totalPages,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .navigationBarsPadding(),
+                            )
+                        }
 
-                    ContentOverlay(state = state)
+                        ContentOverlay(state = state)
 
-                    if (isDraggingForSpeed) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .statusBarsPadding()
-                                .padding(top = 96.dp),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
+                        if (isDraggingForSpeed) {
                             Box(
                                 modifier = Modifier
-                                    .background(
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                        shape = CircleShape,
-                                    )
-                                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                                contentAlignment = Alignment.Center,
+                                    .fillMaxSize()
+                                    .statusBarsPadding()
+                                    .padding(top = 96.dp),
+                                contentAlignment = Alignment.TopCenter,
                             ) {
-                                Text(
-                                    text = dragSpeedValue,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            shape = CircleShape,
+                                        )
+                                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = dragSpeedValue,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
@@ -707,8 +733,10 @@ class ReaderActivity : BaseActivity() {
                                 it.pageNumber == (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page?.number
                         },
                         onTogglePageBookmarked = {
-                            val pageNum = (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page?.number
-                            viewModel.togglePageBookmark(pageNum)
+                            val page = (state.dialog as? ReaderViewModel.Dialog.PageActions)?.page
+                            val pageNum = page?.number
+                            val chapterId = page?.chapter?.chapter?.id
+                            viewModel.togglePageBookmark(pageNumber = pageNum, targetChapterId = chapterId)
                         },
                         isAutoScroll = state.autoScroll,
                         onToggleAutoscroll = viewModel::toggleAutoScroll,
@@ -735,14 +763,31 @@ class ReaderActivity : BaseActivity() {
                         mutableStateOf(viewModel.getChapters().toImmutableList())
                     }
                     val isHttpSource = viewModel.getSource() is HttpSource
+                    val currentChapterId = viewModel.state.value.viewerChapters?.currChapter?.chapter?.id
+                    val currentPageNum = viewModel.state.value.currentPage.takeIf { it > 0 } ?: 1
+                    val isCurrentPageBookmarked = state.pageBookmarks.any {
+                        it.chapterId == currentChapterId && it.pageNumber == currentPageNum
+                    }
                     ChapterListDialog(
                         onDismissRequest = onDismissRequest,
                         screenModel = settingsScreenModel,
                         chapters = chapters,
-                        onClickChapter = {
-                            viewModel.loadNewChapterFromDialog(it)
+                        // KMK -->
+                        onClickChapter = { chapter ->
                             onDismissRequest()
+                            if (currentChapterId == chapter.id) {
+                                moveToPageIndex(0)
+                            } else {
+                                lifecycleScope.launch {
+                                    val success = viewModel.loadNewChapterFromDialog(chapter)
+                                    if (success) {
+                                        val targetPage = viewModel.state.value.viewerChapters?.currChapter?.requestedPage ?: 0
+                                        moveToPageIndex(targetPage)
+                                    }
+                                }
+                            }
                         },
+                        // KMK <--
                         onBookmark = { chapter ->
                             viewModel.toggleBookmark(chapter.id, !chapter.bookmark)
                             chapters = chapters.map {
@@ -760,19 +805,33 @@ class ReaderActivity : BaseActivity() {
                         },
                         pageBookmarks = state.pageBookmarks,
                         onClickBookmarkPage = { chapterId, pageNumber ->
-                            val targetChapter = viewModel.getChapters().find { it.chapter.id == chapterId }?.chapter
-                            if (targetChapter != null) {
-                                if (viewModel.state.value.viewerChapters?.currChapter?.chapter?.id == chapterId) {
-                                    moveToPageIndex((pageNumber - 1).coerceAtLeast(0))
-                                } else {
-                                    viewModel.loadNewChapterFromDialog(targetChapter, pageNumber)
+                            val targetIndex = (pageNumber - 1).coerceAtLeast(0)
+                            if (currentChapterId == chapterId) {
+                                moveToPageIndex(targetIndex)
+                            } else {
+                                val targetChapter = viewModel.getChapters().find { it.chapter.id == chapterId }?.chapter
+                                if (targetChapter != null) {
+                                    lifecycleScope.launch {
+                                        val success = viewModel.loadNewChapterFromDialog(targetChapter, pageNumber)
+                                        if (success) {
+                                            moveToPageIndex(targetIndex)
+                                        }
+                                    }
                                 }
                             }
                         },
                         onDeleteBookmarkPage = viewModel::deletePageBookmark,
+                        onToggleCurrentPageBookmark = {
+                            viewModel.togglePageBookmark(pageNumber = currentPageNum, targetChapterId = currentChapterId)
+                        },
+                        currentPageNumber = currentPageNum,
+                        isCurrentPageBookmarked = isCurrentPageBookmarked,
                         // KMK <--
                         isHttpSource = isHttpSource,
                         onBrowserClick = ::openChapterInBrowser.takeIf { isHttpSource },
+                        onResumeClick = {
+                            autoScrollTrigger.tryEmit(Unit)
+                        },
                     )
                 }
 
@@ -857,6 +916,15 @@ class ReaderActivity : BaseActivity() {
      */
     override fun onDestroy() {
         super.onDestroy()
+        // KMK -->
+        try {
+            val layoutParams = WindowManager.LayoutParams().apply {
+                copyFrom(window.attributes)
+                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+            window.attributes = layoutParams
+        } catch (_: Exception) {}
+        // KMK <--
         viewModel.state.value.viewer?.destroy()
         config = null
         menuToggleToast?.cancel()
@@ -866,10 +934,7 @@ class ReaderActivity : BaseActivity() {
             Injekt.get<DownloadManager>().startDownloads()
             wasDownloaderRunning = false
         }
-        val suggestionsPreferences = Injekt.get<SuggestionsPreferences>()
-        if (suggestionsPreferences.isSuggestionsEnabled().get()) {
-            SuggestionsWorker.scheduleBackground(this, true)
-        }
+        SuggestionsWorker.isReaderActive.value = false
         lifecycleScope.launchNonCancellable {
             LibraryUpdateJob.setupTask(this@ReaderActivity)
             SyncDataJob.setupTask(this@ReaderActivity)
@@ -886,6 +951,7 @@ class ReaderActivity : BaseActivity() {
         // <-- AM (DISCORD)
 
         super.onPause()
+        SuggestionsWorker.isReaderActive.value = false
     }
 
     /**
@@ -894,6 +960,7 @@ class ReaderActivity : BaseActivity() {
      */
     override fun onResume() {
         super.onResume()
+        SuggestionsWorker.isReaderActive.value = true
         viewModel.restartReadTimer()
 
         // AM (DISCORD) -->
@@ -911,6 +978,29 @@ class ReaderActivity : BaseActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             setMenuVisibility(viewModel.state.value.menuVisible)
+            // KMK --> Re-apply custom brightness when window regains focus if enabled
+            if (readerPreferences.customBrightness().get()) {
+                config?.setCustomBrightnessValue(readerPreferences.customBrightnessValue().get())
+            }
+            // KMK <--
+        } else {
+            // KMK --> Release brightness lock when losing window focus (e.g. notification shade / quick settings)
+            // so device system brightness can be changed without app restriction
+            try {
+                val layoutParams = WindowManager.LayoutParams().apply {
+                    copyFrom(window.attributes)
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
+                window.attributes = layoutParams
+                activeDialogWindow?.let { dialogWindow ->
+                    val dialogParams = WindowManager.LayoutParams().apply {
+                        copyFrom(dialogWindow.attributes)
+                        screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    }
+                    dialogWindow.attributes = dialogParams
+                }
+            } catch (_: Exception) {}
+            // KMK <--
         }
     }
 
@@ -957,6 +1047,14 @@ class ReaderActivity : BaseActivity() {
         return handled || super.dispatchKeyEvent(event)
     }
 
+    private fun formatAutoScrollInterval(interval: Float): String {
+        return if (interval < 15.0f) {
+            String.format(java.util.Locale.US, "%.1f", interval)
+        } else {
+            String.format(java.util.Locale.US, "%.0f", interval)
+        }
+    }
+
     private fun showSpeedToast(message: String) {
         speedToast?.cancel()
         speedToast = android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).apply {
@@ -979,7 +1077,7 @@ class ReaderActivity : BaseActivity() {
                             dragSpeedStartX = ev.x
                             dragSpeedStartY = ev.y
                             dragSpeedStartInterval = readerPreferences.autoscrollInterval().get()
-                            dragSpeedValue = String.format(java.util.Locale.US, "%.1f", dragSpeedStartInterval)
+                            dragSpeedValue = formatAutoScrollInterval(dragSpeedStartInterval)
                         }
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -992,7 +1090,7 @@ class ReaderActivity : BaseActivity() {
                                 if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 2) {
                                     isDraggingForSpeed = true
                                     dragSpeedStartX = ev.x
-                                    dragSpeedValue = String.format(java.util.Locale.US, "%.1f", dragSpeedStartInterval)
+                                    dragSpeedValue = formatAutoScrollInterval(dragSpeedStartInterval)
 
                                     val cancelEvent = MotionEvent.obtain(ev).apply {
                                         action = MotionEvent.ACTION_CANCEL
@@ -1003,12 +1101,19 @@ class ReaderActivity : BaseActivity() {
                             }
 
                             if (isDraggingForSpeed) {
-                                val change = dx / 60f
-                                var newInterval = dragSpeedStartInterval - change
-                                if (newInterval < 0.5f) newInterval = 0.5f
-                                if (newInterval > 60.0f) newInterval = 60.0f
+                                val dragDx = ev.x - dragSpeedStartX
+                                val sensitivity = readerPreferences.autoscrollSwipeSensitivity().get().coerceIn(25, 200) / 100.0
+                                val factor = java.lang.Math.pow(2.0, (-dragDx * sensitivity / 500.0)).toFloat()
+                                val baseInterval = if (dragSpeedStartInterval in 0.5f..60.0f) dragSpeedStartInterval else 3.0f
+                                var newInterval = (baseInterval * factor).coerceIn(0.5f, 60.0f)
 
-                                val formatted = String.format(java.util.Locale.US, "%.1f", newInterval)
+                                newInterval = when {
+                                    newInterval < 5.0f -> kotlin.math.round(newInterval * 10f) / 10f
+                                    newInterval < 15.0f -> kotlin.math.round(newInterval * 2f) / 2f
+                                    else -> kotlin.math.round(newInterval)
+                                }
+
+                                val formatted = formatAutoScrollInterval(newInterval)
                                 viewModel.setAutoScrollFrequency(formatted)
                                 dragSpeedValue = formatted
                             }
@@ -1108,11 +1213,22 @@ class ReaderActivity : BaseActivity() {
         }
         // SY <--
 
+        val mangaThemeColor = remember(state.manga) {
+            state.manga?.let { m ->
+                try {
+                    eu.kanade.tachiyomi.data.cache.asMangaCover(m).vibrantCoverColor?.let { androidx.compose.ui.graphics.Color(it) }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
         ReaderAppBars(
             visible = state.menuVisible,
 
             mangaTitle = state.manga?.title,
             chapterTitle = state.currentChapter?.chapter?.name,
+            mangaThemeColor = mangaThemeColor,
             navigateUp = onBackPressedDispatcher::onBackPressed,
             onClickTopAppBar = ::openMangaScreen,
             bookmarked = state.bookmarked,
@@ -1170,6 +1286,10 @@ class ReaderActivity : BaseActivity() {
             dualPageSplitEnabled = dualPageSplitPaged,
             doublePages = state.doublePages,
             onClickChapterList = viewModel::openChapterListDialog,
+            onClickResume = {
+                hideMenu()
+                autoScrollTrigger.tryEmit(Unit)
+            },
             onClickPageLayout = {
                 if (readerPreferences.pageLayout().get() == PagerConfig.PageLayout.AUTOMATIC) {
                     (viewModel.state.value.viewer as? PagerViewer)?.config?.let { config ->
@@ -1201,9 +1321,11 @@ class ReaderActivity : BaseActivity() {
 
     // EXH -->
     private fun enableExhAutoScroll() {
-        viewModel.state.map { it.autoScroll to it.menuVisible }.distinctUntilChanged()
-            .mapLatest { (autoScroll, menuVisible) ->
-                if (autoScroll && !menuVisible) {
+        viewModel.state.map {
+            Triple(it.autoScroll, it.menuVisible, it.dialog != null)
+        }.distinctUntilChanged()
+            .mapLatest { (autoScroll, menuVisible, isDialogOpen) ->
+                if (autoScroll && !menuVisible && !isDialogOpen) {
                     repeatOnLifecycle(Lifecycle.State.STARTED) {
                         autoScrollTrigger
                             .onStart { emit(Unit) }
@@ -1556,8 +1678,12 @@ class ReaderActivity : BaseActivity() {
      */
     private fun loadNextChapter() {
         lifecycleScope.launch {
-            viewModel.loadNextChapter()
-            moveToPageIndex(0)
+            // KMK -->
+            val success = viewModel.loadNextChapter()
+            if (success) {
+                moveToPageIndex(0)
+            }
+            // KMK <--
         }
     }
 
@@ -1567,8 +1693,12 @@ class ReaderActivity : BaseActivity() {
      */
     private fun loadPreviousChapter() {
         lifecycleScope.launch {
-            viewModel.loadPreviousChapter()
-            moveToPageIndex(0)
+            // KMK -->
+            val success = viewModel.loadPreviousChapter()
+            if (success) {
+                moveToPageIndex(0)
+            }
+            // KMK <--
         }
     }
 
@@ -1921,13 +2051,17 @@ class ReaderActivity : BaseActivity() {
             }
         }
 
+        // KMK -->
+        private var customBrightnessJob: Job? = null
+
         /**
          * Sets the custom brightness overlay according to [enabled].
          */
         private fun setCustomBrightness(enabled: Boolean) {
+            customBrightnessJob?.cancel()
             if (enabled) {
-                readerPreferences.customBrightnessValue().changes()
-                    .sample(100)
+                customBrightnessJob = readerPreferences.customBrightnessValue().changes()
+                    .conflate()
                     .onEach(::setCustomBrightnessValue)
                     .launchIn(lifecycleScope)
             } else {
@@ -1941,7 +2075,7 @@ class ReaderActivity : BaseActivity() {
          * From 1 to 100 it sets that value as brightness.
          * 0 sets system brightness and hides the overlay.
          */
-        private fun setCustomBrightnessValue(value: Int) {
+        internal fun setCustomBrightnessValue(value: Int) {
             // Calculate and set reader brightness.
             val readerBrightness = when {
                 value > 0 -> {
@@ -1952,10 +2086,25 @@ class ReaderActivity : BaseActivity() {
                 }
                 else -> WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
-            window.attributes = window.attributes.apply { screenBrightness = readerBrightness }
+            val layoutParams = WindowManager.LayoutParams().apply {
+                copyFrom(window.attributes)
+                screenBrightness = readerBrightness
+            }
+            window.attributes = layoutParams
+
+            activeDialogWindow?.let { dialogWindow ->
+                try {
+                    val dialogParams = WindowManager.LayoutParams().apply {
+                        copyFrom(dialogWindow.attributes)
+                        screenBrightness = readerBrightness
+                    }
+                    dialogWindow.attributes = dialogParams
+                } catch (_: Exception) {}
+            }
 
             viewModel.setBrightnessOverlayValue(value)
         }
+        // KMK <--
         private fun setLayerPaint() {
             val filter = ReaderColorFilter(
                 brightness = readerPreferences.colorFilterBrightness().get(),

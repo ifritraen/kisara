@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -58,6 +59,7 @@ import eu.kanade.tachiyomi.ui.browse.duplicate.duplicateSourceTab
 import eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.extension.extensionsTab
 import eu.kanade.tachiyomi.ui.browse.feed.FeedScreenModel
+import eu.kanade.tachiyomi.ui.browse.local.browseLocalTab
 import eu.kanade.tachiyomi.ui.browse.migration.sources.migrateSourceTab
 import eu.kanade.tachiyomi.ui.browse.novel.bulk.novelBulkSearchTab
 import eu.kanade.tachiyomi.ui.browse.novel.duplicate.novelDuplicateTab
@@ -139,16 +141,23 @@ data object BrowseTab : Tab {
         switchToTabChannel.trySend(1)
     }
 
-    fun showMigration() {
+    fun showLocal() {
         switchToTabChannel.trySend(2)
     }
 
+    fun showMigration() {
+        val isManga = Injekt.get<UiPreferences>().activeMediaType().get() == MediaType.MANGA
+        switchToTabChannel.trySend(if (isManga) 3 else 2)
+    }
+
     fun showDuplicate() {
-        switchToTabChannel.trySend(3)
+        val isManga = Injekt.get<UiPreferences>().activeMediaType().get() == MediaType.MANGA
+        switchToTabChannel.trySend(if (isManga) 4 else 3)
     }
 
     fun showBulkSearch() {
-        switchToTabChannel.trySend(4)
+        val isManga = Injekt.get<UiPreferences>().activeMediaType().get() == MediaType.MANGA
+        switchToTabChannel.trySend(if (isManga) 5 else 4)
     }
 
     @Composable
@@ -196,6 +205,7 @@ data object BrowseTab : Tab {
                     persistentListOf(
                         sourcesTab(),
                         extensionsTab(extensionsScreenModel),
+                        browseLocalTab(),
                         migrateSourceTab(),
                         duplicateSourceTab(),
                         searchTab(MediaType.MANGA),
@@ -208,8 +218,10 @@ data object BrowseTab : Tab {
 
         val state = rememberPagerState { tabs.size }
 
-        LaunchedEffect(state.currentPage) {
-            currentPageIndex = state.currentPage
+        LaunchedEffect(state) {
+            snapshotFlow { state.settledPage }.collect {
+                currentPageIndex = it
+            }
         }
 
         val scope = rememberCoroutineScope()
@@ -243,7 +255,13 @@ data object BrowseTab : Tab {
         LaunchedEffect(Unit) {
             launch {
                 switchToTabChannel.receiveAsFlow()
-                    .collectLatest { state.animateScrollToPage(it) }
+                    .collectLatest {
+                        if (kotlin.math.abs(it - state.currentPage) <= 1) {
+                            state.animateScrollToPage(it)
+                        } else {
+                            state.scrollToPage(it)
+                        }
+                    }
             }
             launch {
                 nextSubTabEvent.receiveAsFlow()

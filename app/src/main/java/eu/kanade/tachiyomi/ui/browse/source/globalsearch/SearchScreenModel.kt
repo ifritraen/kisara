@@ -59,6 +59,7 @@ abstract class SearchScreenModel(
 
     private var lastQuery: String? = null
     private var lastSourceFilter: SourceFilter? = null
+    private var lastCustomGroupId: String? = null
 
     protected var extensionFilter: String? = null
 
@@ -168,6 +169,7 @@ abstract class SearchScreenModel(
 
     fun setSourceFilter(filter: SourceFilter) {
         preferences.globalSearchPinnedState().set(filter)
+        mutableState.update { it.copy(sourceFilter = filter) }
         search()
     }
 
@@ -175,6 +177,7 @@ abstract class SearchScreenModel(
     fun setCustomGroupFilter(groupId: String) {
         preferences.globalSearchActiveCustomGroupId().set(groupId)
         preferences.globalSearchPinnedState().set(SourceFilter.Custom)
+        mutableState.update { it.copy(sourceFilter = SourceFilter.Custom) }
         search()
     }
 
@@ -192,6 +195,7 @@ abstract class SearchScreenModel(
         ) {
             preferences.globalSearchActiveCustomGroupId().set(group.id)
             preferences.globalSearchPinnedState().set(SourceFilter.Custom)
+            mutableState.update { it.copy(sourceFilter = SourceFilter.Custom) }
         }
         search()
     }
@@ -204,6 +208,7 @@ abstract class SearchScreenModel(
             preferences.globalSearchActiveCustomGroupId().set(fallback)
             if (fallback.isEmpty() && state.value.sourceFilter == SourceFilter.Custom) {
                 preferences.globalSearchPinnedState().set(SourceFilter.All)
+                mutableState.update { it.copy(sourceFilter = SourceFilter.All) }
             }
         }
         search()
@@ -217,14 +222,18 @@ abstract class SearchScreenModel(
     fun search() {
         val query = state.value.searchQuery
         val sourceFilter = state.value.sourceFilter
+        val currentGroupId = preferences.globalSearchActiveCustomGroupId().get()
 
         if (query.isNullOrBlank()) return
 
         val sameQuery = this.lastQuery == query
-        if (sameQuery && this.lastSourceFilter == sourceFilter) return
+        val sameFilter = this.lastSourceFilter == sourceFilter
+        val sameGroup = sourceFilter != SourceFilter.Custom || this.lastCustomGroupId == currentGroupId
+        if (sameQuery && sameFilter && sameGroup) return
 
         this.lastQuery = query
         this.lastSourceFilter = sourceFilter
+        this.lastCustomGroupId = currentGroupId
 
         searchJob?.cancel()
 
@@ -304,11 +313,13 @@ abstract class SearchScreenModel(
                         }
 
                         val filterMangaByBlockedContent = Injekt.get<tachiyomi.domain.suggestions.interactor.FilterMangaByBlockedContent>()
+                        val optionalTags = eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.extractOptionalTags(query)
                         val titles = page.mangas
                             .map { it.toDomainManga(source.id) }
                             .distinctBy { it.url }
                             .let { networkToLocalManga(it) }
                             .let { filterMangaByBlockedContent.filterList(it) }
+                            .let { eu.kanade.tachiyomi.ui.browse.search.model.SearchQueryTagMatcher.rankTitlesByOptionalTagMatches(it, optionalTags) }
 
                         if (isActive) {
                             updateItem(source, SearchItemResult.Success(titles))
@@ -344,7 +355,8 @@ abstract class SearchScreenModel(
     fun setMigrateDialog(currentId: Long, target: Manga) {
         screenModelScope.launchIO {
             val current = getManga.await(currentId) ?: return@launchIO
-            mutableState.update { it.copy(dialog = Dialog.Migrate(target, current)) }
+            val localTarget = if (target.id > 0) target else networkToLocalManga(target)
+            mutableState.update { it.copy(dialog = Dialog.Migrate(localTarget, current)) }
         }
     }
 

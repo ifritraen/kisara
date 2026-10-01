@@ -142,6 +142,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -239,7 +240,6 @@ class MainActivity : BaseActivity() {
 
         super.onCreate(savedInstanceState)
         enforceHighRefreshRate()
-        eu.kanade.tachiyomi.data.ai.ResourceMonitor.start()
 
         // KMK --> ponytail: await preference migrations without blocking the main thread (Tadami parity)
         if (isLaunch) {
@@ -264,11 +264,33 @@ class MainActivity : BaseActivity() {
         // KMK <--
 
         if (isLaunch) {
-            // KMK --> ponytail: delay background suggestion and feed workers by 30s to keep startup instant and CPU idle
-            lifecycleScope.launch(Dispatchers.Default) {
-                kotlinx.coroutines.delay(30000L)
-                eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.triggerOnAppStart(this@MainActivity)
-                if (uiPreferences.homeFeedBackgroundPrefetch().get()) {
+            // KMK --> Suggestions & Feed Worker Lifecycle
+            val suggestionsPreferences = Injekt.get<tachiyomi.domain.suggestions.service.SuggestionsPreferences>()
+            if (suggestionsPreferences.isSuggestionsEnabled().get()) {
+                // Ensure periodic schedule is active with configured interval
+                eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.scheduleBackground(this@MainActivity, true)
+
+                // Check if missed interval / past periodic time
+                val lastFetch = suggestionsPreferences.lastSuggestionsFetchTime().get()
+                val intervalHours = suggestionsPreferences.suggestionsInterval().get().coerceIn(6, 168)
+                val intervalMs = intervalHours * 3600_000L
+                val isPastPeriodicTime = (lastFetch == 0L) || (System.currentTimeMillis() - lastFetch >= intervalMs)
+
+                if (isPastPeriodicTime) {
+                    lifecycleScope.launch(Dispatchers.Default) {
+                        // Delayed 2 minutes after app start
+                        kotlinx.coroutines.delay(120_000L)
+                        // If reader is active, hold until reader is closed
+                        if (eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.isReaderActive.value) {
+                            eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.isReaderActive.first { !it }
+                        }
+                        eu.kanade.tachiyomi.data.suggestions.SuggestionsWorker.triggerOnAppStart(this@MainActivity)
+                    }
+                }
+            }
+            if (uiPreferences.homeFeedBackgroundPrefetch().get()) {
+                lifecycleScope.launch(Dispatchers.Default) {
+                    kotlinx.coroutines.delay(30_000L)
                     eu.kanade.tachiyomi.data.suggestions.HomeFeedWorker.scheduleBackground(this@MainActivity, true)
                 }
             }
@@ -344,7 +366,11 @@ class MainActivity : BaseActivity() {
                             p.percent / 100f,
                             {
                                 val active = colorizerManager.getQueuedColorizerOrNull(p.chapterId)
-                                if (active != null) colorizerManager.cancelQueuedColorizer(active)
+                                if (active != null) {
+                                    colorizerManager.cancelQueuedColorizer(active)
+                                } else {
+                                    colorizerManager.cancelActiveColorizer()
+                                }
                             },
                             Icons.Default.Palette,
                         ),
@@ -359,7 +385,11 @@ class MainActivity : BaseActivity() {
                             p.percent / 100f,
                             {
                                 val active = superResolutionManager.getQueuedSuperResolutionOrNull(p.chapterId)
-                                if (active != null) superResolutionManager.cancelQueuedSuperResolution(active)
+                                if (active != null) {
+                                    superResolutionManager.cancelQueuedSuperResolution(active)
+                                } else {
+                                    superResolutionManager.cancelActiveSuperResolution()
+                                }
                             },
                             Icons.Default.AutoAwesome,
                         ),

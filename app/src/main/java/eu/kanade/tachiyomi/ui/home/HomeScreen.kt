@@ -183,6 +183,7 @@ import tachiyomi.domain.category.interactor.RenameCategory
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.presentation.core.components.material.NavigationBar
 import tachiyomi.presentation.core.components.material.NavigationRail
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -281,6 +282,13 @@ object HomeScreen : Screen() {
             }
         }
 
+        LaunchedEffect(activeMediaType) {
+            val maxIdx = if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) 2 else 1
+            if (eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex > maxIdx) {
+                eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex = maxIdx
+            }
+        }
+
         var categoryToEdit by remember { mutableStateOf<Category?>(null) }
         val categoriesState by produceState<List<Category>>(emptyList(), activeMediaType) {
             when (activeMediaType) {
@@ -298,7 +306,27 @@ object HomeScreen : Screen() {
                 }
                 else -> {
                     val getCategories = Injekt.get<GetCategories>()
-                    getCategories.subscribe().collect { value = it }
+                    val localCategory = Category(
+                        id = Category.LOCAL_CATEGORY_ID,
+                        name = "Local",
+                        order = -1L,
+                        flags = 0L,
+                        parentId = null,
+                        hidden = false,
+                    )
+                    getCategories.subscribe().collect { cats ->
+                        value = buildList {
+                            val defaultCat = cats.find { it.isSystemCategory }
+                            if (defaultCat != null) {
+                                add(defaultCat)
+                                add(localCategory)
+                                addAll(cats.filterNot { it.isSystemCategory || it.isLocalCategory })
+                            } else {
+                                add(localCategory)
+                                addAll(cats.filterNot { it.isLocalCategory })
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -492,7 +520,9 @@ object HomeScreen : Screen() {
                                                         else HomeTab.prevSubTabEvent.trySend(Unit)
                                                     }
                                                     is BrowseTab -> {
-                                                        if (BrowseTab.currentPageIndex == 4) {
+                                                        val isManga = activeMediaType == MediaType.MANGA
+                                                        val searchIndex = if (isManga) 5 else 4
+                                                        if (BrowseTab.currentPageIndex == searchIndex) {
                                                             if (swipeLeft) eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.nextSubTabEvent.trySend(Unit)
                                                             else eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.prevSubTabEvent.trySend(Unit)
                                                         } else {
@@ -558,7 +588,11 @@ object HomeScreen : Screen() {
                                 ) {
                                     CompositionLocalProvider(
                                         LocalActiveSubTabPopup provides activeSubTabPopup,
-                                        LocalEditCategory provides { categoryToEdit = it },
+                                        LocalEditCategory provides { cat ->
+                                            if (!cat.isSystemCategory && !cat.isLocalCategory) {
+                                                categoryToEdit = cat
+                                            }
+                                        },
                                     ) {
                                         AnimatedContent(
                                             targetState = tabNavigator.current,
@@ -609,7 +643,10 @@ object HomeScreen : Screen() {
                                     val hasActions = when (currentTab) {
                                         is LibraryTab -> true
                                         is HomeTab -> HomeTab.currentPageIndex in 1..5
-                                        is BrowseTab -> BrowseTab.currentPageIndex in 0..3
+                                        is BrowseTab -> {
+                                            val maxIdx = if (activeMediaType == MediaType.MANGA) 5 else 4
+                                            BrowseTab.currentPageIndex in 0..maxIdx
+                                        }
                                         is eu.kanade.tachiyomi.ui.track.TrackTab -> true
                                         else -> false
                                     }
@@ -647,7 +684,15 @@ object HomeScreen : Screen() {
                                             .align(Alignment.BottomCenter),
                                     ) {
                                         val parentCategories = remember(categoriesState) {
-                                            categoriesState.filter { it.parentId == null }.sortedBy { it.order }
+                                            categoriesState.filter { it.parentId == null }.sortedWith { c1, c2 ->
+                                                when {
+                                                    c1.isSystemCategory && !c2.isSystemCategory -> -1
+                                                    c2.isSystemCategory && !c1.isSystemCategory -> 1
+                                                    c1.isLocalCategory && !c2.isLocalCategory -> -1
+                                                    c2.isLocalCategory && !c1.isLocalCategory -> 1
+                                                    else -> c1.order.compareTo(c2.order)
+                                                }
+                                            }
                                         }
                                         val childrenByParent = remember(categoriesState) {
                                             categoriesState.filter { it.parentId != null }
@@ -666,9 +711,11 @@ object HomeScreen : Screen() {
                                         GlassSurface(
                                             shape = RoundedCornerShape(effectiveCornerRadius),
                                             style = GlassDefaults.regularStyle(),
+                                            isCategoryBar = true,
                                         ) {
                                             Box(
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                                contentAlignment = Alignment.Center,
                                             ) {
                                                 if (activePopup is LibraryTab) {
                                                     val editCategory = LocalEditCategory.current
@@ -698,13 +745,14 @@ object HomeScreen : Screen() {
                                                     }
 
                                                     Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
                                                         verticalArrangement = Arrangement.spacedBy(4.dp),
                                                     ) {
                                                         // Subcategories Row (if present) - Rendered ABOVE Parent Categories
                                                         if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
                                                             LazyRow(
                                                                 state = subcategoryListState,
-                                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                                                 verticalAlignment = Alignment.CenterVertically,
                                                             ) {
                                                                 // "All" button
@@ -742,6 +790,7 @@ object HomeScreen : Screen() {
                                                                         },
                                                                         modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                             subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                sub.parentId?.let { popupSelectedCategoryId = it }
                                                                                 popupSelectedSubcategoryId = sub.id
                                                                                 tabNavigator.current = LibraryTab
                                                                                 LibraryTab.selectSubcategoryEvent.trySend(sub.id)
@@ -749,6 +798,7 @@ object HomeScreen : Screen() {
                                                                             }
                                                                         },
                                                                     ) {
+                                                                        sub.parentId?.let { popupSelectedCategoryId = it }
                                                                         popupSelectedSubcategoryId = sub.id
                                                                         tabNavigator.current = LibraryTab
                                                                         LibraryTab.selectSubcategoryEvent.trySend(sub.id)
@@ -760,13 +810,14 @@ object HomeScreen : Screen() {
 
                                                         // Parent Categories Row with Pin icon
                                                         Row(
-                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            modifier = Modifier.wrapContentWidth(),
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                                             verticalAlignment = Alignment.CenterVertically,
                                                         ) {
                                                             LazyRow(
                                                                 state = parentCategoryListState,
                                                                 modifier = Modifier.weight(1f, fill = false),
-                                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                                                 verticalAlignment = Alignment.CenterVertically,
                                                             ) {
                                                                 items(tabCategories, key = { it.id }) { category ->
@@ -776,7 +827,9 @@ object HomeScreen : Screen() {
                                                                         selected = selectedParentId == category.id,
                                                                         hovered = hoveredButtonKey == key,
                                                                         onLongClick = {
-                                                                            editCategory(category)
+                                                                            if (!category.isLocalCategory) {
+                                                                                editCategory(category)
+                                                                            }
                                                                             if (!alwaysShowSubTabsLibrary && !isCategoryBarPinned) activeSubTabPopup = null
                                                                         },
                                                                         modifier = Modifier.onGloballyPositioned { coordinates ->
@@ -835,7 +888,18 @@ object HomeScreen : Screen() {
                                                                 ) {
                                                                     // Sub-subtabs Row for Updates (Calendar | Updates | Schedule) rendered ABOVE Home subtabs
                                                                     if (HomeTab.currentPageIndex == 3) {
-                                                                        val updatesSubTabs = listOf("Calendar" to 0, "Updates" to 1, "Schedule" to 2)
+                                                                        val updatesSubTabs = if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+                                                                            listOf(
+                                                                                stringResource(KMR.strings.tab_calendar) to 0,
+                                                                                stringResource(KMR.strings.tab_updates) to 1,
+                                                                                stringResource(KMR.strings.tab_schedule) to 2,
+                                                                            )
+                                                                        } else {
+                                                                            listOf(
+                                                                                stringResource(KMR.strings.tab_calendar) to 0,
+                                                                                stringResource(KMR.strings.tab_updates) to 1,
+                                                                            )
+                                                                        }
                                                                         Row(
                                                                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                                                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -851,6 +915,7 @@ object HomeScreen : Screen() {
                                                                                         subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
                                                                                             tabNavigator.current = HomeTab
                                                                                             HomeTab.showSubTab(3)
+                                                                                            eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex = idx
                                                                                             eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
                                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                                         }
@@ -858,6 +923,7 @@ object HomeScreen : Screen() {
                                                                                 ) {
                                                                                     tabNavigator.current = HomeTab
                                                                                     HomeTab.showSubTab(3)
+                                                                                    eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex = idx
                                                                                     eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
                                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                                 }
@@ -971,7 +1037,18 @@ object HomeScreen : Screen() {
                                                                 }
                                                             }
                                                             is UpdatesTab -> {
-                                                                val updatesSubTabs = listOf("Calendar" to 0, "Updates" to 1, "Schedule" to 2)
+                                                                val updatesSubTabs = if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+                                                                    listOf(
+                                                                        stringResource(KMR.strings.tab_calendar) to 0,
+                                                                        stringResource(KMR.strings.tab_updates) to 1,
+                                                                        stringResource(KMR.strings.tab_schedule) to 2,
+                                                                    )
+                                                                } else {
+                                                                    listOf(
+                                                                        stringResource(KMR.strings.tab_calendar) to 0,
+                                                                        stringResource(KMR.strings.tab_updates) to 1,
+                                                                    )
+                                                                }
                                                                 Row(
                                                                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                                                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -986,12 +1063,14 @@ object HomeScreen : Screen() {
                                                                             modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                                 subTabButtonBounds[key] = ButtonActionBounds(coordinates.boundsInRoot()) {
                                                                                     tabNavigator.current = UpdatesTab
+                                                                                    eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex = idx
                                                                                     eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
                                                                                     if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                                 }
                                                                             },
                                                                         ) {
                                                                             tabNavigator.current = UpdatesTab
+                                                                            eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.currentPageIndex = idx
                                                                             eu.kanade.tachiyomi.ui.updates.UpdatesTabEvents.selectSubTabEvent.trySend(idx)
                                                                             if (!alwaysShowSubTabsHome) activeSubTabPopup = null
                                                                         }
@@ -1002,8 +1081,13 @@ object HomeScreen : Screen() {
                                                                 Column(
                                                                     verticalArrangement = Arrangement.spacedBy(4.dp),
                                                                 ) {
+                                                                    val isManga = activeMediaType == MediaType.MANGA
+                                                                    val migrationIndex = if (isManga) 3 else 2
+                                                                    val duplicateIndex = if (isManga) 4 else 3
+                                                                    val searchIndex = if (isManga) 5 else 4
+
                                                                     // Sub-subtabs Row for SearchTab (Global | Bulk | Advanced) rendered ABOVE Browse subtabs
-                                                                    if (BrowseTab.currentPageIndex == 4) {
+                                                                    if (BrowseTab.currentPageIndex == searchIndex) {
                                                                         val searchSubTabs = listOf("Global" to 0, "Bulk" to 1, "Advanced" to 2)
                                                                         Row(
                                                                             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -1072,9 +1156,27 @@ object HomeScreen : Screen() {
                                                                             BrowseTab.showExtension()
                                                                             if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
                                                                         }
+                                                                        if (isManga) {
+                                                                            SubTabButton(
+                                                                                text = "Local",
+                                                                                selected = BrowseTab.currentPageIndex == 2,
+                                                                                hovered = hoveredButtonKey == "Browse_Local",
+                                                                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                                                                    subTabButtonBounds["Browse_Local"] = ButtonActionBounds(coordinates.boundsInRoot()) {
+                                                                                        tabNavigator.current = BrowseTab
+                                                                                        BrowseTab.showLocal()
+                                                                                        if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                                    }
+                                                                                },
+                                                                            ) {
+                                                                                tabNavigator.current = BrowseTab
+                                                                                BrowseTab.showLocal()
+                                                                                if (!alwaysShowSubTabsBrowse) activeSubTabPopup = null
+                                                                            }
+                                                                        }
                                                                         SubTabButton(
                                                                             text = "Migration",
-                                                                            selected = BrowseTab.currentPageIndex == 2,
+                                                                            selected = BrowseTab.currentPageIndex == migrationIndex,
                                                                             hovered = hoveredButtonKey == "Browse_Migration",
                                                                             modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                                 subTabButtonBounds["Browse_Migration"] = ButtonActionBounds(coordinates.boundsInRoot()) {
@@ -1090,7 +1192,7 @@ object HomeScreen : Screen() {
                                                                         }
                                                                         SubTabButton(
                                                                             text = "Duplicate",
-                                                                            selected = BrowseTab.currentPageIndex == 3,
+                                                                            selected = BrowseTab.currentPageIndex == duplicateIndex,
                                                                             hovered = hoveredButtonKey == "Browse_Duplicate",
                                                                             modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                                 subTabButtonBounds["Browse_Duplicate"] = ButtonActionBounds(coordinates.boundsInRoot()) {
@@ -1106,7 +1208,7 @@ object HomeScreen : Screen() {
                                                                         }
                                                                         SubTabButton(
                                                                             text = "Search",
-                                                                            selected = BrowseTab.currentPageIndex == 4,
+                                                                            selected = BrowseTab.currentPageIndex == searchIndex,
                                                                             hovered = hoveredButtonKey == "Browse_BulkSearch",
                                                                             modifier = Modifier.onGloballyPositioned { coordinates ->
                                                                                 subTabButtonBounds["Browse_BulkSearch"] = ButtonActionBounds(coordinates.boundsInRoot()) {
@@ -1255,6 +1357,7 @@ object HomeScreen : Screen() {
                                                         GlassSurface(
                                                             shape = RoundedCornerShape(effectiveCornerRadius),
                                                             style = GlassDefaults.regularStyle(),
+                                                            isStandardSurface = true,
                                                             modifier = Modifier.wrapContentWidth(),
                                                         ) {
                                                             Column(
@@ -1314,6 +1417,7 @@ object HomeScreen : Screen() {
                                                     GlassSurface(
                                                         shape = RoundedCornerShape(effectiveCornerRadius),
                                                         style = GlassDefaults.prominentStyle(),
+                                                        isStandardSurface = true,
                                                         modifier = Modifier.size(bottomBarHeight.dp),
                                                     ) {
                                                         Box(
@@ -1378,6 +1482,7 @@ object HomeScreen : Screen() {
                                             GlassSurface(
                                                 shape = RoundedCornerShape(bottomBarCornerRadius.dp),
                                                 style = GlassDefaults.prominentStyle(),
+                                                isStandardSurface = true,
                                                 modifier = Modifier
                                                     .height(bottomBarHeight.dp)
                                                     .then(
@@ -1507,6 +1612,7 @@ object HomeScreen : Screen() {
                                                             GlassSurface(
                                                                 shape = RoundedCornerShape(effectiveCornerRadius),
                                                                 style = GlassDefaults.regularStyle(),
+                                                                isStandardSurface = true,
                                                                 modifier = Modifier.wrapContentWidth(),
                                                             ) {
                                                                 Column(
@@ -1529,18 +1635,40 @@ object HomeScreen : Screen() {
                                                         GlassSurface(
                                                             shape = RoundedCornerShape(effectiveCornerRadius),
                                                             style = GlassDefaults.prominentStyle(),
+                                                            isStandardSurface = true,
                                                             modifier = Modifier.size(bottomBarHeight.dp),
                                                         ) {
                                                             Box(
                                                                 modifier = Modifier
                                                                     .fillMaxSize()
                                                                     .clip(RoundedCornerShape(effectiveCornerRadius))
-                                                                    .clickable {
-                                                                        showVerticalActionPopup = !showVerticalActionPopup
-                                                                        if (showVerticalActionPopup) {
-                                                                            showMediaModePopup = false
-                                                                        }
-                                                                    },
+                                                                    .combinedClickable(
+                                                                        onClick = {
+                                                                            showVerticalActionPopup = !showVerticalActionPopup
+                                                                            if (showVerticalActionPopup) {
+                                                                                showMediaModePopup = false
+                                                                            }
+                                                                        },
+                                                                        onDoubleClick = {
+                                                                            showVerticalActionPopup = false
+                                                                            when (currentTab) {
+                                                                                is LibraryTab -> LibraryTab.searchEvent.trySend(Unit)
+                                                                                is BrowseTab -> {
+                                                                                    when (BrowseTab.currentPageIndex) {
+                                                                                        1 -> BrowseTab.extensionsSearchEvent.trySend(Unit)
+                                                                                        else -> BrowseTab.sourcesGlobalSearchEvent.trySend(Unit)
+                                                                                    }
+                                                                                }
+                                                                                is eu.kanade.tachiyomi.ui.track.TrackTab -> eu.kanade.tachiyomi.ui.track.TrackTab.searchEvent.trySend(Unit)
+                                                                                is HomeTab -> {
+                                                                                    if (HomeTab.currentPageIndex == 4) {
+                                                                                        HomeTab.historySearchEvent.trySend(null)
+                                                                                    }
+                                                                                }
+                                                                                else -> {}
+                                                                            }
+                                                                        },
+                                                                    ),
                                                                 contentAlignment = Alignment.Center,
                                                             ) {
                                                                 Icon(
@@ -1587,11 +1715,11 @@ object HomeScreen : Screen() {
                                 tabNavigator.current = when (it) {
                                     is Tab.Library -> LibraryTab
                                     Tab.Updates -> {
-                                        HomeTab.showSubTab(1)
+                                        HomeTab.showSubTab(3)
                                         HomeTab
                                     }
                                     Tab.History -> {
-                                        HomeTab.showSubTab(2)
+                                        HomeTab.showSubTab(4)
                                         HomeTab
                                     }
                                     is Tab.Browse -> {
@@ -1812,16 +1940,17 @@ internal fun SubTabButton(
         label = "subTabAlpha",
     )
 
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else if (hovered) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        } else {
-            Color.Transparent
-        },
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+    val shape = RoundedCornerShape(8.dp)
+    val backgroundColor = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else if (hovered) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    } else {
+        Color.Transparent
+    }
+    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(
         modifier = modifier
             .height(subBarHeight.dp)
             .graphicsLayer {
@@ -1829,20 +1958,20 @@ internal fun SubTabButton(
                 scaleY = scale
                 this.alpha = alpha
             }
+            .clip(shape)
+            .background(backgroundColor, shape)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
-            ),
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 6.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium.copy(fontSize = fontSize),
             )
-        }
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = fontSize),
+        )
     }
 }
 
@@ -1955,6 +2084,7 @@ fun EditCategoryPopup(
             GlassSurface(
                 shape = RoundedCornerShape(28.dp),
                 style = GlassDefaults.prominentStyle(),
+                dialogSurface = true,
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -2114,9 +2244,18 @@ private fun TabActionGroup(
                 Icon(Icons.Outlined.FilterList, contentDescription = "Filter", modifier = iconModifier)
             }
             Box {
-                IconButton(
-                    onClick = { showLibraryMoreMenu = true },
-                    modifier = buttonModifier,
+                Box(
+                    modifier = buttonModifier
+                        .clip(CircleShape)
+                        .combinedClickable(
+                            onClick = { showLibraryMoreMenu = true },
+                            onDoubleClick = {
+                                showLibraryMoreMenu = false
+                                onActionExecuted()
+                                LibraryTab.searchEvent.trySend(Unit)
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More Options", modifier = iconModifier)
                 }
@@ -2278,6 +2417,12 @@ private fun TabActionGroup(
             }
         }
         is BrowseTab -> {
+            val uiPreferences = remember { Injekt.get<UiPreferences>() }
+            val activeMediaType by uiPreferences.activeMediaType().collectAsState()
+            val isManga = activeMediaType == MediaType.MANGA
+            val migrationIndex = if (isManga) 3 else 2
+            val duplicateIndex = if (isManga) 4 else 3
+            val searchIndex = if (isManga) 5 else 4
             when (BrowseTab.currentPageIndex) {
                 0 -> { // Sources
                     IconButton(
@@ -2366,7 +2511,7 @@ private fun TabActionGroup(
                         Icon(Icons.Outlined.Extension, contentDescription = "Install Kotatsu JAR", modifier = iconModifier)
                     }
                 }
-                2 -> { // Migrate
+                migrationIndex -> { // Migrate
                     IconButton(
                         onClick = {
                             BrowseTab.migrateHelpEvent.trySend(Unit)
@@ -2377,7 +2522,7 @@ private fun TabActionGroup(
                         Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help Guide", modifier = iconModifier)
                     }
                 }
-                3 -> { // Duplicate
+                duplicateIndex -> { // Duplicate
                     IconButton(
                         onClick = {
                             eu.kanade.tachiyomi.ui.browse.duplicate.DuplicateTab.resolveDuplicatesEvent.trySend(Unit)
@@ -2388,7 +2533,7 @@ private fun TabActionGroup(
                         Icon(Icons.Default.Check, contentDescription = "Resolve Duplicates", modifier = iconModifier)
                     }
                 }
-                4 -> { // Search (Global | Bulk | Advance)
+                searchIndex -> { // Search (Global | Bulk | Advance)
                     IconButton(
                         onClick = {
                             eu.kanade.tachiyomi.ui.browse.search.SearchTabEvents.prevSubTabEvent.trySend(Unit)

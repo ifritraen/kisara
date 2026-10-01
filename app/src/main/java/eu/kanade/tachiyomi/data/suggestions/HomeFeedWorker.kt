@@ -160,7 +160,7 @@ class HomeFeedWorker(
 
                 androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                     TAG,
-                    ExistingPeriodicWorkPolicy.UPDATE,
+                    ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                     request,
                 )
                 logcat(LogPriority.INFO) { "Scheduled periodic home feed pre-fetch background job." }

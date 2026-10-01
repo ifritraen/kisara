@@ -83,6 +83,7 @@ import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
+import eu.kanade.presentation.components.SearchBottomSheet
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.novel.NovelLibraryContent
 import eu.kanade.presentation.library.novel.NovelLibraryItem
@@ -206,13 +207,9 @@ data object NovelLibraryTab : Tab {
         }
 
         var activeSubcategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
-        var previousCategoryIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-        LaunchedEffect(screenModel.activeCategoryIndex) {
-            if (previousCategoryIndex != null && previousCategoryIndex != screenModel.activeCategoryIndex) {
-                activeSubcategoryId = null
-            }
-            previousCategoryIndex = screenModel.activeCategoryIndex
-        }
+        var previousParentId by rememberSaveable { mutableStateOf<Long?>(null) }
+        var showSearchSheet by rememberSaveable { mutableStateOf(false) }
+        val showSubcategoriesAtTop by uiPreferences.showSubcategoriesAtTop().collectAsState()
 
         val kisaraShowSubcategoriesInMainBar = uiPreferences.kisaraShowSubcategoriesInMainBar().collectAsState().value
         val parentCategories = remember(state.categories) {
@@ -247,6 +244,18 @@ data object NovelLibraryTab : Tab {
             if (activeCategory?.parentId != null) activeCategory.id else null
         }
 
+        LaunchedEffect(activeParent?.id) {
+            if (previousParentId != null && activeParent?.id != null && previousParentId != activeParent?.id) {
+                val sub = activeSubcategoryId?.let { id -> state.categories.firstOrNull { it.id == id } }
+                if (sub == null || sub.parentId != activeParent.id) {
+                    activeSubcategoryId = null
+                }
+            }
+            if (activeParent?.id != null) {
+                previousParentId = activeParent?.id
+            }
+        }
+
         LaunchedEffect(activeParent?.id, activeSubcategoryId) {
             eu.kanade.tachiyomi.ui.library.LibraryTab.activeCategoryFlow.value = Pair(activeParent?.id, activeSubcategoryId)
         }
@@ -266,7 +275,7 @@ data object NovelLibraryTab : Tab {
             }
             launch {
                 eu.kanade.tachiyomi.ui.library.LibraryTab.searchEvent.receiveAsFlow().collectLatest {
-                    screenModel.search("")
+                    showSearchSheet = true
                 }
             }
             launch {
@@ -332,7 +341,7 @@ data object NovelLibraryTab : Tab {
                         if (sub?.parentId != null) {
                             val pIndex = state.categories.indexOfFirst { it.id == sub.parentId }
                             if (pIndex != -1) {
-                                previousCategoryIndex = pIndex
+                                previousParentId = sub.parentId
                                 screenModel.activeCategoryIndex = pIndex
                             }
                         }
@@ -432,8 +441,8 @@ data object NovelLibraryTab : Tab {
                                     page = screenModel.activeCategoryIndex,
                                 ),
                                 onClickUnselectAll = screenModel::clearSelection,
-                                onClickSelectAll = { screenModel.selectAll(screenModel.activeCategoryIndex) },
-                                onClickInvertSelection = { screenModel.invertSelection(screenModel.activeCategoryIndex) },
+                                onClickSelectAll = { screenModel.selectAll(screenModel.activeCategoryIndex, activeSubcategoryId) },
+                                onClickInvertSelection = { screenModel.invertSelection(screenModel.activeCategoryIndex, activeSubcategoryId) },
                                 onClickFilter = screenModel::showSettingsDialog,
                                 onClickRefresh = onClickRefresh,
                                 onClickGlobalUpdate = onClickRefresh,
@@ -453,6 +462,7 @@ data object NovelLibraryTab : Tab {
                                 onInvalidateDownloadCache = {},
                                 searchQuery = state.searchQuery,
                                 onSearchQueryChange = screenModel::search,
+                                onOpenSearchSheet = { showSearchSheet = true },
                                 scrollBehavior = scrollBehavior,
                             )
                             if (state.searchQuery != null) {
@@ -632,9 +642,10 @@ data object NovelLibraryTab : Tab {
                                 state.library[category] ?: emptyList()
                             },
                             showParentFilters = showParentFilters,
-                            showSubcategories = showSubcategoryTabs && topBarVisible,
+                            showSubcategories = showSubcategoriesAtTop && (showSubcategoryTabs || showParentFilters) && topBarVisible,
                             activeSubcategoryId = activeSubcategoryId,
                             onSubcategorySelected = { activeSubcategoryId = it },
+                            sort = state.sort,
                         )
                     }
                 }
@@ -719,10 +730,11 @@ data object NovelLibraryTab : Tab {
                     GlassSurface(
                         shape = RoundedCornerShape(effectiveCornerRadius),
                         style = GlassDefaults.regularStyle(),
-                        isCategoryBar = false,
+                        isCategoryBar = true,
                     ) {
                     Column(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         if (subcategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
@@ -760,7 +772,8 @@ data object NovelLibraryTab : Tab {
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.wrapContentWidth(),
+                            horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             LazyRow(
@@ -805,7 +818,21 @@ data object NovelLibraryTab : Tab {
                 }
             }
         }
-            }
+    }
+}
+
+        if (showSearchSheet) {
+            SearchBottomSheet(
+                searchQuery = state.searchQuery,
+                onChangeSearchQuery = screenModel::search,
+                onSearch = { query ->
+                    screenModel.search(query)
+                    showSearchSheet = false
+                },
+                onDismissRequest = { showSearchSheet = false },
+                title = stringResource(MR.strings.action_search),
+                placeholderText = stringResource(MR.strings.action_search_hint),
+            )
         }
 
         when (val dialog = state.dialog) {

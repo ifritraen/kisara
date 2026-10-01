@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material3.AlertDialog
+import eu.kanade.presentation.components.KisaraBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,21 +44,24 @@ fun SeriesCoverDialog(
     onDeleteCustom: (() -> Unit)?,
     onSelectEntry: (Long) -> Unit,
 ) {
-    AlertDialog(
+    KisaraBottomSheet(
         onDismissRequest = onDismissRequest,
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(text = stringResource(MR.strings.action_close))
+        title = stringResource(MR.strings.action_edit_cover),
+        footer = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismissRequest) {
+                    Text(text = stringResource(MR.strings.action_close))
+                }
             }
         },
-        title = {
-            Text(text = stringResource(MR.strings.action_edit_cover))
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
                 SeriesCoverActionRow(
                     label = stringResource(MR.strings.automatic_background),
                     selected = currentMode == SeriesCoverMode.AUTO,
@@ -134,9 +137,8 @@ fun SeriesCoverDialog(
                     )
                 }
             }
-        },
-    )
-}
+        }
+    }
 
 @Composable
 private fun SeriesCoverActionRow(

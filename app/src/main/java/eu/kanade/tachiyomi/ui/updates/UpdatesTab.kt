@@ -17,8 +17,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -69,7 +71,7 @@ object UpdatesTabEvents {
     val nextSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val prevSubTabEvent = kotlinx.coroutines.channels.Channel<Unit>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val selectSubTabEvent = kotlinx.coroutines.channels.Channel<Int>(1, kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
-    var currentPageIndex = 1
+    var currentPageIndex by mutableIntStateOf(1)
 }
 
 @Composable
@@ -88,12 +90,32 @@ fun Screen.UpdatesTabViewContent(
     val floatingBottomBar by uiPreferences.floatingBottomBar().collectAsState()
     val showTopTabBar by uiPreferences.showTopTabBar().collectAsState()
 
-    val tabTitles = persistentListOf(
-        stringResource(KMR.strings.tab_calendar),
-        stringResource(KMR.strings.tab_updates),
-        stringResource(KMR.strings.tab_schedule),
-    )
-    val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = UpdatesTabEvents.currentPageIndex.coerceIn(0, tabTitles.size - 1)) { tabTitles.size }
+    val tabTitles = if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+        persistentListOf(
+            stringResource(KMR.strings.tab_calendar),
+            stringResource(KMR.strings.tab_updates),
+            stringResource(KMR.strings.tab_schedule),
+        )
+    } else {
+        persistentListOf(
+            stringResource(KMR.strings.tab_calendar),
+            stringResource(KMR.strings.tab_updates),
+        )
+    }
+
+    val maxPageIndex = (tabTitles.size - 1).coerceAtLeast(0)
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = UpdatesTabEvents.currentPageIndex.coerceIn(0, maxPageIndex),
+    ) { tabTitles.size }
+
+    LaunchedEffect(tabTitles.size) {
+        if (UpdatesTabEvents.currentPageIndex >= tabTitles.size) {
+            UpdatesTabEvents.currentPageIndex = (tabTitles.size - 1).coerceAtLeast(0)
+        }
+        if (pagerState.currentPage >= tabTitles.size) {
+            pagerState.scrollToPage((tabTitles.size - 1).coerceAtLeast(0))
+        }
+    }
 
     LaunchedEffect(pagerState.currentPage) {
         UpdatesTabEvents.currentPageIndex = pagerState.currentPage
@@ -117,6 +139,7 @@ fun Screen.UpdatesTabViewContent(
         launch {
             UpdatesTabEvents.selectSubTabEvent.receiveAsFlow().collectLatest { index ->
                 if (index in 0 until tabTitles.size) {
+                    UpdatesTabEvents.currentPageIndex = index
                     pagerState.animateScrollToPage(index)
                 }
             }
@@ -127,13 +150,16 @@ fun Screen.UpdatesTabViewContent(
         // Show in-screen tab row ONLY if floating bar is disabled or top tab bar is explicitly enabled
         if (!floatingBottomBar || showTopTabBar) {
             androidx.compose.material3.PrimaryTabRow(
-                selectedTabIndex = pagerState.currentPage,
+                selectedTabIndex = pagerState.currentPage.coerceIn(0, tabTitles.size - 1),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 tabTitles.forEachIndexed { index, title ->
                     androidx.compose.material3.Tab(
                         selected = pagerState.currentPage == index,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        onClick = {
+                            UpdatesTabEvents.currentPageIndex = index
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        },
                         text = {
                             androidx.compose.material3.Text(
                                 text = title,
@@ -285,8 +311,10 @@ fun Screen.UpdatesTabViewContent(
                     }
                 }
                 2 -> {
-                    val animeScheduleScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenModel() }
-                    eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenContent(screenModel = animeScheduleScreenModel)
+                    if (activeMediaType == eu.kanade.domain.ui.model.MediaType.ANIME) {
+                        val animeScheduleScreenModel = rememberScreenModel { eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenModel() }
+                        eu.kanade.tachiyomi.ui.schedule.AnimeScheduleScreenContent(screenModel = animeScheduleScreenModel)
+                    }
                 }
             }
         }
@@ -350,7 +378,10 @@ fun Screen.updatesTab(
             AppBar.Action(
                 title = stringResource(MR.strings.action_view_upcoming),
                 icon = Icons.Outlined.CalendarMonth,
-                onClick = { UpdatesTabEvents.selectSubTabEvent.trySend(0) },
+                onClick = {
+                    UpdatesTabEvents.currentPageIndex = 0
+                    UpdatesTabEvents.selectSubTabEvent.trySend(0)
+                },
             ),
             AppBar.Action(
                 title = stringResource(MR.strings.action_update_library),

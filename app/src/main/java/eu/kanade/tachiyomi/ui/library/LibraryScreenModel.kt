@@ -175,6 +175,10 @@ class LibraryScreenModel(
     // KMK <--
 ) : StateScreenModel<LibraryScreenModel.State>(State()) {
 
+    // KMK --> ponytail: retain scroll positions across tab switches and navigation
+    val scrollPositions = mutableMapOf<Triple<Long, Long?, LibraryDisplayMode>, Pair<Int, Int>>()
+    // KMK <--
+
     // SY -->
     val favoritesSync = FavoritesSyncHelper(preferences.context)
     val recommendationSearch = RecommendationSearchHelper(preferences.context)
@@ -228,9 +232,29 @@ class LibraryScreenModel(
                         }
                     }
 
+                val localCategory = Category(
+                    id = Category.LOCAL_CATEGORY_ID,
+                    name = preferences.context.stringResource(MR.strings.label_local),
+                    order = -1L,
+                    flags = 0L,
+                    parentId = null,
+                    hidden = false,
+                )
+                val categoriesWithLocal = buildList {
+                    val defaultCat = categories.find { it.isSystemCategory }
+                    if (defaultCat != null) {
+                        add(defaultCat)
+                        add(localCategory)
+                        addAll(categories.filterNot { it.isSystemCategory || it.isLocalCategory })
+                    } else {
+                        add(localCategory)
+                        addAll(categories.filterNot { it.isLocalCategory })
+                    }
+                }
+
                 LibraryData(
                     isInitialized = true,
-                    categories = categories,
+                    categories = categoriesWithLocal,
                     favorites = filteredFavorites,
                     tracksMap = tracksMap,
                     loggedInTrackerIds = trackingFilters.keys,
@@ -302,9 +326,13 @@ class LibraryScreenModel(
                         // SY <--
                     )
                     // KMK -->
-                    .filter {
+                    .filter { entry ->
                         // Hide empty categories unless the setting is enabled or there are no active filters/search
-                        showEmptyCategoriesSearch || noActiveFilterOrSearch || it.value.isNotEmpty()
+                        entry.key.isLocalCategory ||
+                        showEmptyCategoriesSearch || noActiveFilterOrSearch || entry.value.isNotEmpty() ||
+                            (entry.key.parentId == null && data.categories.any { sub ->
+                                sub.parentId == entry.key.id && (data.favorites.any { fav -> fav.libraryManga.categories.contains(sub.id) })
+                            })
                     }
                     .let {
                         // Fall back to default category if no categories are present
@@ -620,9 +648,12 @@ class LibraryScreenModel(
                         // KMK <--
                         groupCache.getOrPut(categoryId) { mutableListOf() }.add(item.id)
                     }
+                    if (item.libraryManga.manga.isLocal() || item.downloadCount > 0) {
+                        groupCache.getOrPut(Category.LOCAL_CATEGORY_ID) { mutableListOf() }.add(item.id)
+                    }
                 }
                 return categories.fastFilter {
-                    (showSystemCategory || !it.isSystemCategory) &&
+                    (it.isLocalCategory || showSystemCategory || !it.isSystemCategory) &&
                         // KMK -->
                         (showHiddenCategories || !it.hidden)
                     // KMK <--
@@ -1231,18 +1262,32 @@ class LibraryScreenModel(
      */
     fun setMangaCategories(mangaList: List<Manga>, addCategories: List<Long>, removeCategories: List<Long>) {
         screenModelScope.launchNonCancellable {
-            mangaList.forEach { manga ->
-                val categoryIds = getCategories.await(manga.id)
-                    .map { it.id }
-                    .subtract(removeCategories.toSet())
-                    .plus(addCategories)
+            // KMK -->
+            val removeSet = removeCategories.toSet()
+            val addSet = addCategories.toSet()
+            val favoritesById = state.value.libraryData.favoritesById
+            val updates = mangaList.map { manga ->
+                val existingCategories = favoritesById[manga.id]?.libraryManga?.categories
+                    ?: getCategories.await(manga.id).map { it.id }
+                val categoryIds = existingCategories
+                    .subtract(removeSet)
+                    .plus(addSet)
                     .toList()
+                manga.id to categoryIds
+            }
 
-                setMangaCategories.await(manga.id, categoryIds)
-                if (categoryIds.isNotEmpty()) {
-                    uy.kohesive.injekt.Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+            setMangaCategories.await(updates)
+
+            mangaList.forEach { manga ->
+                screenModelScope.launchIO {
+                    try {
+                        uy.kohesive.injekt.Injekt.get<eu.kanade.domain.track.interactor.TrackOnCategorySet>().execute(manga)
+                    } catch (e: Throwable) {
+                        // ignore background tracking errors
+                    }
                 }
             }
+            // KMK <--
         }
     }
 
@@ -1588,21 +1633,58 @@ class LibraryScreenModel(
         }
     }
 
-    fun selectAll() {
+    fun selectAll(subcategoryId: Long? = null, categoryId: Long? = null) {
         lastSelectionCategory = null
         mutableState.update { state ->
+            val targetItems = when {
+                !state.searchQuery.isNullOrBlank() -> {
+                    state.categories.flatMap { state.getItemsForCategory(it) }.distinctBy { it.id }
+                }
+                subcategoryId != null -> {
+                    state.getItemsForCategoryId(subcategoryId)
+                }
+                else -> {
+                    val targetCat = (categoryId?.let { id -> state.categories.find { it.id == id } }
+                        ?: state.activeCategory)
+                    if (targetCat != null) {
+                        val subcats = state.getAllSubcategories(targetCat.id, state.categories)
+                        (listOf(targetCat) + subcats).flatMap { state.getItemsForCategory(it) }.distinctBy { it.id }
+                    } else {
+                        emptyList()
+                    }
+                }
+            }
             val newSelection = state.selection.mutate { list ->
-                state.getItemsForCategoryId(state.activeCategory?.id).fastMap { it.id }.let(list::addAll)
+                val newIds = targetItems.fastMap { it.id }.filterNot { it in list }
+                list.addAll(newIds)
             }
             state.copy(selection = newSelection)
         }
     }
 
-    fun invertSelection() {
+    fun invertSelection(subcategoryId: Long? = null, categoryId: Long? = null) {
         lastSelectionCategory = null
         mutableState.update { state ->
+            val targetItems = when {
+                !state.searchQuery.isNullOrBlank() -> {
+                    state.categories.flatMap { state.getItemsForCategory(it) }.distinctBy { it.id }
+                }
+                subcategoryId != null -> {
+                    state.getItemsForCategoryId(subcategoryId)
+                }
+                else -> {
+                    val targetCat = (categoryId?.let { id -> state.categories.find { it.id == id } }
+                        ?: state.activeCategory)
+                    if (targetCat != null) {
+                        val subcats = state.getAllSubcategories(targetCat.id, state.categories)
+                        (listOf(targetCat) + subcats).flatMap { state.getItemsForCategory(it) }.distinctBy { it.id }
+                    } else {
+                        emptyList()
+                    }
+                }
+            }
             val newSelection = state.selection.mutate { list ->
-                val itemIds = state.getItemsForCategoryId(state.activeCategory?.id).fastMap { it.id }
+                val itemIds = targetItems.fastMap { it.id }
                 val (toRemove, toAdd) = itemIds.partition { it in list }
                 list.removeAll(toRemove.toSet())
                 list.addAll(toAdd)
@@ -1633,7 +1715,7 @@ class LibraryScreenModel(
 
             // Hide the default category because it has a different behavior than the ones from db.
             // KMK -->
-            val categories = state.value.libraryData.categories.fastFilter { it.id != 0L }
+            val categories = state.value.libraryData.categories.fastFilter { !it.isSystemCategory && !it.isLocalCategory }
             // KMK <--
 
             // Get indexes of the common categories to preselect.
@@ -1977,7 +2059,7 @@ class LibraryScreenModel(
         val displayedCategories: List<Category> = groupedFavorites.keys.toList()
 
         // Recursively get all subcategories for a given parent category
-        private fun getAllSubcategories(parentId: Long, allCategories: List<Category>): List<Category> {
+        fun getAllSubcategories(parentId: Long, allCategories: List<Category>): List<Category> {
             val directChildren = allCategories.filter { it.parentId == parentId }
             return directChildren + directChildren.flatMap { getAllSubcategories(it.id, allCategories) }
         }

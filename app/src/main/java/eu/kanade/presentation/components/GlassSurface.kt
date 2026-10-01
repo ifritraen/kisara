@@ -1,12 +1,14 @@
 package eu.kanade.presentation.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalAbsoluteTonalElevation
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -59,7 +61,7 @@ object GlassDefaults {
         containerAlpha = 0.82f,
         borderAlpha = 0.24f,
         tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
+        shadowElevation = 0.dp,
     )
 
     @Composable
@@ -67,7 +69,7 @@ object GlassDefaults {
         containerAlpha = 0.88f,
         borderAlpha = 0.30f,
         tonalElevation = 0.dp,
-        shadowElevation = 10.dp,
+        shadowElevation = 0.dp,
     )
 }
 
@@ -88,6 +90,7 @@ fun GlassSurface(
     isReaderSurface: Boolean = false,
     isStandardSurface: Boolean = false,
     isCategoryBar: Boolean = false,
+    customBaseColor: Color? = null,
     isOverlay: Boolean = dialogSurface || isReaderSurface || isStandardSurface || isCategoryBar,
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -140,14 +143,21 @@ fun GlassSurface(
 
     // Base color formula
     val baseColor = when {
+        customBaseColor != null -> customBaseColor
         isReaderSurface -> Color(0xFF1C1C1E)
         adjustedContainerAlpha >= 0.86f -> colorScheme.surfaceContainerHigh
         adjustedContainerAlpha >= 0.80f -> colorScheme.surfaceContainer
         else -> colorScheme.surfaceContainerLow
     }.let { candidate ->
-        if (isDarkTheme) lerp(candidate, colorScheme.surfaceBright, 0.16f) else candidate
+        if (customBaseColor != null) {
+            candidate
+        } else if (isDarkTheme) {
+            lerp(candidate, colorScheme.surfaceBright, 0.16f)
+        } else {
+            candidate
+        }
     }.let { candidate ->
-        if (mixColor != null && mixRatio > 0f) lerp(candidate, mixColor, mixRatio) else candidate
+        if (customBaseColor == null && mixColor != null && mixRatio > 0f) lerp(candidate, mixColor, mixRatio) else candidate
     }
     val containerColor = baseColor.copy(alpha = adjustedContainerAlpha)
 
@@ -176,7 +186,11 @@ fun GlassSurface(
     val border = BorderStroke(
         width = 1.dp,
         color = if (isReaderSurface) {
-            Color.White.copy(alpha = 0.12f)
+            if (customBaseColor != null) {
+                customBaseColor.copy(alpha = 0.30f)
+            } else {
+                Color.White.copy(alpha = 0.12f)
+            }
         } else {
             colorScheme.outlineVariant.copy(
                 alpha = if (isDarkTheme) style.borderAlpha.coerceIn(0.16f, 0.28f) else style.borderAlpha.coerceAtMost(0.18f),
@@ -188,7 +202,7 @@ fun GlassSurface(
     // ponytail: Scope runtime Haze blur exclusively to overlay sheets (bottom bar, sheet, dialog, reader)
     // Inline scrolling cards use hardware-accelerated translucent blending (0ms GPU shader stall).
     val useRuntimeHaze = isOverlay && isGlassEnabled && !performanceMode && !hazeBypass &&
-        !(isReaderSurface && disableGlassInReader) &&
+        !isReaderSurface &&
         !(isStandardSurface && disableGlassInBottomBar) &&
         !(isCategoryBar && disableGlassInCategoryBar)
 
@@ -202,31 +216,32 @@ fun GlassSurface(
     }
 
     val hazeBackgroundColor = if (dialogSurface) Color.Transparent else containerColor
-    val surfaceColor = if (useRuntimeHaze && !dialogSurface) Color.Transparent else containerColor
 
-    CompositionLocalProvider(LocalAbsoluteTonalElevation provides 0.dp) {
-        Surface(
-            modifier = if (useRuntimeHaze) {
-                modifier
-                    .clip(shape)
-                    .hazeChild(hazeState, hazeStyle) {
-                        backgroundColor = hazeBackgroundColor
-                        blurredEdgeTreatment = BlurredEdgeTreatment(shape)
-                        clipToAreasBounds = false
-                        expandLayerBounds = false
-                        forceInvalidateOnPreDraw = false
-                    }
-            } else {
-                modifier
-            },
-            shape = shape,
-            color = surfaceColor,
-            contentColor = colorScheme.onSurface,
-            tonalElevation = style.tonalElevation,
-            shadowElevation = if (useRuntimeHaze && !isReaderSurface) 0.dp else style.shadowElevation,
-            border = border,
-        ) {
-            Box(content = content)
-        }
+    CompositionLocalProvider(
+        LocalAbsoluteTonalElevation provides 0.dp,
+        LocalContentColor provides colorScheme.onSurface,
+    ) {
+        Box(
+            modifier = modifier
+                .then(
+                    if (useRuntimeHaze) {
+                        Modifier
+                            .clip(shape)
+                            .hazeChild(hazeState, hazeStyle) {
+                                backgroundColor = hazeBackgroundColor
+                                blurredEdgeTreatment = BlurredEdgeTreatment(shape)
+                                clipToAreasBounds = false
+                                expandLayerBounds = false
+                                forceInvalidateOnPreDraw = false
+                            }
+                    } else {
+                        Modifier
+                            .clip(shape)
+                            .background(containerColor, shape)
+                    },
+                )
+                .border(border, shape),
+            content = content,
+        )
     }
 }

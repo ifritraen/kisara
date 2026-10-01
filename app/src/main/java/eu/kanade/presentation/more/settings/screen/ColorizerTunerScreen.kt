@@ -59,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -92,6 +93,7 @@ import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.data.ai.ColorizeImageUtils
 import eu.kanade.tachiyomi.data.ai.MangaColorizeEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -164,6 +166,7 @@ class ColorizerTunerScreen : Screen() {
         var section3Expanded by remember { mutableStateOf(true) }
 
         var updateJob by remember { mutableStateOf<Job?>(null) }
+        var inferJob by remember { mutableStateOf<Job?>(null) }
 
         // Trigger real-time post-processing update
         fun triggerRender() {
@@ -231,7 +234,8 @@ class ColorizerTunerScreen : Screen() {
             val bitmap = origBitmap ?: return
             if (isInferringModel) return
             isInferringModel = true
-            scope.launch(Dispatchers.Default) {
+            inferJob?.cancel()
+            inferJob = scope.launch(Dispatchers.Default) {
                 try {
                     val modelFile = modelManager.getModelFile(AiModelManager.ModelType.MANGA_COLORIZER_V2)
                     if (modelFile.exists() && modelFile.length() > 0) {
@@ -267,6 +271,11 @@ class ColorizerTunerScreen : Screen() {
                             context.toast("Please download Manga Colorizer v2 model first")
                         }
                     }
+                } catch (e: CancellationException) {
+                    withContext(Dispatchers.Main) {
+                        isInferringModel = false
+                    }
+                    throw e
                 } catch (e: Exception) {
                     logcat(LogPriority.ERROR, e) { "Failed to run preview model inference" }
                     withContext(Dispatchers.Main) {
@@ -374,6 +383,15 @@ class ColorizerTunerScreen : Screen() {
         LaunchedEffect(Unit) {
             loadDefaultSample()
             scanDownloadedPages()
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                updateJob?.cancel()
+                inferJob?.cancel()
+                colorizeEngine.cancelCurrentInference()
+                colorizeEngine.unloadSession()
+            }
         }
 
         // Custom File Picker Launcher

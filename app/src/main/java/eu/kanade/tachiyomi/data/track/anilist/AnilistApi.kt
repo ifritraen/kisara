@@ -223,6 +223,10 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                             |day
                         |}
                         |averageScore
+                        |genres
+                        |tags {
+                            |name
+                        |}
                     |}
                 |}
             |}
@@ -474,6 +478,10 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         |day
                     |}
                     |averageScore
+                    |genres
+                    |tags {
+                        |name
+                    |}
                 |}
             |}
             |

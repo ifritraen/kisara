@@ -543,14 +543,18 @@ private fun PipelineStatusOverviewCard(
     val (ocrTitle, ocrStatus, isOcrReady) = when (currentOcrIndex) {
         0 -> Triple("MLKit OCR", "Ready • Built-in (No Downloads Needed)", true)
         1 -> {
-            val dir = File(context.filesDir, "mangaocr")
-            val ready = (dir.listFiles()?.sumOf { it.length() } ?: 0L) > 10 * 1024 * 1024L
+            val dir = eu.kanade.tachiyomi.data.ai.AiModelManager.getModelSubdir(context, "mangaocr")
+            val internalDir = File(context.filesDir, "mangaocr")
+            val size = (dir.listFiles()?.sumOf { it.length() } ?: 0L).let { if (it > 0L) it else internalDir.listFiles()?.sumOf { f -> f.length() } ?: 0L }
+            val ready = size > 10 * 1024 * 1024L
             if (ready) Triple("MangaOCR", "Ready • Model Downloaded (~135MB)", true)
             else Triple("MangaOCR", "⚠️ Download Needed • Download MangaOCR below", false)
         }
         2 -> {
-            val dir = File(context.filesDir, "paddleocr")
-            val ready = (dir.listFiles()?.sumOf { it.length() } ?: 0L) > 10 * 1024 * 1024L
+            val dir = eu.kanade.tachiyomi.data.ai.AiModelManager.getModelSubdir(context, "paddleocr")
+            val internalDir = File(context.filesDir, "paddleocr")
+            val size = (dir.listFiles()?.sumOf { it.length() } ?: 0L).let { if (it > 0L) it else internalDir.listFiles()?.sumOf { f -> f.length() } ?: 0L }
+            val ready = size > 10 * 1024 * 1024L
             if (ready) Triple("PaddleOCR", "Ready • Model Downloaded (~30MB)", true)
             else Triple("PaddleOCR", "⚠️ Download Needed • Download PaddleOCR below", false)
         }
@@ -787,9 +791,13 @@ private fun ModelDownloadPreference(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val modelDir = remember { File(context.filesDir, modelDirName) }
+    val modelDir = remember { eu.kanade.tachiyomi.data.ai.AiModelManager.getModelSubdir(context, modelDirName) }
+    val internalDir = remember { File(context.filesDir, modelDirName) }
 
-    var sizeBytes by remember { mutableStateOf(getFolderSizeBytes(modelDir)) }
+    var sizeBytes by remember {
+        val s = getFolderSizeBytes(modelDir)
+        mutableStateOf(if (s > 0L) s else getFolderSizeBytes(internalDir))
+    }
     var downloadStatus by remember { mutableStateOf("") }
     var isDownloading by remember { mutableStateOf(false) }
     var errorDialogText by remember { mutableStateOf<String?>(null) }
@@ -829,6 +837,7 @@ private fun ModelDownloadPreference(
             if (isDownloaded && !isDownloading) {
                 IconButton(onClick = {
                     deleteFolder(modelDir)
+                    deleteFolder(internalDir)
                     sizeBytes = getFolderSizeBytes(modelDir)
                     context.toast("Model files deleted")
                 }) {

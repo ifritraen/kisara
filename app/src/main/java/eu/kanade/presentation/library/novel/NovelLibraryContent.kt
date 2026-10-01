@@ -1,5 +1,6 @@
 package eu.kanade.presentation.library.novel
 
+import tachiyomi.core.common.util.lang.compareToWithCollator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -118,6 +119,7 @@ fun NovelLibraryContent(
     onSubcategorySelected: (Long?) -> Unit = {},
     showSubcategories: Boolean = true,
     onGlobalSearchClicked: (() -> Unit)? = null,
+    sort: tachiyomi.domain.library.novel.model.NovelLibrarySort = tachiyomi.domain.library.novel.model.NovelLibrarySort.default,
 ) {
     val parentCategories = remember(categories) {
         categories.filter { it.parentId == null }.sortedBy { it.order }
@@ -167,24 +169,36 @@ fun NovelLibraryContent(
         }
         val pagerState = rememberPagerState(initialPage) { tabCategories.size }
 
-        LaunchedEffect(tabCategories, currentPage()) {
+        LaunchedEffect(currentPage()) {
             val targetPage = when {
                 tabCategories.isEmpty() -> 0
-                currentPage() != pagerState.currentPage && currentPage() in tabCategories.indices -> currentPage()
+                currentPage() in tabCategories.indices -> currentPage()
                 pagerState.currentPage >= tabCategories.size -> tabCategories.size - 1
                 else -> pagerState.currentPage
             }
-            if (targetPage != pagerState.currentPage) {
-                pagerState.scrollToPage(targetPage)
+            if ((targetPage != pagerState.currentPage || pagerState.currentPageOffsetFraction != 0f) && targetPage != pagerState.targetPage) {
+                if (kotlin.math.abs(targetPage - pagerState.currentPage) <= 1 && pagerState.currentPageOffsetFraction == 0f) {
+                    pagerState.animateScrollToPage(targetPage)
+                } else {
+                    pagerState.scrollToPage(targetPage)
+                }
             }
         }
 
         LaunchedEffect(pagerState) {
-            snapshotFlow { pagerState.currentPage }.collect {
-                if (showParentFilters) {
-                    onSubcategorySelected(null)
+            var previousPage: Int? = null
+            snapshotFlow { pagerState.settledPage }.collect { settledPage ->
+                if (previousPage != null && previousPage != settledPage) {
+                    if (showParentFilters) {
+                        val newParent = parentCategories.getOrNull(settledPage)
+                        val sub = activeSubcategoryId?.let { id -> categories.firstOrNull { it.id == id } }
+                        if (sub == null || sub.parentId != newParent?.id) {
+                            onSubcategorySelected(null)
+                        }
+                    }
                 }
-                onChangeCurrentPage(it)
+                previousPage = settledPage
+                onChangeCurrentPage(settledPage)
             }
         }
 
@@ -194,12 +208,22 @@ fun NovelLibraryContent(
                 categories = tabCategories,
                 pagerState = pagerState,
                 getItemCountForCategory = { getNumberOfNovelForCategory(it) },
-                onTabItemClick = { scope.launch { pagerState.animateScrollToPage(it) } },
+                onTabItemClick = {
+                    scope.launch {
+                        if (it != pagerState.currentPage || pagerState.currentPageOffsetFraction != 0f) {
+                            if (kotlin.math.abs(it - pagerState.currentPage) <= 1 && pagerState.currentPageOffsetFraction == 0f) {
+                                pagerState.animateScrollToPage(it)
+                            } else {
+                                pagerState.scrollToPage(it)
+                            }
+                        }
+                    }
+                },
             )
         }
 
         // Subcategories Filter Chips Bar
-        val currentCategory = tabCategories.getOrNull(pagerState.currentPage)
+        val currentCategory = tabCategories.getOrNull(pagerState.settledPage.coerceIn(0, tabCategories.lastIndex))
         val activeParent = if (currentCategory?.parentId == null) currentCategory else parentCategories.find { it.id == currentCategory.parentId }
         val currentSubcategories = activeParent?.let { childrenByParent[it.id] }.orEmpty()
 
@@ -290,7 +314,49 @@ fun NovelLibraryContent(
                         (parentItems + childItems).forEach { item ->
                             if (seen.add(item.id)) merged.add(item)
                         }
-                        merged
+                        val categorySort = tachiyomi.domain.library.novel.model.NovelLibrarySort.valueOf(pageCategory.flags)
+                        val effectiveSort = if (categorySort != tachiyomi.domain.library.novel.model.NovelLibrarySort.default) categorySort else sort
+                        if (merged.size > 1) {
+                            val comparator = Comparator<NovelLibraryItem> { leftItem, rightItem ->
+                                val isLeftPinned = leftItem.pinned
+                                val isRightPinned = rightItem.pinned
+                                if (isLeftPinned != isRightPinned) {
+                                    return@Comparator if (isLeftPinned) -1 else 1
+                                }
+                                val left = leftItem.coverNovel
+                                val right = rightItem.coverNovel
+                                if (left == null || right == null) return@Comparator 0
+                                when (effectiveSort.type) {
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.Alphabetical -> 0
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.LastRead -> leftItem.lastRead.compareTo(rightItem.lastRead)
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.LastUpdate -> left.lastUpdate.compareTo(right.lastUpdate)
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.UnreadCount -> leftItem.unreadCount.compareTo(rightItem.unreadCount)
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.TotalChapters -> leftItem.totalChapters.compareTo(rightItem.totalChapters)
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.LatestChapter -> {
+                                        val leftLatest = (leftItem as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
+                                        val rightLatest = (rightItem as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
+                                        leftLatest.compareTo(rightLatest)
+                                    }
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.ChapterFetchDate -> {
+                                        val leftChapterFetchedAt =
+                                            (leftItem as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
+                                        val rightChapterFetchedAt =
+                                            (rightItem as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
+                                        leftChapterFetchedAt.compareTo(rightChapterFetchedAt)
+                                    }
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.DateAdded -> leftItem.dateAdded.compareTo(rightItem.dateAdded)
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.TrackerMean -> 0
+                                    tachiyomi.domain.library.novel.model.NovelLibrarySort.Type.Random -> 0
+                                }
+                            }
+                                .let { if (effectiveSort.isAscending) it else it.reversed() }
+                                .thenComparator { left, right ->
+                                    left.title.lowercase().compareToWithCollator(right.title.lowercase())
+                                }
+                            merged.sortedWith(comparator)
+                        } else {
+                            merged
+                        }
                     } else {
                         getItemsForCategory(pageCategory)
                     }
@@ -424,6 +490,7 @@ fun NovelLibraryContent(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1,
                 ) { page ->
                     val category = tabCategories.getOrNull(page) ?: return@HorizontalPager
                     val items = wrappedGetItemsForCategory(category)

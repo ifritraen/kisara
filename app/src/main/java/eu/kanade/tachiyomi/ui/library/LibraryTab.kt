@@ -110,6 +110,7 @@ import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.GlassDefaults
 import eu.kanade.presentation.components.GlassSurface
 import eu.kanade.presentation.components.LocalHazeState
+import eu.kanade.presentation.components.SearchBottomSheet
 import eu.kanade.presentation.library.DeleteLibraryMangaDialog
 import eu.kanade.presentation.library.LibrarySettingsDialog
 import eu.kanade.presentation.library.components.LibraryContent
@@ -240,7 +241,7 @@ data object LibraryTab : Tab {
             // SY -->
             val started = LibraryUpdateJob.startNow(
                 context = context,
-                category = if (state.groupType == LibraryGroup.BY_DEFAULT) category else null,
+                category = if (state.groupType == LibraryGroup.BY_DEFAULT && category?.isLocalCategory != true) category else null,
                 group = state.groupType,
                 groupExtra = when (state.groupType) {
                     LibraryGroup.BY_DEFAULT -> null
@@ -263,24 +264,29 @@ data object LibraryTab : Tab {
 
         // KMK -->
         var activeSubcategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
-        var previousCategoryIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-        LaunchedEffect(state.activeCategoryIndex) {
-            if (previousCategoryIndex != null && previousCategoryIndex != state.activeCategoryIndex) {
-                activeSubcategoryId = null
-            }
-            previousCategoryIndex = state.activeCategoryIndex
-        }
+        var previousParentId by rememberSaveable { mutableStateOf<Long?>(null) }
+        var showSearchSheet by rememberSaveable { mutableStateOf(false) }
+        val showSubcategoriesAtTop by uiPreferences.showSubcategoriesAtTop().collectAsStateWithLifecycle()
+        // KMK <--
 
         val kisaraShowSubcategoriesInMainBar = remember { Injekt.get<eu.kanade.domain.ui.UiPreferences>() }.kisaraShowSubcategoriesInMainBar().collectAsStateWithLifecycle().value
         val parentCategories = remember(state.categories) {
-            state.categories.filter { it.parentId == null }.sortedBy { it.order }
+            state.categories.filter { it.parentId == null }.sortedWith { c1, c2 ->
+                when {
+                    c1.isSystemCategory && !c2.isSystemCategory -> -1
+                    c2.isSystemCategory && !c1.isSystemCategory -> 1
+                    c1.isLocalCategory && !c2.isLocalCategory -> -1
+                    c2.isLocalCategory && !c1.isLocalCategory -> 1
+                    else -> c1.order.compareTo(c2.order)
+                }
+            }
         }
         val childrenByParent = remember(state.categories) {
             state.categories.filter { it.parentId != null }
                 .groupBy { it.parentId }
                 .mapValues { entry -> entry.value.sortedBy { it.order } }
         }
-        val showParentFilters = useNewCategorySubbar || (state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory })
+        val showParentFilters = useNewCategorySubbar || (state.showParentFilters && state.categories.any { it.parentId == null && !it.isSystemCategory && !it.isLocalCategory })
         val tabCategories = if (showParentFilters && parentCategories.isNotEmpty() && !kisaraShowSubcategoriesInMainBar) {
             parentCategories
         } else {
@@ -302,6 +308,18 @@ data object LibraryTab : Tab {
             activeSubcategoryId
         } else {
             if (activeCategory?.parentId != null) activeCategory.id else null
+        }
+
+        LaunchedEffect(activeParent?.id) {
+            if (previousParentId != null && activeParent?.id != null && previousParentId != activeParent?.id) {
+                val sub = activeSubcategoryId?.let { id -> state.categories.firstOrNull { it.id == id } }
+                if (sub == null || sub.parentId != activeParent.id) {
+                    activeSubcategoryId = null
+                }
+            }
+            if (activeParent?.id != null) {
+                previousParentId = activeParent?.id
+            }
         }
 
         LaunchedEffect(activeParent?.id, activeSubcategoryId) {
@@ -346,7 +364,7 @@ data object LibraryTab : Tab {
                         if (sub?.parentId != null) {
                             val pIndex = state.categories.indexOfFirst { it.id == sub.parentId }
                             if (pIndex != -1) {
-                                previousCategoryIndex = pIndex
+                                previousParentId = sub.parentId
                                 screenModel.updateActiveCategoryIndex(pIndex)
                             }
                         }
@@ -380,7 +398,7 @@ data object LibraryTab : Tab {
             }
             launch {
                 searchEvent.receiveAsFlow().collectLatest {
-                    screenModel.search("")
+                    showSearchSheet = true
                 }
             }
             launch {
@@ -514,8 +532,8 @@ data object LibraryTab : Tab {
                                         selectedCount = state.selection.size,
                                         title = title,
                                         onClickUnselectAll = screenModel::clearSelection,
-                                        onClickSelectAll = screenModel::selectAll,
-                                        onClickInvertSelection = screenModel::invertSelection,
+                                        onClickSelectAll = { screenModel.selectAll(activeSubcategoryId, activeParent?.id ?: state.activeCategory?.id) },
+                                        onClickInvertSelection = { screenModel.invertSelection(activeSubcategoryId, activeParent?.id ?: state.activeCategory?.id) },
                                         onClickFilter = screenModel::showSettingsDialog,
                                         onClickRefresh = { onClickRefresh(state.activeCategory) },
                                         onClickGlobalUpdate = { onClickRefresh(null) },
@@ -544,6 +562,7 @@ data object LibraryTab : Tab {
                                         // SY <--
                                         searchQuery = state.searchQuery,
                                         onSearchQueryChange = screenModel::search,
+                                        onOpenSearchSheet = { showSearchSheet = true },
                                         onInvalidateDownloadCache = { context ->
                                             Injekt.get<DownloadCache>().invalidateCache()
                                             context.toast(MR.strings.download_cache_invalidated)
@@ -757,7 +776,7 @@ data object LibraryTab : Tab {
                                     hasActiveFilters = state.hasActiveFilters,
                                     showPageTabs = (showTopTabBar || !state.searchQuery.isNullOrEmpty()) && topBarVisible,
                                     showParentFilters = showParentFilters,
-                                    showSubcategories = showSubcategoryTabs && topBarVisible,
+                                    showSubcategories = showSubcategoriesAtTop && (showSubcategoryTabs || useNewCategorySubbar) && topBarVisible,
                                     onChangeCurrentPage = { page ->
                                         if (showParentFilters && !kisaraShowSubcategoriesInMainBar) {
                                             val parentCat = parentCategories.getOrNull(page)
@@ -801,6 +820,7 @@ data object LibraryTab : Tab {
                                     // KMK -->
                                     activeSubcategoryId = activeSubcategoryId,
                                     onSubcategorySelected = { activeSubcategoryId = it },
+                                    scrollPositions = screenModel.scrollPositions,
                                     // KMK <--
                                 )
                             }
@@ -877,9 +897,9 @@ data object LibraryTab : Tab {
 
                 Box(
                     modifier = Modifier
-                        .align(if (useNewCategorySubbar) Alignment.BottomCenter else Alignment.BottomStart)
+                        .align(Alignment.BottomCenter)
                         .padding(start = 16.dp, end = 16.dp, bottom = fabBottomPadding)
-                        .let { if (useNewCategorySubbar) it.wrapContentWidth() else it.fillMaxWidth() }
+                        .wrapContentWidth()
                         .graphicsLayer {
                             translationY = categoryBarTranslationY
                             alpha = categoryBarAlpha
@@ -895,11 +915,12 @@ data object LibraryTab : Tab {
                         GlassSurface(
                             shape = RoundedCornerShape(effectiveCornerRadius),
                             style = GlassDefaults.regularStyle(),
-                            isCategoryBar = false,
+                            isCategoryBar = true,
                         ) {
                         Column(
                             modifier = Modifier
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             // Subcategories Row (if present) - Rendered ABOVE Parent Categories (True Carousel)
@@ -973,7 +994,8 @@ data object LibraryTab : Tab {
 
                             // Parent Categories Row (with Pin on the right) (True Carousel)
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.wrapContentWidth(),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 LazyRow(
@@ -1011,7 +1033,7 @@ data object LibraryTab : Tab {
                                                 state.activeCategoryIndex == index
                                             },
                                             carouselStyle = categoryBarCarouselStyle,
-                                            onLongClick = { editCategory(category) },
+                                            onLongClick = { if (!category.isLocalCategory && !category.isSystemCategory) editCategory(category) },
                                         ) {
                                             val actualIndex = state.categories.indexOfFirst { it.id == category.id }
                                             if (actualIndex != -1) {
@@ -1044,23 +1066,37 @@ data object LibraryTab : Tab {
                 }
             }
 
+            if (showSearchSheet) {
+                SearchBottomSheet(
+                    searchQuery = state.searchQuery,
+                    onChangeSearchQuery = screenModel::search,
+                    onSearch = { query ->
+                        screenModel.search(query)
+                        showSearchSheet = false
+                    },
+                    onDismissRequest = { showSearchSheet = false },
+                    title = stringResource(MR.strings.action_search),
+                    placeholderText = stringResource(MR.strings.action_search_hint),
+                )
+            }
+
             val onDismissRequest = screenModel::closeDialog
             when (val dialog = state.dialog) {
                 is LibraryScreenModel.Dialog.SettingsSheet -> run {
                     val activeCategoryForSettings = if (activeSubcategoryId != null) {
-                        state.libraryData.categories.find { it.id == activeSubcategoryId } ?: state.activeCategory
+                        state.libraryData.categories.find { it.id == activeSubcategoryId } ?: activeParent ?: state.activeCategory
                     } else {
-                        state.activeCategory
+                        activeParent ?: state.activeCategory
                     }
                     LibrarySettingsDialog(
                         onDismissRequest = onDismissRequest,
                         screenModel = settingsScreenModel,
                         category = activeCategoryForSettings,
                         // SY -->
-                        hasCategories = state.libraryData.categories.fastAny { !it.isSystemCategory },
+                        hasCategories = state.libraryData.categories.fastAny { !it.isSystemCategory && !it.isLocalCategory },
                         // SY <--
                         // KMK -->
-                        categories = state.libraryData.categories.filterNot(Category::isSystemCategory),
+                        categories = state.libraryData.categories.filterNot { it.isSystemCategory || it.isLocalCategory },
                         // KMK <--
                     )
                 }
@@ -1244,10 +1280,11 @@ private fun SubTabButton(
         label = "subTabAlpha",
     )
 
-    androidx.compose.material3.Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+    val shape = RoundedCornerShape(8.dp)
+    val backgroundColor = if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent
+    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(
         modifier = modifier
             .height(subBarHeight.dp)
             .graphicsLayer {
@@ -1255,19 +1292,19 @@ private fun SubTabButton(
                 scaleY = scale
                 this.alpha = alpha
             }
+            .clip(shape)
+            .background(backgroundColor, shape)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
-            ),
-    ) {
-        Box(
-            modifier = androidx.compose.ui.Modifier.padding(horizontal = 12.dp),
-            contentAlignment = androidx.compose.ui.Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium.copy(fontSize = fontSize),
             )
-        }
+            .padding(horizontal = 12.dp),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = fontSize),
+        )
     }
 }

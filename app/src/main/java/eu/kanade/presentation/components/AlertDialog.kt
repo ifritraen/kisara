@@ -1,26 +1,33 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import tachiyomi.presentation.core.components.material.DialogButtonRole
 import tachiyomi.presentation.core.components.material.LocalDialogButtonRole
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlertDialog(
     onDismissRequest: () -> Unit,
@@ -30,34 +37,44 @@ fun AlertDialog(
     icon: @Composable (() -> Unit)? = null,
     title: @Composable (() -> Unit)? = null,
     text: @Composable (() -> Unit)? = null,
-    shape: Shape = MaterialTheme.shapes.extraLarge,
+    shape: Shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     properties: DialogProperties = DialogProperties(),
 ) {
-    val view = LocalView.current
-    androidx.compose.runtime.DisposableEffect(view) {
-        val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-        if (window != null) {
-            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                window.attributes.blurBehindRadius = 60
-            }
-        }
-        onDispose {}
-    }
+    val colorScheme = MaterialTheme.colorScheme
+    val scrimColor = colorScheme.scrim.copy(alpha = 0.32f)
 
-    Dialog(
+    ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        properties = properties,
+        modifier = modifier,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.Transparent,
+        scrimColor = scrimColor,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = null,
     ) {
         GlassSurface(
-            modifier = modifier
-                .sizeIn(minWidth = 280.dp, maxWidth = 560.dp),
-            shape = shape,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             style = GlassDefaults.prominentStyle(),
             dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BottomSheetDefaults.DragHandle(
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(bottom = 24.dp),
+                ) {
                 if (icon != null) {
                     Box(
                         modifier = Modifier
@@ -116,4 +133,5 @@ fun AlertDialog(
             }
         }
     }
+}
 }

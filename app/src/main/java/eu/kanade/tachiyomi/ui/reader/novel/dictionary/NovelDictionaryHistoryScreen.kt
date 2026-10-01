@@ -1,4 +1,4 @@
-﻿@file:Suppress("ktlint:standard:max-line-length")
+@file:Suppress("ktlint:standard:max-line-length")
 
 package eu.kanade.tachiyomi.ui.reader.novel.dictionary
 
@@ -24,10 +24,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import eu.kanade.presentation.components.GlassDefaults
+import eu.kanade.presentation.components.GlassSurface
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1208,26 +1211,38 @@ private fun HistoryDetailSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = sheetColor,
+        containerColor = Color.Transparent,
         shape = HistorySheetShape,
         scrimColor = dictionaryDialogScrim(colors),
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 10.dp, bottom = 4.dp)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(HistoryPillShape)
-                    .background(Color.White.copy(alpha = if (colors.isDark) 0.22f else 0.28f)),
-            )
-        },
+        dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 36.dp),
+        GlassSurface(
+            shape = HistorySheetShape,
+            style = GlassDefaults.prominentStyle(),
+            dialogSurface = true,
+            isStandardSurface = true,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 10.dp, bottom = 4.dp)
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(HistoryPillShape)
+                        .background(Color.White.copy(alpha = if (colors.isDark) 0.22f else 0.28f)),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 36.dp),
+                ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -1430,6 +1445,8 @@ private fun HistoryDetailSheet(
             )
         }
     }
+}
+}
 }
 
 @Composable

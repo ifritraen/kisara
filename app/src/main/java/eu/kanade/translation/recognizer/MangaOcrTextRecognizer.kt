@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import eu.kanade.tachiyomi.data.ai.AiModelManager
 import eu.kanade.tachiyomi.network.NetworkHelper
 import org.json.JSONObject
 import uy.kohesive.injekt.Injekt
@@ -36,11 +37,32 @@ class MangaOcrEngine(
     private val language: TextRecognizerLanguage,
 ) : AutoCloseable {
 
-    private val modelDir = File(context.filesDir, "mangaocr")
+    private val modelDir get() = AiModelManager.getModelSubdir(context, "mangaocr")
 
-    private val encoderFile get() = File(modelDir, "encoder_model.onnx")
-    private val decoderFile get() = File(modelDir, "decoder_model.onnx")
-    private val tokenizerFile get() = File(modelDir, "tokenizer.json")
+    private val encoderFile: File
+        get() {
+            val external = File(modelDir, "encoder_model.onnx")
+            if (external.exists()) return external
+            val internal = File(context.filesDir, "mangaocr/encoder_model.onnx")
+            if (internal.exists()) return internal
+            return external
+        }
+    private val decoderFile: File
+        get() {
+            val external = File(modelDir, "decoder_model.onnx")
+            if (external.exists()) return external
+            val internal = File(context.filesDir, "mangaocr/decoder_model.onnx")
+            if (internal.exists()) return internal
+            return external
+        }
+    private val tokenizerFile: File
+        get() {
+            val external = File(modelDir, "tokenizer.json")
+            if (external.exists()) return external
+            val internal = File(context.filesDir, "mangaocr/tokenizer.json")
+            if (internal.exists()) return internal
+            return external
+        }
 
     private val env = OrtEnvironment.getEnvironment()
     private var encoderSession: OrtSession? = null

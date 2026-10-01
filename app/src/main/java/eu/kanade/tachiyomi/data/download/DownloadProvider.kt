@@ -126,6 +126,19 @@ class DownloadProvider(
         source: Source,
     ): UniFile? {
         val mangaDir = findMangaDir(mangaTitle, source)
+        if (source.isLocal()) {
+            val splitUrl = chapterUrl.split('/', limit = 2)
+            if (splitUrl.size >= 2) {
+                val (mangaDirName, chapterDirName) = splitUrl
+                val localFile = try {
+                    mangaDir?.findFile(chapterDirName)
+                        ?: storageManager.getLocalSourceDirectory()?.findFile(mangaDirName)?.findFile(chapterDirName)
+                } catch (e: Exception) {
+                    null
+                }
+                if (localFile != null) return localFile
+            }
+        }
         return getValidChapterDirNames(chapterName, chapterScanlator, chapterUrl).asSequence()
             .mapNotNull {
                 try {

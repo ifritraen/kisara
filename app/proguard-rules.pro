@@ -38,6 +38,9 @@
 # Coroutines Extension ABI & Synthetic Bridges
 -keep class kotlinx.coroutines.BuildersKt { *; }
 -keep class kotlinx.coroutines.BuildersKt__* { *; }
+-keepclassmembers class kotlinx.coroutines.BuildersKt** {
+    public static *** runBlocking*(...);
+}
 -keep class kotlinx.coroutines.CoroutineScopeKt { *; }
 -keep class kotlinx.coroutines.DelayKt { *; }
 -keep class kotlinx.coroutines.Dispatchers { *; }
@@ -202,6 +205,13 @@
 # Coil3
 -keep class * extends coil3.util.DecoderServiceLoaderTarget { *; }
 -keep class * extends coil3.util.FetcherServiceLoaderTarget { *; }
+
+# ONNX Runtime — JNI bridge classes must not be stripped/renamed by R8.
+# Release build has isMinifyEnabled=true; without these rules, colorize crashes
+# with UnsatisfiedLinkError or NoClassDefFoundError on first use.
+-keep class ai.onnxruntime.** { *; }
+-keepclassmembers class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
 # KMK <--
 
 # Design library
